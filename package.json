@@ -18,7 +18,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "npm run -ws --if-present build",
+    "build": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint packages",
