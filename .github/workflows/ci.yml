@@ -45,12 +45,21 @@ jobs:
 
   no-optional-deps:
     # ADR-150 invariant: the engine builds and tests with the optional
-    # ruvector/RVF wasm packages ABSENT (they are peer-optional).
+    # ruvector/RVF wasm backends ABSENT. They are declared peer-optional in
+    # @dream-machine/memory, so a plain `npm ci` never installs them — this
+    # default install IS the "no optional backend" scenario. (We deliberately
+    # do NOT pass `npm ci --omit=optional`, which trips the known npm bug
+    # npm/cli#4828 and removes rollup's platform binary that vitest needs.)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
-      - run: npm ci --omit=optional
+      - run: npm ci
+      - name: Assert ruvector backends are NOT installed
+        run: |
+          test ! -d node_modules/@ruvector/wasm && test ! -d node_modules/@ruvector/rvf-wasm \
+            && echo "confirmed: ruvector wasm backends absent (peer-optional)"
       - run: npm run build
-      - run: npx vitest run packages/memory
+      - name: Memory adapter degrades gracefully without ruvector
+        run: npx vitest run packages/memory
