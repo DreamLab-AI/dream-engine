@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/media/hero.jpg" alt="Dream Machine — one honest cycle, every single night" width="100%">
+<a href="https://ruvnet.github.io/dream-machine/" title="Open the live site — interactive 4D hero"><img src="docs/media/hero.jpg" alt="Dream Machine — one honest cycle, every single night" width="100%"></a>
 
 # ☾ Dream Machine
 
@@ -44,7 +44,7 @@ engine and the differences into a `dream.config`.
 
 ## The nightly pipeline
 
-<div align="center"><img src="docs/media/pipeline.jpg" alt="The 13-stage nightly pipeline, rendered as an orbital scrollytelling narrative" width="100%"></div>
+<div align="center"><a href="https://ruvnet.github.io/dream-machine/#pipeline" title="See it animate on the live site"><img src="docs/media/pipeline.jpg" alt="The 13-stage nightly pipeline, rendered as an orbital scrollytelling narrative" width="100%"></a></div>
 
 ```
 ledger → research → frozen hypothesis → concrete candidate → baseline
@@ -81,7 +81,7 @@ dream-machine tui --path docs/dream-cycle/LEDGER.md            # the dashboard, 
 A browser dashboard renders the ledger as recent nights, verdict distribution,
 and per-night evidence — the same data the TUI shows.
 
-<div align="center"><img src="docs/media/dashboard.jpg" alt="The Dream Machine management console" width="100%"></div>
+<div align="center"><a href="https://ruvnet.github.io/dream-machine/dashboard.html" title="Open the live management dashboard"><img src="docs/media/dashboard.jpg" alt="The Dream Machine management console" width="100%"></a></div>
 
 ## Schedule it — nightly, autonomous, always improving
 
@@ -96,24 +96,40 @@ improvement that compounds while you sleep.
 npx dream-machine schedule dream.config.json --env <your-cloud-env-id> --out routine.json
 ```
 
-**2 — create the routine.** In Claude Code, run `/schedule` and create a routine
-on cron `0 9 * * *` (UTC) with the body from `routine.json`.
+**2 — create the routine.** In Claude Code, type `/schedule`, choose a nightly
+cron (e.g. `0 9 * * *` UTC) and your target repo, and paste the routine body
+from `routine.json` — or, better, paste the tiny **self-hosting prompt** below.
 
-**Self-hosting bootstrap (recommended).** Instead of freezing a prompt, point the
-routine at a tiny bootstrap that compiles tonight's instructions from your
-committed `dream.config.json` — so the schedule can never drift from the repo:
+**The prompt to paste into `/schedule` (recommended).** Rather than freeze a full
+prompt, point the routine at a bootstrap that compiles tonight's instructions
+from your committed `dream.config.json`, so the schedule can never drift from the
+repo. This is the exact prompt that runs against this repository every night —
+just change the repo slug:
 
 ```text
-You are the Dream Machine nightly runner for <owner/repo>, checked out on main.
+You are the Dream Machine nightly runner for ruvnet/dream-machine, checked out fresh on main.
 
-1. npm ci && npm run build          # build the engine (wasm failure is a recorded degradation)
-2. npx dream-machine compile dream.config.json --out /tmp/tonight.md
-3. Follow /tmp/tonight.md exactly — the full 26-step pipeline.
+STEP A — build the engine (a fresh checkout has no dist/):
+  npm ci && npm run build || true          # a wasm/NAPI failure is a recorded degradation, not a stop
 
-Invariants: end in ACCEPT | REJECT | INCONCLUSIVE. Never merge, never
-self-promote. Publish a gist + a labeled issue + a DRAFT PR, and append exactly
-one row to docs/dream-cycle/LEDGER.md every run.
+STEP B — compile tonight's instructions from the committed config:
+  npx dream-machine compile dream.config.json --out /tmp/tonight.md
+  cat /tmp/tonight.md
+
+STEP C — follow /tmp/tonight.md EXACTLY: the full 26-step pipeline
+  (ledger → research → frozen hypothesis → candidate → baseline → evaluation →
+   adversarial critique → bounded Darwin → evidence → witness → issue → DRAFT PR → ledger row).
+
+Invariants: end in exactly one of ACCEPT | REJECT | INCONCLUSIVE (INCONCLUSIVE
+with LLM_EVAL=blocked when there's no API key is a legitimate, successful night).
+Evaluation is not promotion — NEVER merge, NEVER self-promote. Publish a public
+gist + a labeled issue + a DRAFT PR, and append exactly one row to
+docs/dream-cycle/LEDGER.md every run. Never weaken a test; never force-push.
 ```
+
+> Prefer to keep the whole prompt inline instead of the bootstrap?
+> `npx dream-machine compile dream.config.json` prints the full 26-step routine —
+> paste that into `/schedule` directly.
 
 **What each night does** — research SOTA for tonight's rotation surface → freeze a
 falsifiable hypothesis → build a concrete candidate → evaluate parent vs.
