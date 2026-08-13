@@ -21,7 +21,7 @@
     "build": "npm run -ws --if-present build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint packages --ext .ts",
+    "lint": "eslint packages",
     "typecheck": "tsc -b --noEmit || tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf packages/*/dist coverage"
   },

@@ -816,11 +816,15 @@ code {
   background: linear-gradient(180deg, var(--glass-strong), rgba(255, 255, 255, 0.02));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  opacity: 0.45;
-  transform: translateY(14px);
   transition: opacity 0.5s ease, transform 0.5s ease, border-color 0.5s ease,
     box-shadow 0.5s ease;
   will-change: opacity, transform;
+}
+
+/* Only dim the inactive stages when JS is there to un-dim them again. */
+.js .stage {
+  opacity: 0.45;
+  transform: translateY(14px);
 }
 
 .stage.is-active {
@@ -881,7 +885,7 @@ code {
     margin-inline: auto;
   }
 
-  .stage {
+  .js .stage {
     opacity: 1;
     transform: none;
   }
@@ -1483,6 +1487,12 @@ dl.fields dd {
     grid-template-columns: 7.5rem minmax(0, 1fr);
     gap: 0.75rem;
     padding: 0.6rem 0.9rem;
+  }
+
+  /* every content child belongs in the value column, not the label column */
+  .ledger-table td > * {
+    grid-column: 2;
+    min-width: 0;
   }
 
   .ledger-table td::before {

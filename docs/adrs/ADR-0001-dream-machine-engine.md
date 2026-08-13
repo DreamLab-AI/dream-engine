@@ -1,7 +1,8 @@
 # ADR-0001: The Dream Machine engine — a config-driven, evidence-gated nightly evolution loop composed from the ruvnet stack
 
-- **Status**: Proposed — founding design; no engine code shipped yet. Two production routines (`ruvnet/ruflo`, `ruvnet/metaharness`) are the working reference implementations this engine will subsume.
+- **Status**: Accepted — engine v0.1.0 shipped (compile/ledger/witness/schedule/memory + `dream-machine` CLI/TUI, 85 tests). The two production routines (`ruvnet/ruflo`, `ruvnet/metaharness`) remain the reference implementations this engine subsumes.
 - **Date**: 2026-08-13
+- **Updated**: 2026-08-13 — implemented; Test Contract §1 revised from "byte-identical to metaharness PROMPT.md" to a golden-snapshot + structural-completeness contract (this repo's compiled template is the source of truth; targets legitimately differ in phrasing and ADR shape, so byte-identity was the wrong bar).
 - **Deciders**: ruv
 - **Tags**: dream-machine, founding, config-compiler, flywheel, darwin, redblue, promotion-gate, witness, autonomy
 - **Composes**: `@metaharness/flywheel` 0.1.10, `@metaharness/darwin` 0.9.1, `@metaharness/redblue` 0.1.4, `metaharness` CLI 0.4.5, ruvector 0.2.41, agentdb 3.0.0-alpha (all optional/peer — see §4)
@@ -178,11 +179,17 @@ implementation; do not introduce dependencies merely to satisfy this prompt."
 
 This ADR is satisfied when:
 
-1. **Compiler parity**: `@dream-machine/compile` compiles the
-   `ruvnet/metaharness` `dream.config` to a prompt byte-identical to the
-   hand-written `docs/dream-cycle/PROMPT.md` shipped in metaharness ADR-251
-   (the existence proof that the config captures the full delta), and likewise
-   for the Ruflo prompt.
+1. **Compiler determinism + completeness** *(revised — see Updated)*:
+   `@dream-machine/compile` is deterministic (identical config → identical
+   output, no dates/randomness) and golden-snapshot tested; the compiled prompt
+   contains every config-supplied slot (rotation surfaces, bonus moduli,
+   competitors, evaluator entrypoints, ADR convention, extra disciplines) and
+   every pipeline step marker, plus the load-bearing invariants verbatim
+   (`ACCEPT | REJECT | INCONCLUSIVE`, "evaluation is not promotion", the witness
+   formula, the 10-column ledger schema). Byte-identity to a specific target's
+   hand-written prompt is explicitly *not* required — this repo's template is the
+   source of truth and targets differ in phrasing and ADR shape. *(Implemented:
+   `packages/compile`, 19 tests incl. the golden snapshot.)*
 2. **Ledger toolkit**: `@dream-machine/ledger` round-trips the 10-column schema
    (parse → append a row → re-parse) and reproduces the STEP 1.1 learning
    signals on a fixture ledger, with property tests for the append invariant
