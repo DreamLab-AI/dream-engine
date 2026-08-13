@@ -1,8 +1,1 @@
-{ "files": [], "references": [
-  { "path": "packages/witness" },
-  { "path": "packages/ledger" },
-  { "path": "packages/compile" },
-  { "path": "packages/schedule" },
-  { "path": "packages/memory" },
-  { "path": "packages/cli" }
-] }
+{ "files": [], "include": [] }

@@ -6,12 +6,32 @@
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",
   "homepage": "https://github.com/ruvnet/dream-machine",
-  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git", "directory": "packages/ledger" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/dream-machine.git",
+    "directory": "packages/ledger"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "scripts": { "build": "tsc -b" },
-  "keywords": ["dream-machine", "ledger", "durable-memory", "learning-signals"]
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "keywords": [
+    "dream-machine",
+    "ledger",
+    "durable-memory",
+    "learning-signals"
+  ]
 }

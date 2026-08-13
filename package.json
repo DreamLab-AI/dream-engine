@@ -18,7 +18,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "npm run build -w packages/witness && npm run build -w packages/ledger && npm run build -w packages/compile && npm run build -w packages/schedule && npm run build -w packages/memory && npm run build -w packages/cli",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint packages",

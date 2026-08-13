@@ -6,20 +6,47 @@
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",
   "homepage": "https://github.com/ruvnet/dream-machine",
-  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git", "directory": "packages/memory" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/dream-machine.git",
+    "directory": "packages/memory"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "scripts": { "build": "tsc -b" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
   "peerDependencies": {
     "@ruvector/wasm": "*",
     "@ruvector/rvf-wasm": "*"
   },
   "peerDependenciesMeta": {
-    "@ruvector/wasm": { "optional": true },
-    "@ruvector/rvf-wasm": { "optional": true }
+    "@ruvector/wasm": {
+      "optional": true
+    },
+    "@ruvector/rvf-wasm": {
+      "optional": true
+    }
   },
-  "keywords": ["dream-machine", "memory", "ruvector", "rvf", "wasm", "semantic-search", "optional"]
+  "keywords": [
+    "dream-machine",
+    "memory",
+    "ruvector",
+    "rvf",
+    "wasm",
+    "semantic-search",
+    "optional"
+  ]
 }

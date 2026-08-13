@@ -6,20 +6,47 @@
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",
   "homepage": "https://github.com/ruvnet/dream-machine",
-  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git", "directory": "packages/cli" },
-  "bugs": { "url": "https://github.com/ruvnet/dream-machine/issues" },
-  "bin": { "dream-machine": "dist/bin.js" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/dream-machine.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/ruvnet/dream-machine/issues"
+  },
+  "bin": {
+    "dream-machine": "dist/bin.js"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=18" },
-  "scripts": { "build": "tsc -b" },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
   "dependencies": {
     "@dream-machine/compile": "0.1.0",
     "@dream-machine/ledger": "0.1.0",
     "@dream-machine/witness": "0.1.0",
     "@dream-machine/schedule": "0.1.0"
   },
-  "keywords": ["dream-machine", "agent-evolution", "autonomous-agents", "self-improving-agents", "flywheel", "darwin", "nightly", "cli", "metaharness", "ruvnet"]
+  "keywords": [
+    "dream-machine",
+    "agent-evolution",
+    "autonomous-agents",
+    "self-improving-agents",
+    "flywheel",
+    "darwin",
+    "nightly",
+    "cli",
+    "metaharness",
+    "ruvnet"
+  ]
 }
