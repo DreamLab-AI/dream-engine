@@ -41,7 +41,13 @@ jobs:
         working-directory: packages/cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance --access public
+        # Tolerant: no token, or a version already on npm (e.g. released
+        # manually), is a skip — not a failed release.
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN not set — skipping publish (release notes only)."; exit 0
+          fi
+          npm publish --provenance --access public || echo "publish skipped (version already on npm)"
       - name: Dry-run pack (no token needed)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
         working-directory: packages/cli
