@@ -129,6 +129,26 @@ gists, and draft PRs to see it in action.
 > A night with no API key still runs — it reports `LLM_EVAL=blocked`, an honest
 > `INCONCLUSIVE`, rather than faking a result.
 
+### Or: the optional GitHub Actions "dream" (no cloud agent needed)
+
+Prefer to stay entirely inside GitHub? [`.github/workflows/dream-nightly.yml`](.github/workflows/dream-nightly.yml)
+runs the **research + hypothesis** half of the pipeline from a plain CI runner
+using an [OpenRouter](https://openrouter.ai) model, files a witnessed
+`dream-cycle` research issue, and opens a draft PR that appends one ledger row.
+
+```yaml
+# add repo secret OPENROUTER_API_KEY (+ optional var OPENROUTER_MODEL),
+# then uncomment the schedule in dream-nightly.yml:
+schedule:
+  - cron: '0 9 * * *'
+```
+
+Honest scope: candidate evaluation, bounded Darwin, and the promotion gate need
+the agentic `/schedule` session, so this CI path is **research-only** — every
+night is an `INCONCLUSIVE` research night, and with no key it degrades to
+`LLM_EVAL=blocked` rather than fabricating a finding. It's disabled by default
+and also runs on demand via **Run workflow** (with a dry-run option).
+
 ## What it composes (never reimplements)
 
 The heavy stages delegate to the ruvnet stack as **optional, config-selected
