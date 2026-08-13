@@ -1620,10 +1620,11 @@ dl.fields dd {
   width: 100%;
   height: 100%;
   display: block;
-  opacity: 0.9;
-  /* keep the centre readable: fade the canvas where the hero copy sits */
-  -webkit-mask-image: radial-gradient(120% 90% at 78% 32%, #000 0%, #000 42%, rgba(0,0,0,0.35) 72%, rgba(0,0,0,0.12) 100%);
-  mask-image: radial-gradient(120% 90% at 78% 32%, #000 0%, #000 42%, rgba(0,0,0,0.35) 72%, rgba(0,0,0,0.12) 100%);
+  opacity: 0.5;
+  /* keep the copy readable: the canvas is brightest on the right, and fades
+     hard across the left half where the hero text sits */
+  -webkit-mask-image: radial-gradient(105% 85% at 82% 34%, #000 0%, rgba(0,0,0,0.85) 30%, rgba(0,0,0,0.28) 62%, rgba(0,0,0,0.06) 100%);
+  mask-image: radial-gradient(105% 85% at 82% 34%, #000 0%, rgba(0,0,0,0.85) 30%, rgba(0,0,0,0.28) 62%, rgba(0,0,0,0.06) 100%);
   pointer-events: none;
 }
 
@@ -1689,9 +1690,9 @@ dl.fields dd {
 /* ---- desktop + mobile friendly ---- */
 @media (max-width: 720px) {
   .sky__gl {
-    opacity: 0.6;
-    -webkit-mask-image: radial-gradient(140% 70% at 50% 22%, #000 0%, #000 38%, rgba(0,0,0,0.2) 82%, rgba(0,0,0,0.08) 100%);
-    mask-image: radial-gradient(140% 70% at 50% 22%, #000 0%, #000 38%, rgba(0,0,0,0.2) 82%, rgba(0,0,0,0.08) 100%);
+    opacity: 0.38;
+    -webkit-mask-image: radial-gradient(150% 65% at 55% 20%, #000 0%, rgba(0,0,0,0.55) 34%, rgba(0,0,0,0.16) 78%, rgba(0,0,0,0.05) 100%);
+    mask-image: radial-gradient(150% 65% at 55% 20%, #000 0%, rgba(0,0,0,0.55) 34%, rgba(0,0,0,0.16) 78%, rgba(0,0,0,0.05) 100%);
   }
   .dream4d-hud { font-size: 0.7rem; }
   .dream4d-hud__t { max-width: 62vw; }
