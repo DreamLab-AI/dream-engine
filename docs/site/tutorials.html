@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Tutorials — Dream Machine</title>
+    <meta
+      name="description"
+      content="Step-by-step tutorials for the Dream Machine: install the CLI, write your first dream.config, compile a routine, verify a witness stamp, read the nightly ledger, and schedule the run."
+    />
+    <link rel="canonical" href="https://ruvnet.github.io/dream-machine/tutorials.html" />
+    <meta name="theme-color" content="#05060f" />
+    <meta name="color-scheme" content="dark" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Dream Machine" />
+    <meta
+      property="og:url"
+      content="https://ruvnet.github.io/dream-machine/tutorials.html"
+    />
+    <meta property="og:title" content="Tutorials — Dream Machine" />
+    <meta
+      property="og:description"
+      content="Install the CLI, write your first dream.config, compile a routine, verify a witness, read the ledger, and schedule the nightly run."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Tutorials — Dream Machine" />
+    <meta
+      name="twitter:description"
+      content="Install the CLI, write your first dream.config, compile a routine, verify a witness, read the ledger, and schedule the nightly run."
+    />
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230a0b1a'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2367e8f9' stroke-width='1.6' opacity='.75'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23a78bfa'/%3E%3Ccircle cx='16' cy='7' r='2.2' fill='%2367e8f9'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <symbol id="i-copy" viewBox="0 0 24 24" fill="none">
+        <rect
+          x="9"
+          y="9"
+          width="11"
+          height="11"
+          rx="2"
+          stroke="currentColor"
+          stroke-width="1.8"
+        />
+        <path
+          d="M5 15V6a2 2 0 0 1 2-2h8"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+        />
+      </symbol>
+    </svg>
+
+    <div class="sky" aria-hidden="true">
+      <canvas class="sky__stars" data-parallax="0.02"></canvas>
+      <div class="nebula nebula--a" data-parallax="0.05"></div>
+      <div class="nebula nebula--c" data-parallax="0.11"></div>
+    </div>
+
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="./index.html">
+          <svg
+            class="brand__mark"
+            viewBox="0 0 32 32"
+            role="img"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle
+              cx="16"
+              cy="16"
+              r="10"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              opacity=".55"
+            />
+            <circle cx="16" cy="16" r="4.2" fill="currentColor" opacity=".85" />
+            <circle cx="16" cy="6" r="2.4" fill="currentColor" />
+          </svg>
+          <span class="brand__text">Dream Machine</span>
+        </a>
+
+        <nav class="nav" aria-label="Primary">
+          <a href="./index.html#what">Overview</a>
+          <a href="./index.html#pipeline">Pipeline</a>
+          <a href="./index.html#verdicts">Verdicts</a>
+          <a href="./index.html#quickstart">Quickstart</a>
+          <a href="./tutorials.html" aria-current="page">Tutorials</a>
+          <a href="./dashboard.html">Dashboard</a>
+          <a href="https://github.com/ruvnet/dream-machine">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="section container section--tight">
+        <p class="eyebrow">Tutorials</p>
+        <h1>From an empty repo to a nightly cycle.</h1>
+        <p class="lede">
+          Six short tutorials, in the order you will actually need them, followed
+          by a guided walkthrough of a single night from dusk to the morning's
+          ledger row.
+        </p>
+
+        <div class="banner" style="margin-top: 1.75rem">
+          <span class="banner__dot" aria-hidden="true"></span>
+          <p>
+            <strong>Read this first.</strong> The Dream Machine is at
+            <em>founding design</em> status — ADR-0001 is Proposed and no engine
+            code has shipped. The commands below describe the designed CLI
+            surface so you can follow the shape of the workflow; they are not yet
+            a released binary. Where the design deliberately defers something
+            (scheduling, most of all) this page says so rather than inventing a
+            capability.
+          </p>
+        </div>
+
+        <nav aria-label="Tutorial contents">
+          <ul class="toc" style="margin-top: 2rem">
+            <li><a href="#install">1. Install</a></li>
+            <li><a href="#config">2. First dream.config</a></li>
+            <li><a href="#compile">3. Compile a routine</a></li>
+            <li><a href="#witness">4. Verify a witness</a></li>
+            <li><a href="#ledger">5. Read the ledger</a></li>
+            <li><a href="#schedule">6. Schedule the run</a></li>
+            <li><a href="#walkthrough">Guided walkthrough</a></li>
+          </ul>
+        </nav>
+      </section>
+
+      <section class="section container" aria-label="The six tutorials">
+        <ol class="steps">
+          <!-- ============================================ 1. INSTALL -->
+          <li class="tut" id="install">
+            <h2>Install</h2>
+            <p>
+              There is nothing to install globally. The CLI runs through
+              <code>npx</code>, which fetches it on demand — the same way the
+              nightly cloud session will invoke it inside a fresh checkout.
+            </p>
+
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">Terminal</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the install check commands"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>node --version            <span class="c"># 18 or newer</span>
+cd path/to/your/repo
+npx dream-machine init</code></pre>
+            </div>
+
+            <p>
+              <code>init</code> scaffolds a <code>dream.config</code> in the
+              repository root and leaves everything else alone. Run it inside the
+              repository you want the machine to dream about — the config
+              describes one target, and one target only.
+            </p>
+          </li>
+
+          <!-- ============================================ 2. CONFIG -->
+          <li class="tut" id="config">
+            <h2>Write your first dream.config</h2>
+            <p>
+              The config carries the per-repo delta and nothing else. Everything
+              generic — the pipeline, the verdict vocabulary, the authority
+              boundaries — lives in the engine, so what you write here is
+              genuinely small.
+            </p>
+
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">dream.config</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the example dream.config"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>{
+  <span class="p">"repo"</span>: <span class="s">"ruvnet/metaharness"</span>,
+  <span class="p">"cron"</span>: <span class="s">"0 8 * * *"</span>,
+  <span class="p">"slots"</span>: [
+    { <span class="p">"deep"</span>: <span class="s">"generator-genome"</span>,
+      <span class="p">"scan"</span>: [<span class="s">"router"</span>, <span class="s">"turn-credit"</span>] },
+    { <span class="p">"deep"</span>: <span class="s">"flywheel-promotion"</span>,
+      <span class="p">"scan"</span>: [<span class="s">"evals-verticals"</span>, <span class="s">"bench"</span>] }
+  ],
+  <span class="p">"bonusModuli"</span>: { <span class="p">"25"</span>: <span class="s">"vertical-packs"</span>, <span class="p">"75"</span>: <span class="s">"meta-proxy"</span> },
+  <span class="p">"controlPlaneProbes"</span>: [<span class="s">"node packages/create-agent-harness/dist/bin.js --help"</span>],
+  <span class="p">"buildStep"</span>: { <span class="p">"cmd"</span>: <span class="s">"npm ci &amp;&amp; npm run build"</span>, <span class="p">"degradeOnWasmFailure"</span>: <span class="k">true</span> },
+  <span class="p">"evaluatorEntrypoints"</span>: { <span class="p">"bench"</span>: <span class="s">"experiments/*/run.mjs"</span> },
+  <span class="p">"adrTemplate"</span>: <span class="s">"metaharness-7-section"</span>,
+  <span class="p">"competitorList"</span>: [<span class="s">"LangGraph"</span>, <span class="s">"AutoGen"</span>, <span class="s">"DSPy/GEPA"</span>],
+  <span class="p">"extraDiscipline"</span>: [<span class="s">"adr-250-proof-ladder"</span>]
+}</code></pre>
+            </div>
+
+            <dl class="fields">
+              <dt>repo</dt>
+              <dd>The single target repository this config describes.</dd>
+
+              <dt>cron</dt>
+              <dd>
+                When the night runs, in UTC. Stagger it against your other
+                targets so two sessions never contend for the same budget.
+              </dd>
+
+              <dt>slots</dt>
+              <dd>
+                The rotation vocabulary. Each slot names one <em>deep</em>
+                surface to investigate properly and a couple of <em>scan</em>
+                targets to sweep. This is what stops the machine from
+                investigating the same thing forever.
+              </dd>
+
+              <dt>bonusModuli</dt>
+              <dd>
+                Occasional surfaces, keyed by night number, for areas worth
+                revisiting periodically but not on the main rotation.
+              </dd>
+
+              <dt>controlPlaneProbes</dt>
+              <dd>
+                Commands the session runs to confirm the repository's own tooling
+                is alive before trusting any measurement taken through it.
+              </dd>
+
+              <dt>buildStep</dt>
+              <dd>
+                How to build the target, and whether a WASM build failure should
+                degrade the night rather than end it.
+              </dd>
+
+              <dt>evaluatorEntrypoints</dt>
+              <dd>
+                Where the evaluators live in this repo — the wiring between the
+                pipeline's stages and the backends that actually run them.
+              </dd>
+
+              <dt>adrTemplate</dt>
+              <dd>
+                Which ADR shape this repo writes, so a night's proposal lands in
+                the house style instead of a generic one.
+              </dd>
+
+              <dt>competitorList</dt>
+              <dd>
+                The field to read during the research stage — the prior art the
+                night is expected to have considered before forming a hypothesis.
+              </dd>
+
+              <dt>extraDiscipline</dt>
+              <dd>
+                Repo-specific rules the night must additionally honour, named by
+                their ADR.
+              </dd>
+            </dl>
+
+            <p class="note" style="margin-top: 1.5rem">
+              <strong>Onboarding a third repository is writing one of these.</strong>
+              Not forking an 800-line prompt and hand-editing it — which is the
+              maintenance defect the engine exists to remove.
+            </p>
+          </li>
+
+          <!-- ============================================ 3. COMPILE -->
+          <li class="tut" id="compile">
+            <h2>Compile a routine</h2>
+            <p>
+              Compiling turns the config into the full routine prompt. Both
+              copies that used to be hand-synced — the one pasted into the cloud
+              scheduler and the one mirrored in the repository — become outputs
+              of this single build.
+            </p>
+
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">Terminal</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the compile command"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>npx dream-machine compile</code></pre>
+            </div>
+
+            <p>
+              That is the whole point of the compiler: drift between the two
+              copies stops being a reviewable defect you have to notice, and
+              becomes structurally impossible. Re-run <code>compile</code> after
+              every config change and commit the result alongside it, so the
+              mirror is never a stale artifact of a config nobody remembers
+              editing.
+            </p>
+
+            <p class="note">
+              <strong>How the design proves itself.</strong> ADR-0001's test
+              contract requires the compiler to reproduce the existing
+              hand-written prompts <em>byte-identically</em> from their configs.
+              That is the existence proof that the config really captures the
+              full per-repo delta — if a single byte differs, something is still
+              hiding in the prose.
+            </p>
+          </li>
+
+          <!-- ============================================ 4. WITNESS -->
+          <li class="tut" id="witness">
+            <h2>Verify a witness</h2>
+            <p>
+              Every night stamps a witness that binds what it published to the
+              exact code it ran against. The scheme is deliberately plain enough
+              to re-derive by hand:
+            </p>
+
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">The scheme</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the witness formula"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>WITNESS = sha256( sha256(gist) + SESSION_COMMIT )</code></pre>
+            </div>
+
+            <p>
+              The gist is the night's published record; <code>SESSION_COMMIT</code>
+              is the commit the isolated session actually had checked out. Hash
+              the gist, concatenate the resulting hex digest with the commit
+              SHA, hash again. Change one byte of either input and the witness
+              no longer matches.
+            </p>
+
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">Terminal</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the witness stamp and verify commands"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code><span class="c"># produce a witness for tonight's gist + commit</span>
+npx dream-machine witness stamp
+
+<span class="c"># check a published witness against its inputs</span>
+npx dream-machine witness verify</code></pre>
+            </div>
+
+            <p>
+              You do not have to take the CLI's word for it. The same two hashes
+              are reproducible with standard tools, which is exactly why the
+              scheme is worth having:
+            </p>
+
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">Re-derive it yourself</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the manual witness re-derivation snippet"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>GIST_HASH=$(curl -sL "$GIST_RAW_URL" | sha256sum | cut -d' ' -f1)
+printf '%s%s' "$GIST_HASH" "$SESSION_COMMIT" | sha256sum | cut -d' ' -f1</code></pre>
+            </div>
+
+            <p class="note">
+              <strong>What a witness does and does not prove.</strong> It proves
+              that this record and this commit belong together and have not been
+              edited since. It does not prove the measurement was sound — that is
+              what the adversarial critique, the reward-hack scan, and the
+              promotion gate are for. Provenance and merit are separate claims,
+              checked separately.
+            </p>
+          </li>
+
+          <!-- ============================================ 5. LEDGER -->
+          <li class="tut" id="ledger">
+            <h2>Read the ledger</h2>
+            <p>
+              <code>LEDGER.md</code> is the only durable memory that survives
+              between nights — each session is a fresh, isolated checkout with no
+              recollection of the last one. Ten columns, one row per night,
+              appended even when the run halts on budget.
+            </p>
+
+            <div class="table-scroll">
+              <table>
+                <caption>
+                  The ledger schema, as rendered by the
+                  <a href="./dashboard.html">dashboard</a>.
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Column</th>
+                    <th scope="col">What it holds</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row"><code>date</code></th>
+                    <td>The night, in UTC.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>repo</code></th>
+                    <td>The target repository the config named.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>deep</code></th>
+                    <td>The deep surface drawn from the rotation.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>scan</code></th>
+                    <td>The lighter scan targets swept alongside it.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>hypothesis</code></th>
+                    <td>The single claim, frozen before measurement.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>finding</code></th>
+                    <td>What was actually learned, in plain language.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>verdict</code></th>
+                    <td><code>ACCEPT</code>, <code>REJECT</code>, or <code>INCONCLUSIVE</code>.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>evidence</code></th>
+                    <td>Sample sizes, intervals, and the halt reason if there was one.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>artifacts</code></th>
+                    <td>The gist, the issue, and the draft PR if one was opened.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row"><code>witness</code></th>
+                    <td>The provenance stamp for the row.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="code" style="margin-top: 1.5rem">
+              <div class="code__bar">
+                <span class="code__label">Terminal</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the ledger commands"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>npx dream-machine ledger          <span class="c"># parse and print the rows</span>
+npx dream-machine ledger verify   <span class="c"># check the schema holds</span>
+npx dream-machine tui             <span class="c"># browse the nights interactively</span></code></pre>
+            </div>
+
+            <p>
+              The ledger is not an archive you consult occasionally — it is an
+              input. Before forming tonight's hypothesis, the engine computes
+              learning signals from it deterministically, in library code rather
+              than leaving them for the model to re-derive:
+            </p>
+
+            <ul>
+              <li>
+                <strong>Duplicate-finding suppression</strong> — a question
+                already answered does not get asked again.
+              </li>
+              <li>
+                <strong>Zero-merge bias</strong> — a surface that has produced
+                nothing a human merged in fourteen nights gets weighted down.
+              </li>
+              <li>
+                <strong>Low-score-streak throttling</strong> — a run of poor
+                results narrows the night's ambition rather than escalating it.
+              </li>
+            </ul>
+
+            <p class="note">
+              <strong>A REJECT row is the point, not the consolation.</strong> It
+              is a question that was open at dusk and closed by morning, which
+              makes tomorrow's search space smaller and tomorrow's night cheaper.
+              A night that produces a clean REJECT has done its job.
+            </p>
+          </li>
+
+          <!-- ============================================ 6. SCHEDULE -->
+          <li class="tut" id="schedule">
+            <h2>Schedule the nightly run</h2>
+            <p>
+              The night runs in an isolated cloud session with a fresh checkout —
+              deliberately not as a CI job in the target repository. The loop
+              needs an agentic session that can research and judge, and keeping
+              evolution authority out of the repo's own CI credentials is a
+              security feature, not an inconvenience.
+            </p>
+
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">Terminal</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the schedule commands"
+                >
+                  <svg aria-hidden="true" focusable="false"><use href="#i-copy" /></svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>npx dream-machine compile
+npx dream-machine schedule</code></pre>
+            </div>
+
+            <p class="note">
+              <strong>What v1 actually does — stated plainly.</strong> ADR-0001
+              ships scheduling as <em>compile, then paste the result into the
+              cloud scheduler's <code>/schedule</code> routine</em>. Full
+              automation is deliberately deferred until a callable scheduling API
+              is confirmed to exist; shipping an unverified API wrapper would be
+              exactly the kind of overclaim the pipeline's own discipline
+              forbids. So this step is honest manual work today, and the CLI's job
+              is to make sure what you paste is a build output rather than a
+              hand-edited copy.
+            </p>
+
+            <p>
+              Set the <code>cron</code> in your config to a UTC time that does not
+              collide with your other targets — the two reference routines run at
+              <code>0 6 * * *</code> and <code>0 8 * * *</code> for exactly this
+              reason. Then keep the in-repo mirror committed next to the config,
+              so anyone reading the repository can see what the scheduler is
+              running without having to log into it.
+            </p>
+          </li>
+        </ol>
+      </section>
+
+      <!-- ============================================ WALKTHROUGH -->
+      <section class="section container" id="walkthrough">
+        <div class="section__head">
+          <p class="eyebrow">Guided walkthrough</p>
+          <h2>One night, dusk to morning.</h2>
+          <p class="lede">
+            Everything above, assembled. This is what happens while you are
+            asleep, and what you will find waiting when you are not.
+          </p>
+        </div>
+
+        <div class="grid grid--2">
+          <article class="card">
+            <h3>What the session does</h3>
+            <ol>
+              <li>
+                Wakes on your <code>cron</code> in a fresh, isolated checkout with
+                no memory of last night.
+              </li>
+              <li>
+                Reads <code>LEDGER.md</code> and computes the learning signals —
+                what is already answered, what is not paying off.
+              </li>
+              <li>
+                Draws a slot from the rotation and researches the surface,
+                including the prior art your <code>competitorList</code> names.
+              </li>
+              <li>
+                Freezes exactly one falsifiable hypothesis, then builds a
+                concrete candidate — a real diff, not a direction.
+              </li>
+              <li>
+                Measures the baseline and the candidate under the same frozen
+                model, so only the harness varies.
+              </li>
+              <li>
+                Runs adversarial critique and the reward-hack scan: is the work
+                better, or only the score?
+              </li>
+              <li>
+                Explores bounded variations, retains flywheel evidence, and reads
+                — never moves — the promotion gate.
+              </li>
+              <li>
+                Stamps the witness, publishes the gist and issue, opens a draft
+                PR if there is one worth opening, and appends the ledger row.
+              </li>
+            </ol>
+          </article>
+
+          <article class="card">
+            <h3>What you find in the morning</h3>
+            <ul>
+              <li>
+                <strong>One ledger row</strong> — always, including on a budget
+                halt. A night with no row is a night that never happened.
+              </li>
+              <li>
+                <strong>One verdict</strong> — <code>ACCEPT</code>,
+                <code>REJECT</code>, or <code>INCONCLUSIVE</code> with its reason.
+                Never a fourth, never silence.
+              </li>
+              <li>
+                <strong>A gist and an issue</strong> carrying the hypothesis, the
+                measurement, the critique, and the witness.
+              </li>
+              <li>
+                <strong>Possibly a draft PR</strong> — and it will still be a
+                draft, because the machine recommends and you decide.
+              </li>
+            </ul>
+
+            <p style="margin-top: 1.25rem">
+              Two of the three verdicts produce no pull request at all, and both
+              of those are good nights. Judge the loop by how fast it is closing
+              questions, not by how many PRs it opened.
+            </p>
+
+            <p>
+              <a class="btn" href="./dashboard.html">See a week of nights</a>
+            </p>
+          </article>
+        </div>
+
+        <div class="banner" style="margin-top: 2rem">
+          <span class="banner__dot" aria-hidden="true"></span>
+          <p>
+            <strong>The invariant that survives everything.</strong> The session
+            never merges, never self-promotes flywheel state, never weakens a
+            test or benchmark or threshold, never edits gold answers, never
+            force-pushes, and never publishes packages. Evaluation is not
+            promotion. Promotion is a human act, every night, with no exceptions.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container site-footer__inner">
+        <div>
+          <h2>Dream Machine</h2>
+          <p style="max-width: 34ch; color: var(--faint)">
+            Config-driven, evidence-gated nightly repository evolution.
+          </p>
+        </div>
+
+        <nav aria-label="Documentation">
+          <h2>Docs</h2>
+          <ul>
+            <li><a href="./index.html">Overview</a></li>
+            <li><a href="./dashboard.html">Dashboard</a></li>
+            <li>
+              <a
+                href="https://github.com/ruvnet/dream-machine/blob/main/docs/adrs/ADR-0001-dream-machine-engine.md"
+                >ADR-0001</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Composed packages">
+          <h2>Stack</h2>
+          <ul>
+            <li>
+              <a href="https://www.npmjs.com/package/@metaharness/flywheel"
+                >@metaharness/flywheel</a
+              >
+            </li>
+            <li>
+              <a href="https://www.npmjs.com/package/@metaharness/darwin"
+                >@metaharness/darwin</a
+              >
+            </li>
+            <li>
+              <a href="https://www.npmjs.com/package/@metaharness/redblue"
+                >@metaharness/redblue</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Project">
+          <h2>Project</h2>
+          <ul>
+            <li><a href="https://github.com/ruvnet/dream-machine">GitHub</a></li>
+            <li>
+              <a href="https://github.com/ruvnet/dream-machine/issues">Issues</a>
+            </li>
+            <li>
+              <a href="https://github.com/ruvnet/dream-machine/blob/main/LICENSE"
+                >MIT License</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <div class="site-footer__legal">
+          <p>
+            MIT © rUv. The Dream Machine never merges — promotion is a human act,
+            every night, with no exceptions.
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <p id="copy-status" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

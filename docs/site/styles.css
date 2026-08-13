@@ -385,6 +385,15 @@ code {
   margin-bottom: 0;
 }
 
+.card ul,
+.card ol {
+  color: var(--muted);
+}
+
+.card li::marker {
+  color: var(--cyan-dim);
+}
+
 .card__icon {
   display: block;
   width: 38px;
@@ -451,6 +460,7 @@ code {
   display: flex;
   align-items: center;
   gap: clamp(0.35rem, 1.4vw, 1.1rem);
+  min-width: 0; /* let the nav scroll internally instead of widening the header */
   overflow-x: auto;
   scrollbar-width: none;
 }
