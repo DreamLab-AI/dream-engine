@@ -181,13 +181,14 @@
         <div class="banner" style="margin-top: 1.75rem">
           <span class="banner__dot" aria-hidden="true"></span>
           <p>
-            <strong>Read this first.</strong> The Dream Machine is at
-            <em>founding design</em> status — ADR-0001 is Proposed and no engine
-            code has shipped. The commands below describe the designed CLI
-            surface so you can follow the shape of the workflow; they are not yet
-            a released binary. Where the design deliberately defers something
-            (scheduling, most of all) this page says so rather than inventing a
-            capability.
+            <strong>Read this first.</strong> The engine has shipped (v0.1.0):
+            these commands run today from a source checkout —
+            <code>git clone</code>, <code>npm ci &amp;&amp; npm run build</code>,
+            then <code>node packages/cli/dist/bin.js &lt;command&gt;</code>. The
+            <code>npx dream-machine</code> form works once the npm publish lands
+            (a signed release away). Where the design deliberately defers
+            something (automated scheduling, most of all) this page says so
+            rather than inventing a capability.
           </p>
         </div>
 
