@@ -1,0 +1,25 @@
+{
+  "name": "@dream-machine/memory",
+  "version": "0.1.0",
+  "description": "Optional semantic memory over prior dream nights — ruvector/RVF wasm when present, deterministic flat-file fallback otherwise.",
+  "type": "module",
+  "license": "MIT",
+  "author": "rUv <ruv@ruv.net>",
+  "homepage": "https://github.com/ruvnet/dream-machine",
+  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git", "directory": "packages/memory" },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "build": "tsc -b" },
+  "peerDependencies": {
+    "@ruvector/wasm": "*",
+    "@ruvector/rvf-wasm": "*"
+  },
+  "peerDependenciesMeta": {
+    "@ruvector/wasm": { "optional": true },
+    "@ruvector/rvf-wasm": { "optional": true }
+  },
+  "keywords": ["dream-machine", "memory", "ruvector", "rvf", "wasm", "semantic-search", "optional"]
+}

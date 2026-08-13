@@ -1,0 +1,147 @@
+{
+  "schema": "dream-ledger/v1",
+  "generated": "2026-08-13T06:00:00Z",
+  "note": "Sample ledger shipped with the documentation site. Illustrative data for the dashboard — not the output of a real nightly run.",
+  "columns": [
+    "date",
+    "repo",
+    "deep",
+    "scan",
+    "hypothesis",
+    "finding",
+    "verdict",
+    "evidence",
+    "artifacts",
+    "witness"
+  ],
+  "nights": [
+    {
+      "date": "2026-08-12",
+      "repo": "ruvnet/metaharness",
+      "deep": "flywheel-promotion",
+      "scan": ["evals-verticals", "bench"],
+      "hypothesis": "Raising the flywheel promotion gate's minimum holdout size from n=40 to n=60 removes false ACCEPTs without costing true lift.",
+      "finding": "n=60 eliminated 2 of the 3 historical false promotions while keeping every true lift. The gate got stricter without getting blinder.",
+      "verdict": "ACCEPT",
+      "evidence": "Replayed all 9 archived promotions: false positives 3/9 → 1/9; true-lift recall held at 6/6. Replay receipts verified against stored flywheel state.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/148",
+        "pr": "https://github.com/ruvnet/metaharness/pull/149",
+        "gist": "https://gist.github.com/ruvnet/4b1e9c0d7a2f8e5613c4d90ab7f2e651"
+      },
+      "witness": "9f2c7a41d8be03957c16a4ef25db807fa3c9e14b62d05879fe3ab1c47d902e68"
+    },
+    {
+      "date": "2026-08-11",
+      "repo": "ruvnet/ruflo",
+      "deep": "hooks-routing",
+      "scan": ["memory-bridge", "session-start"],
+      "hypothesis": "Routing tier-1 transforms through the WASM booster before the LLM tier cuts median hook latency by more than 30%.",
+      "finding": "Median latency moved 8% — inside run-to-run noise. The booster path was already taken on 91% of tier-1 calls, so there was almost nothing left to reroute.",
+      "verdict": "REJECT",
+      "evidence": "n=240 hook invocations. Median 512 ms → 471 ms; paired bootstrap 95% CI [-14%, +2%] crosses zero. Pre-existing booster hit rate measured at 91%.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/612",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/71ad3f5c8e0946b2d1fc07e3ab5928d4"
+      },
+      "witness": "3ac48e0b5f719d62e8c30a97bd41582fce6079a3d24b8e15fa07c396b8d2140e"
+    },
+    {
+      "date": "2026-08-10",
+      "repo": "ruvnet/metaharness",
+      "deep": "generator-genome",
+      "scan": ["router", "turn-credit"],
+      "hypothesis": "A genome that biases the generator toward edit-by-midpoint transfers from the training verticals to the held-out ones.",
+      "finding": "No measurement was taken. The baseline built cleanly and the candidate genome compiled, but every scoring call was refused for lack of credentials — so the hypothesis carries over untested rather than answered.",
+      "verdict": "INCONCLUSIVE",
+      "evidence": "LLM_EVAL=blocked — 0 model calls completed (no provider key in the session). Build green, control-plane probes green, baseline artifacts retained for tomorrow.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/144",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/c05e8b91a7d34f26be180d5c93af6712"
+      },
+      "witness": "b7e105d34fa2986c0b53e7d1a94f8206ce31d75b8a0f9243e6cb15807df3a29c"
+    },
+    {
+      "date": "2026-08-09",
+      "repo": "ruvnet/ruflo",
+      "deep": "darwin-mutation-budget",
+      "scan": ["swarm-topology", "claims-board"],
+      "hypothesis": "At a fixed token budget, 3 Darwin generations of 8 candidates beats 6 generations of 4.",
+      "finding": "Wider-and-shallower won. The extra population per generation mattered more than the extra generations, at equal spend.",
+      "verdict": "ACCEPT",
+      "evidence": "60-task holdout, n=60. Score 0.612 → 0.647; paired bootstrap p=0.021. Token spend within 2% between arms. Reward-hack scan clean.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/605",
+        "pr": "https://github.com/ruvnet/ruflo/pull/606",
+        "gist": "https://gist.github.com/ruvnet/2f9c14b7e08d5a361cb27f04e9d6813a"
+      },
+      "witness": "5d81c93fa072e4b6180da5c37fe92b40819c6ad35e7f01b2c483e9d70a6bf1c2"
+    },
+    {
+      "date": "2026-08-08",
+      "repo": "ruvnet/metaharness",
+      "deep": "redblue-critic",
+      "scan": ["security-bench", "mcp-scan"],
+      "hypothesis": "A second adversarial critic pass surfaces reward-hack surface the first pass misses.",
+      "finding": "The second pass found nothing the first had not already flagged, across 40 candidate diffs, and roughly doubled critique cost. One pass is the right number.",
+      "verdict": "REJECT",
+      "evidence": "40 candidate diffs, two-pass vs one-pass. Additional findings: 0. Critique cost +103%. Agreement between passes: 40/40.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/139",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/8e73b0a52c9d14f607be3a1d95c082f7"
+      },
+      "witness": "c418a6027ed3b591f0a74c8d2be6931507fa4c8e19d62b30a7f5e04c8b1d9236"
+    },
+    {
+      "date": "2026-08-07",
+      "repo": "ruvnet/ruflo",
+      "deep": "memory-consolidation",
+      "scan": ["agentdb-hnsw", "embeddings"],
+      "hypothesis": "Consolidating near-duplicate memories before indexing improves recall precision without losing coverage.",
+      "finding": "The budget ceiling was reached partway through the baseline sweep. 22 of 60 tasks were scored — too few to separate the arms, so no claim is made either way.",
+      "verdict": "INCONCLUSIVE",
+      "evidence": "HALT: budget at $18.40 against an $18.00 ceiling. 22/60 tasks scored before the halt. Partial baseline retained; the ledger row was written by the halt path.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/598",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/a1d6f3902c7b48e5106df82a4b3ce907"
+      },
+      "witness": "e60fb2a97d1c4358024ae7b61df9302c85a147ed3b09c6f2158d0ba4e73c9615"
+    },
+    {
+      "date": "2026-08-06",
+      "repo": "ruvnet/metaharness",
+      "deep": "evals-verticals",
+      "scan": ["evals-sql", "evals-math"],
+      "hypothesis": "A normalizer shared across the SQL and math verticals raises extraction agreement without touching either gold set.",
+      "finding": "Agreement rose substantially and the gold answers were provably untouched — the lift came from the normalizer, not from moving the target.",
+      "verdict": "ACCEPT",
+      "evidence": "Inter-vertical agreement 0.71 → 0.83 over n=180 items, p<0.01. Gold-answer files hash-verified identical before and after. Reward-hack scan clean.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/131",
+        "pr": "https://github.com/ruvnet/metaharness/pull/132",
+        "gist": "https://gist.github.com/ruvnet/6c092e14b7fa538d01e4c7ab29f60d38"
+      },
+      "witness": "1a94d7e05fb32c68094ae61d7b3f8250cd6194ab7e02f35c8d14b96e07a3fc82"
+    },
+    {
+      "date": "2026-08-05",
+      "repo": "ruvnet/ruflo",
+      "deep": "context-compaction",
+      "scan": ["session-restore", "hooks-metrics"],
+      "hypothesis": "Summarising tool results above 2 KB before they enter context saves tokens without hurting task success.",
+      "finding": "It saved the tokens and cost the success. A 14% token reduction came with a measurable 4-point drop in task success — a real regression, not noise.",
+      "verdict": "REJECT",
+      "evidence": "n=50 tasks. Tokens -14%; success 0.58 → 0.54; paired bootstrap 95% CI [-0.09, -0.01], excludes zero.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/590",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/df3810c69a4e27b5084c1fae63b092d7"
+      },
+      "witness": "72be5c0a13df894e6a0c27b5fd139480ea36c71b95d20f8a4c63e109db7f2a45"
+    }
+  ]
+}

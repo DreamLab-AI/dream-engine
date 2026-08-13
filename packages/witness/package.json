@@ -1,0 +1,17 @@
+{
+  "name": "@dream-machine/witness",
+  "version": "0.1.0",
+  "description": "Witness provenance for the Dream Machine — sha256(sha256(report) + commit) stamp & 5-step verify.",
+  "type": "module",
+  "license": "MIT",
+  "author": "rUv <ruv@ruv.net>",
+  "homepage": "https://github.com/ruvnet/dream-machine",
+  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git", "directory": "packages/witness" },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "build": "tsc -b" },
+  "keywords": ["dream-machine", "witness", "provenance", "sha256", "reproducibility"]
+}

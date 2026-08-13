@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Dream Machine — evidence-gated nightly repository evolution</title>
+    <meta
+      name="description"
+      content="A config-driven engine that runs one honest research-and-evolution cycle against a repository every night. Freeze the model, evolve the harness, and end every night on ACCEPT, REJECT, or INCONCLUSIVE — the machine never merges."
+    />
+    <link rel="canonical" href="https://ruvnet.github.io/dream-machine/" />
+    <meta name="theme-color" content="#05060f" />
+    <meta name="color-scheme" content="dark" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Dream Machine" />
+    <meta property="og:url" content="https://ruvnet.github.io/dream-machine/" />
+    <meta
+      property="og:title"
+      content="Dream Machine — evidence-gated nightly repository evolution"
+    />
+    <meta
+      property="og:description"
+      content="One honest research-and-evolution cycle against your repository every night, ending in ACCEPT, REJECT, or INCONCLUSIVE. Evaluation is not promotion — a human merges."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Dream Machine — evidence-gated nightly repository evolution"
+    />
+    <meta
+      name="twitter:description"
+      content="One honest research-and-evolution cycle against your repository every night, ending in ACCEPT, REJECT, or INCONCLUSIVE. Evaluation is not promotion — a human merges."
+    />
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230a0b1a'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2367e8f9' stroke-width='1.6' opacity='.75'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23a78bfa'/%3E%3Ccircle cx='16' cy='7' r='2.2' fill='%2367e8f9'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Dream Machine",
+        "alternateName": "@dream-machine",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Cross-platform, Node.js 18+",
+        "url": "https://ruvnet.github.io/dream-machine/",
+        "codeRepository": "https://github.com/ruvnet/dream-machine",
+        "license": "https://opensource.org/licenses/MIT",
+        "description": "A config-driven engine for nightly, cloud-scheduled, evidence-gated repository evolution. Compiles a dream.config into a routine prompt and composes @metaharness/flywheel, @metaharness/darwin and @metaharness/redblue as optional evaluation backends. Every night ends in ACCEPT, REJECT or INCONCLUSIVE, and the engine never merges.",
+        "author": { "@type": "Person", "name": "rUv" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <div class="sky" aria-hidden="true">
+      <canvas class="sky__stars" data-parallax="0.02"></canvas>
+      <div class="nebula nebula--a" data-parallax="0.05"></div>
+      <div class="nebula nebula--b" data-parallax="0.09"></div>
+      <div class="nebula nebula--c" data-parallax="0.12"></div>
+    </div>
+
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="./index.html">
+          <svg
+            class="brand__mark"
+            viewBox="0 0 32 32"
+            role="img"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle
+              cx="16"
+              cy="16"
+              r="10"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              opacity=".55"
+            />
+            <circle cx="16" cy="16" r="4.2" fill="currentColor" opacity=".85" />
+            <circle cx="16" cy="6" r="2.4" fill="currentColor" />
+          </svg>
+          <span class="brand__text">Dream Machine</span>
+        </a>
+
+        <nav class="nav" aria-label="Primary">
+          <a href="#what">Overview</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#verdicts">Verdicts</a>
+          <a href="#stack">Stack</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="./tutorials.html">Tutorials</a>
+          <a href="./dashboard.html">Dashboard</a>
+          <a href="https://github.com/ruvnet/dream-machine">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ================================================== HERO -->
+      <section class="hero container">
+        <p class="eyebrow">Nightly · Evidence-gated · Human-merged</p>
+
+        <h1 class="hero__title">
+          One honest cycle,<br />
+          <span class="grad">every single night.</span>
+        </h1>
+
+        <p class="hero__lede">
+          The Dream Machine turns “run one research-and-evolution cycle against a
+          repository every night” into a config-compiled engine instead of a
+          hand-maintained megaprompt. It wakes up in an isolated cloud session,
+          forms one falsifiable hypothesis, measures it, and writes down what it
+          learned — whether or not the answer was the one it hoped for.
+        </p>
+
+        <p class="hero__principle">
+          Freeze the model. Evolve the harness.
+          <em>Evaluation is not promotion</em> — the machine never merges; a
+          human does.
+        </p>
+
+        <div class="hero__actions">
+          <div class="cmd">
+            <span class="cmd__text"
+              ><span class="cmd__prompt" aria-hidden="true">$</span
+              ><code>npx dream-machine init</code></span
+            >
+            <button
+              class="cmd__btn"
+              type="button"
+              data-copy-btn
+              data-copy="npx dream-machine init"
+              aria-label="Copy the command npx dream-machine init to the clipboard"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <rect
+                  x="9"
+                  y="9"
+                  width="11"
+                  height="11"
+                  rx="2"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                />
+                <path
+                  d="M5 15V6a2 2 0 0 1 2-2h8"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+
+          <a class="btn btn--primary" href="#pipeline">See the nightly pipeline</a>
+          <a class="btn" href="./dashboard.html">Open the dashboard</a>
+        </div>
+
+        <p class="hero__meta">
+          <span>MIT licensed</span>
+          <span>Node.js 18+</span>
+          <span>ruvnet/dream-machine</span>
+        </p>
+      </section>
+
+      <!-- ================================================== STATUS -->
+      <section class="container section--tight" aria-label="Project status">
+        <div class="banner">
+          <span class="banner__dot" aria-hidden="true"></span>
+          <p>
+            <strong>Status: founding design (Proposed).</strong> No engine code
+            has shipped yet.
+            <a href="https://github.com/ruvnet/dream-machine/blob/main/docs/adrs/ADR-0001-dream-machine-engine.md"
+              >ADR-0001</a
+            >
+            is the authoritative design; the two production routines that run
+            nightly against <code>ruvnet/ruflo</code> and
+            <code>ruvnet/metaharness</code> are the working reference
+            implementations this engine will subsume. Commands shown on this site
+            describe the designed surface, not a released binary.
+          </p>
+        </div>
+      </section>
+
+      <!-- ================================================== WHAT IT IS -->
+      <section class="section container" id="what">
+        <div class="section__head reveal">
+          <p class="eyebrow">What it is</p>
+          <h2>An engine, extracted from two routines that already run.</h2>
+          <p class="lede">
+            Two nightly cycles run today in a cloud scheduler — one against
+            Ruflo, one against MetaHarness — each driven by its own ~800-line
+            prompt. They run the identical 26-step pipeline and differ only in a
+            small, well-defined set of per-repo details. Two instances is exactly
+            enough to see the seam: the shared spine becomes an engine, and the
+            differences become a <code>dream.config</code>.
+          </p>
+        </div>
+
+        <div class="grid grid--3">
+          <article class="card reveal">
+            <svg
+              class="card__icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M4 7h16M4 12h16M4 17h10"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+              />
+              <circle cx="19" cy="17" r="2.4" stroke="currentColor" stroke-width="1.7" />
+            </svg>
+            <h3>The compiler is the core</h3>
+            <p>
+              A <code>dream.config</code> declares the per-repo delta — rotation
+              slots, cron, evaluator entrypoints, ADR shape — and compiles to the
+              full routine prompt. The scheduler copy and the in-repo mirror
+              become build outputs of one source, so the drift between them stops
+              being a convention and becomes structurally impossible.
+            </p>
+          </article>
+
+          <article class="card reveal">
+            <svg
+              class="card__icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M12 3v18M5 8l7-5 7 5v8l-7 5-7-5V8Z"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <h3>Composed, never reimplemented</h3>
+            <p>
+              The expensive stages delegate to the packages that already own
+              them: flywheel for the promotion gate, darwin for bounded
+              evolution, redblue for adversarial critique. They are optional
+              backends selected by config — a night without any of them is a
+              <em>degraded</em> night, not a failed one.
+            </p>
+          </article>
+
+          <article class="card reveal">
+            <svg
+              class="card__icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M12 21s7-4.6 7-10V5.6L12 3 5 5.6V11c0 5.4 7 10 7 10Z"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linejoin="round"
+              />
+              <path
+                d="m9 11.6 2.1 2.1L15.4 9.4"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <h3>Hard authority boundaries</h3>
+            <p>
+              The session never merges, never self-promotes flywheel state, never
+              weakens a test or a threshold, never edits gold answers, never
+              force-pushes, never publishes packages. Its only publication
+              surfaces are a gist, an issue, and an always-draft pull request.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================================================== PIPELINE (SCROLLY) -->
+      <section class="section container" id="pipeline">
+        <div class="section__head reveal">
+          <p class="eyebrow">The nightly pipeline</p>
+          <h2>Thirteen stages, one verdict.</h2>
+          <p class="lede">
+            Scroll to walk the cycle. Each stage narrows what tomorrow needs to
+            search — the system optimizes for shrinking the search space, not for
+            producing pull requests.
+          </p>
+        </div>
+
+        <div class="scrolly" data-scrolly>
+          <!-- sticky visual -->
+          <div class="scrolly__viz">
+            <div class="scrolly__stage">
+              <svg
+                class="orbit"
+                viewBox="0 0 300 300"
+                role="img"
+                aria-label="Diagram of the thirteen-stage nightly pipeline arranged as a ring; the current stage is highlighted as you scroll."
+              >
+                <defs>
+                  <linearGradient id="orbitGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#67e8f9" />
+                    <stop offset="55%" stop-color="#a78bfa" />
+                    <stop offset="100%" stop-color="#f472d0" />
+                  </linearGradient>
+                  <radialGradient id="coreGrad" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.16" />
+                    <stop offset="100%" stop-color="#67e8f9" stop-opacity="0" />
+                  </radialGradient>
+                  <filter id="orbitGlow" x="-120%" y="-120%" width="340%" height="340%">
+                    <feGaussianBlur stdDeviation="3.2" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+
+                <circle cx="150" cy="150" r="96" fill="url(#coreGrad)" />
+                <circle class="orbit__ring" cx="150" cy="150" r="118" />
+                <circle
+                  class="orbit__ring"
+                  cx="150"
+                  cy="150"
+                  r="92"
+                  stroke-dasharray="2 6"
+                  opacity="0.6"
+                />
+
+                <circle
+                  class="orbit__arc"
+                  cx="150"
+                  cy="150"
+                  r="118"
+                  transform="rotate(-90 150 150)"
+                  stroke-dasharray="741.42"
+                  stroke-dashoffset="741.42"
+                />
+
+                <circle class="orbit__node" cx="150.00" cy="32.00" r="6" />
+                <circle class="orbit__node" cx="204.84" cy="45.52" r="6" />
+                <circle class="orbit__node" cx="247.11" cy="82.97" r="6" />
+                <circle class="orbit__node" cx="267.14" cy="135.78" r="6" />
+                <circle class="orbit__node" cx="260.33" cy="191.84" r="6" />
+                <circle class="orbit__node" cx="228.25" cy="238.32" r="6" />
+                <circle class="orbit__node" cx="178.24" cy="264.57" r="6" />
+                <circle class="orbit__node" cx="121.76" cy="264.57" r="6" />
+                <circle class="orbit__node" cx="71.75" cy="238.32" r="6" />
+                <circle class="orbit__node" cx="39.67" cy="191.84" r="6" />
+                <circle class="orbit__node" cx="32.86" cy="135.78" r="6" />
+                <circle class="orbit__node" cx="52.89" cy="82.97" r="6" />
+                <circle class="orbit__node" cx="95.16" cy="45.52" r="6" />
+
+                <text class="orbit__center-num" x="150" y="136" data-orbit-num>
+                  STAGE 01
+                </text>
+                <text class="orbit__center-label" x="150" y="162" data-orbit-label>
+                  Ledger
+                </text>
+                <text class="orbit__center-sub" x="150" y="184" data-orbit-sub>
+                  READ · LEDGER.md
+                </text>
+              </svg>
+
+              <p class="scrolly__readout">
+                <span>Nightly cycle</span>
+                <output data-orbit-readout aria-live="off">01 / 13</output>
+              </p>
+            </div>
+          </div>
+
+          <!-- scrolling steps -->
+          <ol class="scrolly__steps">
+            <li class="stage" data-short="Ledger" data-out="READ · LEDGER.md">
+              <span class="stage__num">Stage 01</span>
+              <h3>Read the ledger</h3>
+              <p>
+                The night begins by reading every previous night. The ten-column
+                <code>LEDGER.md</code> is the only durable cross-night memory,
+                and it feeds deterministic learning signals: suppress a finding
+                already made, bias away from a surface that has gone fourteen
+                nights without a merge, throttle a low-scoring streak.
+              </p>
+              <span class="stage__tag">@dream-machine/ledger</span>
+            </li>
+
+            <li class="stage" data-short="Research" data-out="SCAN · prior art">
+              <span class="stage__num">Stage 02</span>
+              <h3>Research the surface</h3>
+              <p>
+                One deep surface and a couple of scan targets come off the
+                rotation declared in <code>dream.config</code>. The session reads
+                the repository and the field around it — competitor frameworks,
+                published results, the repo's own ADRs — before it is allowed to
+                have an opinion.
+              </p>
+            </li>
+
+            <li class="stage" data-short="Hypothesis" data-out="FREEZE · one claim">
+              <span class="stage__num">Stage 03</span>
+              <h3>Freeze one hypothesis</h3>
+              <p>
+                Exactly one falsifiable claim is written down and frozen before
+                anything is measured. Freezing is what makes the night honest: a
+                hypothesis that can be edited after seeing the numbers is not a
+                hypothesis, it is a summary.
+              </p>
+            </li>
+
+            <li class="stage" data-short="Candidate" data-out="DIFF · one change">
+              <span class="stage__num">Stage 04</span>
+              <h3>Build a concrete candidate</h3>
+              <p>
+                The frozen claim becomes an actual change — a diff you could
+                read, not a description of a direction. Vagueness here is what
+                lets a loop declare success without ever having tested anything.
+              </p>
+            </li>
+
+            <li class="stage" data-short="Baseline" data-out="MEASURE · before">
+              <span class="stage__num">Stage 05</span>
+              <h3>Measure the baseline</h3>
+              <p>
+                The unmodified harness is measured first, in this session, on
+                this checkout. A baseline inherited from a previous night is a
+                baseline measured under conditions nobody re-verified.
+              </p>
+            </li>
+
+            <li class="stage" data-short="Evaluation" data-out="MEASURE · after">
+              <span class="stage__num">Stage 06</span>
+              <h3>Evaluate the candidate</h3>
+              <p>
+                The candidate runs against the same tasks, the same sample size,
+                the same frozen model. Only the harness is allowed to vary — that
+                is the whole point of freezing the model, and it is what makes
+                the difference attributable.
+              </p>
+            </li>
+
+            <li class="stage" data-short="Critique" data-out="STEP 10 · redblue">
+              <span class="stage__num">Stage 07</span>
+              <h3>Adversarial critique</h3>
+              <p>
+                A red/blue harness attacks the result: what would have to be true
+                for this measurement to be wrong? Then the reward-hack scan asks
+                the harder question — did the candidate improve the work, or just
+                improve the score?
+              </p>
+              <span class="stage__tag">@metaharness/redblue</span>
+            </li>
+
+            <li class="stage" data-short="Darwin" data-out="STEP 12 · darwin">
+              <span class="stage__num">Stage 08</span>
+              <h3>Bounded Darwin evolution</h3>
+              <p>
+                If the candidate survives critique, a fenced evolution stage
+                explores variations around it under a fixed generation and
+                population budget. Bounded is the operative word: the search is
+                allowed to be creative, not allowed to be open-ended.
+              </p>
+              <span class="stage__tag">@metaharness/darwin</span>
+            </li>
+
+            <li class="stage" data-short="Flywheel" data-out="STEP 13 · receipts">
+              <span class="stage__num">Stage 09</span>
+              <h3>Retain flywheel evidence</h3>
+              <p>
+                Every measurement is captured as a receipt that can be replayed
+                later, and the promotion gate decides — on the retained evidence,
+                not on the narrative — whether the candidate cleared the bar.
+                The session may read the gate's answer. It may never move the
+                bar.
+              </p>
+              <span class="stage__tag">@metaharness/flywheel</span>
+            </li>
+
+            <li class="stage" data-short="Witness" data-out="sha256 ∘ sha256">
+              <span class="stage__num">Stage 10</span>
+              <h3>Stamp the witness</h3>
+              <p>
+                The night's published gist and the session's commit are hashed
+                together —
+                <code>sha256(sha256(gist) + SESSION_COMMIT)</code> — into a
+                single witness. Anyone can re-derive it; a single changed byte in
+                either input breaks it. Provenance stops being a claim and starts
+                being checkable.
+              </p>
+              <span class="stage__tag">@dream-machine/witness</span>
+            </li>
+
+            <li class="stage" data-short="Issue" data-out="PUBLISH · findings">
+              <span class="stage__num">Stage 11</span>
+              <h3>Publish the finding</h3>
+              <p>
+                An issue goes up carrying the hypothesis, the measurement, the
+                critique, and the witness. It goes up whether the answer was yes
+                or no, because the point of the night is the finding, not the
+                outcome.
+              </p>
+            </li>
+
+            <li class="stage" data-short="Draft PR" data-out="NEVER merged">
+              <span class="stage__num">Stage 12</span>
+              <h3>Open a draft pull request</h3>
+              <p>
+                If there is a change worth proposing, it opens as a draft — every
+                night, without exception. This is the invariant everything else
+                protects: the machine recommends, and a human decides. Promotion
+                is a human act.
+              </p>
+            </li>
+
+            <li class="stage" data-short="Ledger row" data-out="WRITE · always">
+              <span class="stage__num">Stage 13</span>
+              <h3>Write the ledger row</h3>
+              <p>
+                The night closes by appending one row: date, surface, hypothesis,
+                finding, verdict, evidence, artifacts, witness. The row is
+                written even when the run halts on budget — a night with no row
+                is a night that never happened, and tomorrow would have to
+                rediscover it.
+              </p>
+              <span class="stage__tag">@dream-machine/ledger</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ================================================== VERDICTS -->
+      <section class="section container" id="verdicts">
+        <div class="section__head reveal">
+          <p class="eyebrow">The three verdicts</p>
+          <h2>Every night ends in exactly one. Never a fourth, never silence.</h2>
+          <p class="lede">
+            The verdict vocabulary is deliberately small and deliberately
+            unflattering. Two of the three outcomes produce no pull request at
+            all, and both of them are good nights.
+          </p>
+        </div>
+
+        <div class="grid grid--3">
+          <article class="card verdict-card verdict-card--accept reveal">
+            <h3>ACCEPT</h3>
+            <p>
+              The frozen hypothesis survived measurement, critique, and the
+              reward-hack scan, and cleared the promotion gate on retained
+              evidence. The result is a draft pull request and an issue — a
+              recommendation for a human, not a merge.
+            </p>
+          </article>
+
+          <article class="card verdict-card verdict-card--reject reveal">
+            <h3>REJECT</h3>
+            <p>
+              The hypothesis was measured cleanly and did not hold. This is a
+              <strong>successful night</strong>: a question that was open at
+              dusk is closed by morning, and tomorrow's search space is smaller
+              for it. Most nights should land here.
+            </p>
+          </article>
+
+          <article class="card verdict-card verdict-card--inconclusive reveal">
+            <h3>INCONCLUSIVE</h3>
+            <p>
+              The measurement could not be taken — blocked credentials, a budget
+              halt, a sample too small to separate the arms. Stated with its
+              reason, this is also a success, because the one thing it refuses to
+              do is guess. A ledger row is written either way.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================================================== STACK -->
+      <section class="section container" id="stack">
+        <div class="section__head reveal">
+          <p class="eyebrow">What it composes</p>
+          <h2>Optional backends, selected by config.</h2>
+          <p class="lede">
+            The Dream Machine builds on the ruvnet stack as config-selected
+            evaluation backends — never hard dependencies. It follows the source
+            routines' own rule: use the best available implementation, and do not
+            introduce a dependency merely to satisfy a prompt.
+          </p>
+        </div>
+
+        <div class="table-scroll reveal">
+          <table>
+            <caption>
+              Pipeline stages and the packages that own them.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Capability</th>
+                <th scope="col">Package</th>
+                <th scope="col">Used for</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Promotion gate, receipts, replay</th>
+                <td>
+                  <a href="https://www.npmjs.com/package/@metaharness/flywheel"
+                    ><code>@metaharness/flywheel</code></a
+                  >
+                </td>
+                <td>Evidence retention and the promotion gate</td>
+              </tr>
+              <tr>
+                <th scope="row">Bounded evolution</th>
+                <td>
+                  <a href="https://www.npmjs.com/package/@metaharness/darwin"
+                    ><code>@metaharness/darwin</code></a
+                  >
+                </td>
+                <td>The fenced Darwin stage</td>
+              </tr>
+              <tr>
+                <th scope="row">Adversarial red/blue</th>
+                <td>
+                  <a href="https://www.npmjs.com/package/@metaharness/redblue"
+                    ><code>@metaharness/redblue</code></a
+                  >
+                </td>
+                <td>Adversarial critic and reward-hack scan</td>
+              </tr>
+              <tr>
+                <th scope="row">Security scan, genome, audit</th>
+                <td>
+                  <a href="https://www.npmjs.com/package/metaharness"
+                    ><code>metaharness</code></a
+                  >
+                  CLI
+                </td>
+                <td>Security review and control-plane discovery</td>
+              </tr>
+              <tr>
+                <th scope="row">Memory, hooks, orchestration</th>
+                <td><code>ruflo</code> (<code>@claude-flow/cli</code>)</td>
+                <td>The cloud session's task and memory substrate</td>
+              </tr>
+              <tr>
+                <th scope="row">Vector memory over prior nights</th>
+                <td>
+                  <a href="https://www.npmjs.com/package/ruvector"
+                    ><code>ruvector</code></a
+                  >
+                  /
+                  <a href="https://www.npmjs.com/package/agentdb"
+                    ><code>agentdb</code></a
+                  >
+                </td>
+                <td>Roadmap — semantic search across the ledger</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================================================== QUICKSTART -->
+      <section class="section container" id="quickstart">
+        <div class="section__head reveal">
+          <p class="eyebrow">Quickstart</p>
+          <h2>Six commands.</h2>
+          <p class="lede">
+            The CLI surface is small on purpose: scaffold a config, compile it,
+            and then work with the two durable artifacts a night produces — the
+            ledger row and the witness.
+          </p>
+        </div>
+
+        <div class="grid grid--2">
+          <div class="reveal">
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">Terminal</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the command list to the clipboard"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                    <rect
+                      x="9"
+                      y="9"
+                      width="11"
+                      height="11"
+                      rx="2"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M5 15V6a2 2 0 0 1 2-2h8"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>npx dream-machine init      <span class="c"># scaffold a dream.config for this repo</span>
+npx dream-machine compile   <span class="c"># dream.config → the routine prompt</span>
+npx dream-machine ledger    <span class="c"># parse / append / verify LEDGER.md</span>
+npx dream-machine witness   <span class="c"># stamp and verify a night's provenance</span>
+npx dream-machine schedule  <span class="c"># prepare the nightly routine</span>
+npx dream-machine tui       <span class="c"># browse past nights in the terminal</span></code></pre>
+            </div>
+            <p>
+              Walk each of these end to end in the
+              <a href="./tutorials.html">tutorials</a>, or see what a week of
+              nights looks like on the
+              <a href="./dashboard.html">dashboard</a>.
+            </p>
+          </div>
+
+          <div class="reveal">
+            <div class="code">
+              <div class="code__bar">
+                <span class="code__label">dream.config</span>
+                <button
+                  class="code__copy"
+                  type="button"
+                  data-copy-btn
+                  aria-label="Copy the example dream.config to the clipboard"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                    <rect
+                      x="9"
+                      y="9"
+                      width="11"
+                      height="11"
+                      rx="2"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M5 15V6a2 2 0 0 1 2-2h8"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span class="copy-label">Copy</span>
+                </button>
+              </div>
+              <pre><code>{
+  <span class="p">"repo"</span>: <span class="s">"ruvnet/metaharness"</span>,
+  <span class="p">"cron"</span>: <span class="s">"0 8 * * *"</span>,
+  <span class="p">"slots"</span>: [
+    { <span class="p">"deep"</span>: <span class="s">"generator-genome"</span>,
+      <span class="p">"scan"</span>: [<span class="s">"router"</span>, <span class="s">"turn-credit"</span>] }
+  ],
+  <span class="p">"adrTemplate"</span>: <span class="s">"metaharness-7-section"</span>
+}</code></pre>
+            </div>
+            <p>
+              The config declares only the per-repo delta. Onboarding a third
+              repository is writing one of these — not forking and hand-editing
+              an 800-line prompt.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================== LEARN -->
+      <section class="section container" id="learn">
+        <div class="section__head reveal">
+          <p class="eyebrow">Tutorials &amp; walkthrough</p>
+          <h2>Go deeper.</h2>
+        </div>
+
+        <div class="grid grid--3">
+          <article class="card reveal">
+            <h3><a href="./tutorials.html#install">Install &amp; first config</a></h3>
+            <p>
+              Get the CLI, scaffold a <code>dream.config</code>, and understand
+              every field it asks you for.
+            </p>
+          </article>
+
+          <article class="card reveal">
+            <h3><a href="./tutorials.html#compile">Compile a routine</a></h3>
+            <p>
+              Turn the config into the routine prompt, and see why the scheduler
+              copy and the in-repo mirror can no longer drift apart.
+            </p>
+          </article>
+
+          <article class="card reveal">
+            <h3><a href="./tutorials.html#witness">Verify a witness</a></h3>
+            <p>
+              Re-derive <code>sha256(sha256(gist) + SESSION_COMMIT)</code> by
+              hand and confirm a night's provenance yourself.
+            </p>
+          </article>
+
+          <article class="card reveal">
+            <h3><a href="./tutorials.html#ledger">Read the ledger</a></h3>
+            <p>
+              The ten columns, what the learning signals do with them, and how a
+              REJECT row makes tomorrow cheaper.
+            </p>
+          </article>
+
+          <article class="card reveal">
+            <h3><a href="./tutorials.html#schedule">Schedule the nightly run</a></h3>
+            <p>
+              Put the compiled routine on a cron and keep the in-repo mirror in
+              lockstep with it.
+            </p>
+          </article>
+
+          <article class="card reveal">
+            <h3><a href="./dashboard.html">Read a week of nights</a></h3>
+            <p>
+              The management view: verdict distribution, findings, witnesses, and
+              links out to every issue and draft PR.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container site-footer__inner">
+        <div>
+          <h2>Dream Machine</h2>
+          <p style="max-width: 34ch; color: var(--faint)">
+            Config-driven, evidence-gated nightly repository evolution.
+          </p>
+        </div>
+
+        <nav aria-label="Documentation">
+          <h2>Docs</h2>
+          <ul>
+            <li><a href="./tutorials.html">Tutorials</a></li>
+            <li><a href="./dashboard.html">Dashboard</a></li>
+            <li>
+              <a
+                href="https://github.com/ruvnet/dream-machine/blob/main/docs/adrs/ADR-0001-dream-machine-engine.md"
+                >ADR-0001</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Composed packages">
+          <h2>Stack</h2>
+          <ul>
+            <li>
+              <a href="https://www.npmjs.com/package/@metaharness/flywheel"
+                >@metaharness/flywheel</a
+              >
+            </li>
+            <li>
+              <a href="https://www.npmjs.com/package/@metaharness/darwin"
+                >@metaharness/darwin</a
+              >
+            </li>
+            <li>
+              <a href="https://www.npmjs.com/package/@metaharness/redblue"
+                >@metaharness/redblue</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Project">
+          <h2>Project</h2>
+          <ul>
+            <li><a href="https://github.com/ruvnet/dream-machine">GitHub</a></li>
+            <li>
+              <a href="https://github.com/ruvnet/dream-machine/issues">Issues</a>
+            </li>
+            <li>
+              <a href="https://github.com/ruvnet/dream-machine/blob/main/LICENSE"
+                >MIT License</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <div class="site-footer__legal">
+          <p>
+            MIT © rUv. The Dream Machine never merges — promotion is a human act,
+            every night, with no exceptions.
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <p id="copy-status" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

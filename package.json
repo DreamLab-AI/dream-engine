@@ -1,0 +1,27 @@
+{
+  "name": "dream-machine-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Dream Machine — config-driven, evidence-gated nightly repository evolution (workspace root)",
+  "type": "module",
+  "license": "MIT",
+  "author": "rUv <ruv@ruv.net>",
+  "homepage": "https://github.com/ruvnet/dream-machine",
+  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git" },
+  "workspaces": ["packages/*"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "npm run -ws --if-present build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint packages --ext .ts",
+    "typecheck": "tsc -b --noEmit || tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf packages/*/dist coverage"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0"
+  }
+}

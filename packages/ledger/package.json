@@ -1,0 +1,17 @@
+{
+  "name": "@dream-machine/ledger",
+  "version": "0.1.0",
+  "description": "The Dream Machine ledger — parse/append/verify the 10-column LEDGER.md and compute nightly learning signals.",
+  "type": "module",
+  "license": "MIT",
+  "author": "rUv <ruv@ruv.net>",
+  "homepage": "https://github.com/ruvnet/dream-machine",
+  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git", "directory": "packages/ledger" },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "build": "tsc -b" },
+  "keywords": ["dream-machine", "ledger", "durable-memory", "learning-signals"]
+}

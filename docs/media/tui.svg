@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="716" height="382" viewBox="0 0 716 382" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13.5">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0a1e"/>
+      <stop offset="1" stop-color="#160f33"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.2" cy="0" r="1">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity="0.20"/>
+      <stop offset="0.5" stop-color="#22d3ee" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="716" height="382" rx="14" fill="url(#bg)"/>
+  <rect x="0" y="0" width="716" height="382" rx="14" fill="url(#glow)"/>
+  <rect x="0.5" y="0.5" width="715" height="381" rx="14" fill="none" stroke="#312e63" stroke-opacity="0.7"/>
+  <circle cx="20" cy="22" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="22" r="6" fill="#ffbd2e"/>
+  <circle cx="64" cy="22" r="6" fill="#27c93f"/>
+  <text x="358" y="26" fill="#8b87b8" text-anchor="middle" font-size="12">dream-machine tui</text>
+  <text xml:space="preserve">
+<tspan x="22.0" y="56" fill="#8b5cf6">╭──────────────────────────────────────────────────────────────────────────────╮</tspan>
+<tspan x="22.0" y="75" fill="#8b5cf6">│</tspan><tspan x="30.4" y="75" fill="#e5e7ff"> </tspan><tspan x="38.8" y="75" fill="#22d3ee" font-weight="700">☾ DREAM MACHINE  ·  ruvnet/dream-machine                                    </tspan><tspan x="677.2" y="75" fill="#e5e7ff"> </tspan><tspan x="685.6" y="75" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="94" fill="#8b5cf6">├──────────────────────────────────────────────────────────────────────────────┤</tspan>
+<tspan x="22.0" y="113" fill="#8b5cf6">│</tspan><tspan x="30.4" y="113" fill="#e5e7ff"> </tspan><tspan x="38.8" y="113" fill="#9ca3af">nights</tspan><tspan x="89.2" y="113" fill="#e5e7ff"> </tspan><tspan x="97.6" y="113" fill="#e5e7ff" font-weight="700">6</tspan><tspan x="106.0" y="113" fill="#e5e7ff">   </tspan><tspan x="131.2" y="113" fill="#4ade80">● 3 accept</tspan><tspan x="215.2" y="113" fill="#e5e7ff">   </tspan><tspan x="240.4" y="113" fill="#f87171">● 1 reject</tspan><tspan x="324.4" y="113" fill="#e5e7ff">   </tspan><tspan x="349.6" y="113" fill="#fbbf24">● 2 inconclusive</tspan><tspan x="484.0" y="113" fill="#e5e7ff">                        </tspan><tspan x="685.6" y="113" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="132" fill="#8b5cf6">├──────────────────────────────────────────────────────────────────────────────┤</tspan>
+<tspan x="22.0" y="151" fill="#8b5cf6">│</tspan><tspan x="30.4" y="151" fill="#e5e7ff"> </tspan><tspan x="38.8" y="151" fill="#e5e7ff" opacity="0.6">DATE        DEEP                 VERDICT        FINDING                     </tspan><tspan x="677.2" y="151" fill="#e5e7ff"> </tspan><tspan x="685.6" y="151" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="170" fill="#8b5cf6">│</tspan><tspan x="30.4" y="170" fill="#e5e7ff"> 2026-08-19  </tspan><tspan x="139.6" y="170" fill="#e879f9">compiler-parity     </tspan><tspan x="307.6" y="170" fill="#e5e7ff"> </tspan><tspan x="316.0" y="170" fill="#fbbf24">INCONCLUSIVE  </tspan><tspan x="433.6" y="170" fill="#e5e7ff"> config schema validation ga… </tspan><tspan x="685.6" y="170" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="189" fill="#8b5cf6">│</tspan><tspan x="30.4" y="189" fill="#e5e7ff"> 2026-08-18  </tspan><tspan x="139.6" y="189" fill="#e879f9">developer-experience</tspan><tspan x="307.6" y="189" fill="#e5e7ff"> </tspan><tspan x="316.0" y="189" fill="#4ade80">ACCEPT        </tspan><tspan x="433.6" y="189" fill="#e5e7ff"> tui verdict distribution pa… </tspan><tspan x="685.6" y="189" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="208" fill="#8b5cf6">│</tspan><tspan x="30.4" y="208" fill="#e5e7ff"> 2026-08-17  </tspan><tspan x="139.6" y="208" fill="#e879f9">security-adversarial</tspan><tspan x="307.6" y="208" fill="#e5e7ff"> </tspan><tspan x="316.0" y="208" fill="#4ade80">ACCEPT        </tspan><tspan x="433.6" y="208" fill="#e5e7ff"> redblue indirect-injection … </tspan><tspan x="685.6" y="208" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="227" fill="#8b5cf6">│</tspan><tspan x="30.4" y="227" fill="#e5e7ff"> 2026-08-16  </tspan><tspan x="139.6" y="227" fill="#e879f9">evaluation-adapters </tspan><tspan x="307.6" y="227" fill="#e5e7ff"> </tspan><tspan x="316.0" y="227" fill="#f87171">REJECT        </tspan><tspan x="433.6" y="227" fill="#e5e7ff"> flywheel receipt replay wir… </tspan><tspan x="685.6" y="227" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="246" fill="#8b5cf6">│</tspan><tspan x="30.4" y="246" fill="#e5e7ff"> 2026-08-15  </tspan><tspan x="139.6" y="246" fill="#e879f9">ledger-signals      </tspan><tspan x="307.6" y="246" fill="#e5e7ff"> </tspan><tspan x="316.0" y="246" fill="#fbbf24">INCONCLUSIVE  </tspan><tspan x="433.6" y="246" fill="#e5e7ff"> zero-merge bias tuning       </tspan><tspan x="685.6" y="246" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="265" fill="#8b5cf6">│</tspan><tspan x="30.4" y="265" fill="#e5e7ff"> 2026-08-14  </tspan><tspan x="139.6" y="265" fill="#e879f9">compiler-parity     </tspan><tspan x="307.6" y="265" fill="#e5e7ff"> </tspan><tspan x="316.0" y="265" fill="#4ade80">ACCEPT        </tspan><tspan x="433.6" y="265" fill="#e5e7ff"> golden snapshot drift guard  </tspan><tspan x="685.6" y="265" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="284" fill="#8b5cf6">├──────────────────────────────────────────────────────────────────────────────┤</tspan>
+<tspan x="22.0" y="303" fill="#8b5cf6">│</tspan><tspan x="30.4" y="303" fill="#e5e7ff"> </tspan><tspan x="38.8" y="303" fill="#fbbf24">⚠ zero merges in 6 nights</tspan><tspan x="248.8" y="303" fill="#e5e7ff">                                                    </tspan><tspan x="685.6" y="303" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="322" fill="#8b5cf6">│</tspan><tspan x="30.4" y="322" fill="#e5e7ff"> </tspan><tspan x="38.8" y="322" fill="#e5e7ff" opacity="0.6">evaluation is not promotion · the machine never merges · a human does</tspan><tspan x="618.4" y="322" fill="#e5e7ff">        </tspan><tspan x="685.6" y="322" fill="#8b5cf6">│</tspan>
+<tspan x="22.0" y="341" fill="#8b5cf6">╰──────────────────────────────────────────────────────────────────────────────╯</tspan>
+  </text>
+</svg>

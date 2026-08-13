@@ -1,0 +1,18 @@
+{
+  "name": "@dream-machine/schedule",
+  "version": "0.1.0",
+  "description": "Emit the cloud /schedule routine body for a Dream Machine target (compile → paste, or automate once an API is available).",
+  "type": "module",
+  "license": "MIT",
+  "author": "rUv <ruv@ruv.net>",
+  "homepage": "https://github.com/ruvnet/dream-machine",
+  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git", "directory": "packages/schedule" },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "build": "tsc -b" },
+  "dependencies": { "@dream-machine/compile": "0.1.0" },
+  "keywords": ["dream-machine", "schedule", "cron", "routine", "cloud-agent"]
+}

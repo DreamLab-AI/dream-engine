@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Dream ledger — Dream Machine dashboard</title>
+    <meta
+      name="description"
+      content="The management view over the Dream Machine ledger: recent nights, their frozen hypotheses, findings, verdict distribution, witness stamps, and links to every issue and draft pull request."
+    />
+    <link rel="canonical" href="https://ruvnet.github.io/dream-machine/dashboard.html" />
+    <meta name="theme-color" content="#05060f" />
+    <meta name="color-scheme" content="dark" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Dream Machine" />
+    <meta
+      property="og:url"
+      content="https://ruvnet.github.io/dream-machine/dashboard.html"
+    />
+    <meta property="og:title" content="Dream ledger — Dream Machine dashboard" />
+    <meta
+      property="og:description"
+      content="Recent dream nights at a glance: findings, verdict distribution, witness stamps, and links to every issue and draft pull request."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Dream ledger — Dream Machine dashboard" />
+    <meta
+      name="twitter:description"
+      content="Recent dream nights at a glance: findings, verdict distribution, witness stamps, and links to every issue and draft pull request."
+    />
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230a0b1a'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2367e8f9' stroke-width='1.6' opacity='.75'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23a78bfa'/%3E%3Ccircle cx='16' cy='7' r='2.2' fill='%2367e8f9'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <div class="sky" aria-hidden="true">
+      <canvas class="sky__stars" data-parallax="0.02"></canvas>
+      <div class="nebula nebula--a" data-parallax="0.05"></div>
+      <div class="nebula nebula--b" data-parallax="0.09"></div>
+    </div>
+
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="./index.html">
+          <svg
+            class="brand__mark"
+            viewBox="0 0 32 32"
+            role="img"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle
+              cx="16"
+              cy="16"
+              r="10"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              opacity=".55"
+            />
+            <circle cx="16" cy="16" r="4.2" fill="currentColor" opacity=".85" />
+            <circle cx="16" cy="6" r="2.4" fill="currentColor" />
+          </svg>
+          <span class="brand__text">Dream Machine</span>
+        </a>
+
+        <nav class="nav" aria-label="Primary">
+          <a href="./index.html#what">Overview</a>
+          <a href="./index.html#pipeline">Pipeline</a>
+          <a href="./index.html#verdicts">Verdicts</a>
+          <a href="./index.html#quickstart">Quickstart</a>
+          <a href="./tutorials.html">Tutorials</a>
+          <a href="./dashboard.html" aria-current="page">Dashboard</a>
+          <a href="https://github.com/ruvnet/dream-machine">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="section container section--tight">
+        <p class="eyebrow">Management view</p>
+        <h1>Dream ledger</h1>
+        <p class="lede">
+          One row per night, written whether the night produced a pull request or
+          closed a question. This is the only durable cross-night memory the
+          engine has — and the thing tomorrow's run reads first.
+        </p>
+
+        <div class="banner" style="margin-top: 1.75rem">
+          <span class="banner__dot" aria-hidden="true"></span>
+          <p>
+            <strong>Sample data.</strong> This dashboard renders the illustrative
+            ledger shipped with the documentation site
+            (<code>data/ledger.json</code>). It shows the shape of a real ledger,
+            not the output of a real nightly run — no engine code has shipped
+            yet.
+          </p>
+        </div>
+      </section>
+
+      <section class="section container section--tight" aria-labelledby="summary-h">
+        <h2 id="summary-h" class="visually-hidden">Summary statistics</h2>
+
+        <div class="stats" data-stats>
+          <div class="stat">
+            <span class="stat__label">Nights recorded</span>
+            <span class="stat__value" data-stat-nights>—</span>
+            <span class="stat__sub" data-stat-range></span>
+          </div>
+          <div class="stat">
+            <span class="stat__label">Accepted</span>
+            <span class="stat__value stat__value--accept" data-stat-accept>—</span>
+            <span class="stat__sub" data-stat-accept-pct></span>
+          </div>
+          <div class="stat">
+            <span class="stat__label">Draft PRs opened</span>
+            <span class="stat__value" data-stat-prs>—</span>
+            <span class="stat__sub">Never merged by the machine</span>
+          </div>
+          <div class="stat">
+            <span class="stat__label">Repositories</span>
+            <span class="stat__value" data-stat-repos>—</span>
+            <span class="stat__sub" data-stat-repo-names></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Verdict distribution</h3>
+          <div class="dist" data-dist>
+            <p class="empty">Loading the ledger…</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section container" aria-labelledby="nights-h">
+        <div class="section__head">
+          <h2 id="nights-h">Recent nights</h2>
+          <p class="lede">
+            Filter by verdict, or search across surfaces, hypotheses, and
+            findings.
+          </p>
+        </div>
+
+        <div class="filters">
+          <div class="filters__group" role="group" aria-label="Filter by verdict">
+            <button class="chip" type="button" data-filter="ALL" aria-pressed="true">
+              All
+            </button>
+            <button class="chip" type="button" data-filter="ACCEPT" aria-pressed="false">
+              Accept
+            </button>
+            <button class="chip" type="button" data-filter="REJECT" aria-pressed="false">
+              Reject
+            </button>
+            <button
+              class="chip"
+              type="button"
+              data-filter="INCONCLUSIVE"
+              aria-pressed="false"
+            >
+              Inconclusive
+            </button>
+          </div>
+
+          <label class="visually-hidden" for="ledger-search">Search the ledger</label>
+          <input
+            class="search"
+            id="ledger-search"
+            type="search"
+            placeholder="Search surface, hypothesis, finding…"
+            autocomplete="off"
+          />
+        </div>
+
+        <p class="source-note" data-result-count role="status" aria-live="polite"></p>
+
+        <div class="table-scroll">
+          <table class="ledger-table">
+            <caption class="visually-hidden">
+              Dream Machine nightly ledger — one row per night.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Repository</th>
+                <th scope="col">Deep surface</th>
+                <th scope="col">Finding</th>
+                <th scope="col">Verdict</th>
+                <th scope="col">Artifacts</th>
+                <th scope="col">Witness</th>
+              </tr>
+            </thead>
+            <tbody data-ledger-body>
+              <tr>
+                <td colspan="7" class="empty">Loading the ledger…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="source-note" data-source-note></p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container site-footer__inner">
+        <div>
+          <h2>Dream Machine</h2>
+          <p style="max-width: 34ch; color: var(--faint)">
+            Config-driven, evidence-gated nightly repository evolution.
+          </p>
+        </div>
+
+        <nav aria-label="Documentation">
+          <h2>Docs</h2>
+          <ul>
+            <li><a href="./index.html">Overview</a></li>
+            <li><a href="./tutorials.html">Tutorials</a></li>
+            <li>
+              <a
+                href="https://github.com/ruvnet/dream-machine/blob/main/docs/adrs/ADR-0001-dream-machine-engine.md"
+                >ADR-0001</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Project">
+          <h2>Project</h2>
+          <ul>
+            <li><a href="https://github.com/ruvnet/dream-machine">GitHub</a></li>
+            <li>
+              <a href="https://github.com/ruvnet/dream-machine/issues">Issues</a>
+            </li>
+            <li>
+              <a href="https://github.com/ruvnet/dream-machine/blob/main/LICENSE"
+                >MIT License</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <div class="site-footer__legal">
+          <p>
+            MIT © rUv. The Dream Machine never merges — promotion is a human act,
+            every night, with no exceptions.
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <p id="copy-status" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <!-- Offline fallback: byte-identical to ./data/ledger.json so the page
+         renders the same whether or not fetch() is available (file:// etc). -->
+    <script type="application/json" id="ledger-fallback">
+{
+  "schema": "dream-ledger/v1",
+  "generated": "2026-08-13T06:00:00Z",
+  "note": "Sample ledger shipped with the documentation site. Illustrative data for the dashboard — not the output of a real nightly run.",
+  "columns": [
+    "date",
+    "repo",
+    "deep",
+    "scan",
+    "hypothesis",
+    "finding",
+    "verdict",
+    "evidence",
+    "artifacts",
+    "witness"
+  ],
+  "nights": [
+    {
+      "date": "2026-08-12",
+      "repo": "ruvnet/metaharness",
+      "deep": "flywheel-promotion",
+      "scan": ["evals-verticals", "bench"],
+      "hypothesis": "Raising the flywheel promotion gate's minimum holdout size from n=40 to n=60 removes false ACCEPTs without costing true lift.",
+      "finding": "n=60 eliminated 2 of the 3 historical false promotions while keeping every true lift. The gate got stricter without getting blinder.",
+      "verdict": "ACCEPT",
+      "evidence": "Replayed all 9 archived promotions: false positives 3/9 → 1/9; true-lift recall held at 6/6. Replay receipts verified against stored flywheel state.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/148",
+        "pr": "https://github.com/ruvnet/metaharness/pull/149",
+        "gist": "https://gist.github.com/ruvnet/4b1e9c0d7a2f8e5613c4d90ab7f2e651"
+      },
+      "witness": "9f2c7a41d8be03957c16a4ef25db807fa3c9e14b62d05879fe3ab1c47d902e68"
+    },
+    {
+      "date": "2026-08-11",
+      "repo": "ruvnet/ruflo",
+      "deep": "hooks-routing",
+      "scan": ["memory-bridge", "session-start"],
+      "hypothesis": "Routing tier-1 transforms through the WASM booster before the LLM tier cuts median hook latency by more than 30%.",
+      "finding": "Median latency moved 8% — inside run-to-run noise. The booster path was already taken on 91% of tier-1 calls, so there was almost nothing left to reroute.",
+      "verdict": "REJECT",
+      "evidence": "n=240 hook invocations. Median 512 ms → 471 ms; paired bootstrap 95% CI [-14%, +2%] crosses zero. Pre-existing booster hit rate measured at 91%.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/612",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/71ad3f5c8e0946b2d1fc07e3ab5928d4"
+      },
+      "witness": "3ac48e0b5f719d62e8c30a97bd41582fce6079a3d24b8e15fa07c396b8d2140e"
+    },
+    {
+      "date": "2026-08-10",
+      "repo": "ruvnet/metaharness",
+      "deep": "generator-genome",
+      "scan": ["router", "turn-credit"],
+      "hypothesis": "A genome that biases the generator toward edit-by-midpoint transfers from the training verticals to the held-out ones.",
+      "finding": "No measurement was taken. The baseline built cleanly and the candidate genome compiled, but every scoring call was refused for lack of credentials — so the hypothesis carries over untested rather than answered.",
+      "verdict": "INCONCLUSIVE",
+      "evidence": "LLM_EVAL=blocked — 0 model calls completed (no provider key in the session). Build green, control-plane probes green, baseline artifacts retained for tomorrow.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/144",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/c05e8b91a7d34f26be180d5c93af6712"
+      },
+      "witness": "b7e105d34fa2986c0b53e7d1a94f8206ce31d75b8a0f9243e6cb15807df3a29c"
+    },
+    {
+      "date": "2026-08-09",
+      "repo": "ruvnet/ruflo",
+      "deep": "darwin-mutation-budget",
+      "scan": ["swarm-topology", "claims-board"],
+      "hypothesis": "At a fixed token budget, 3 Darwin generations of 8 candidates beats 6 generations of 4.",
+      "finding": "Wider-and-shallower won. The extra population per generation mattered more than the extra generations, at equal spend.",
+      "verdict": "ACCEPT",
+      "evidence": "60-task holdout, n=60. Score 0.612 → 0.647; paired bootstrap p=0.021. Token spend within 2% between arms. Reward-hack scan clean.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/605",
+        "pr": "https://github.com/ruvnet/ruflo/pull/606",
+        "gist": "https://gist.github.com/ruvnet/2f9c14b7e08d5a361cb27f04e9d6813a"
+      },
+      "witness": "5d81c93fa072e4b6180da5c37fe92b40819c6ad35e7f01b2c483e9d70a6bf1c2"
+    },
+    {
+      "date": "2026-08-08",
+      "repo": "ruvnet/metaharness",
+      "deep": "redblue-critic",
+      "scan": ["security-bench", "mcp-scan"],
+      "hypothesis": "A second adversarial critic pass surfaces reward-hack surface the first pass misses.",
+      "finding": "The second pass found nothing the first had not already flagged, across 40 candidate diffs, and roughly doubled critique cost. One pass is the right number.",
+      "verdict": "REJECT",
+      "evidence": "40 candidate diffs, two-pass vs one-pass. Additional findings: 0. Critique cost +103%. Agreement between passes: 40/40.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/139",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/8e73b0a52c9d14f607be3a1d95c082f7"
+      },
+      "witness": "c418a6027ed3b591f0a74c8d2be6931507fa4c8e19d62b30a7f5e04c8b1d9236"
+    },
+    {
+      "date": "2026-08-07",
+      "repo": "ruvnet/ruflo",
+      "deep": "memory-consolidation",
+      "scan": ["agentdb-hnsw", "embeddings"],
+      "hypothesis": "Consolidating near-duplicate memories before indexing improves recall precision without losing coverage.",
+      "finding": "The budget ceiling was reached partway through the baseline sweep. 22 of 60 tasks were scored — too few to separate the arms, so no claim is made either way.",
+      "verdict": "INCONCLUSIVE",
+      "evidence": "HALT: budget at $18.40 against an $18.00 ceiling. 22/60 tasks scored before the halt. Partial baseline retained; the ledger row was written by the halt path.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/598",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/a1d6f3902c7b48e5106df82a4b3ce907"
+      },
+      "witness": "e60fb2a97d1c4358024ae7b61df9302c85a147ed3b09c6f2158d0ba4e73c9615"
+    },
+    {
+      "date": "2026-08-06",
+      "repo": "ruvnet/metaharness",
+      "deep": "evals-verticals",
+      "scan": ["evals-sql", "evals-math"],
+      "hypothesis": "A normalizer shared across the SQL and math verticals raises extraction agreement without touching either gold set.",
+      "finding": "Agreement rose substantially and the gold answers were provably untouched — the lift came from the normalizer, not from moving the target.",
+      "verdict": "ACCEPT",
+      "evidence": "Inter-vertical agreement 0.71 → 0.83 over n=180 items, p<0.01. Gold-answer files hash-verified identical before and after. Reward-hack scan clean.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/metaharness/issues/131",
+        "pr": "https://github.com/ruvnet/metaharness/pull/132",
+        "gist": "https://gist.github.com/ruvnet/6c092e14b7fa538d01e4c7ab29f60d38"
+      },
+      "witness": "1a94d7e05fb32c68094ae61d7b3f8250cd6194ab7e02f35c8d14b96e07a3fc82"
+    },
+    {
+      "date": "2026-08-05",
+      "repo": "ruvnet/ruflo",
+      "deep": "context-compaction",
+      "scan": ["session-restore", "hooks-metrics"],
+      "hypothesis": "Summarising tool results above 2 KB before they enter context saves tokens without hurting task success.",
+      "finding": "It saved the tokens and cost the success. A 14% token reduction came with a measurable 4-point drop in task success — a real regression, not noise.",
+      "verdict": "REJECT",
+      "evidence": "n=50 tasks. Tokens -14%; success 0.58 → 0.54; paired bootstrap 95% CI [-0.09, -0.01], excludes zero.",
+      "artifacts": {
+        "issue": "https://github.com/ruvnet/ruflo/issues/590",
+        "pr": null,
+        "gist": "https://gist.github.com/ruvnet/df3810c69a4e27b5084c1fae63b092d7"
+      },
+      "witness": "72be5c0a13df894e6a0c27b5fd139480ea36c71b95d20f8a4c63e109db7f2a45"
+    }
+  ]
+}
+    </script>
+
+    <script src="./app.js" defer></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var VERDICTS = ["ACCEPT", "REJECT", "INCONCLUSIVE"];
+        var CLASS_FOR = {
+          ACCEPT: "accept",
+          REJECT: "reject",
+          INCONCLUSIVE: "inconclusive"
+        };
+
+        var body = document.querySelector("[data-ledger-body]");
+        var distEl = document.querySelector("[data-dist]");
+        var countEl = document.querySelector("[data-result-count]");
+        var sourceEl = document.querySelector("[data-source-note]");
+        var searchEl = document.getElementById("ledger-search");
+        var chips = [].slice.call(document.querySelectorAll("[data-filter]"));
+
+        var nights = [];
+        var activeVerdict = "ALL";
+        var query = "";
+
+        /* ---------------------------------------------------------------- */
+
+        function el(tag, className, text) {
+          var node = document.createElement(tag);
+          if (className) node.className = className;
+          if (text != null) node.textContent = text;
+          return node;
+        }
+
+        function readFallback() {
+          var tag = document.getElementById("ledger-fallback");
+          if (!tag) return null;
+          try {
+            return JSON.parse(tag.textContent);
+          } catch (err) {
+            return null;
+          }
+        }
+
+        function normalize(payload) {
+          if (!payload) return { nights: [], note: "" };
+          if (Array.isArray(payload)) return { nights: payload, note: "" };
+          return {
+            nights: Array.isArray(payload.nights) ? payload.nights : [],
+            note: payload.note || ""
+          };
+        }
+
+        /* ------------------------------------------------------- rendering */
+
+        function linkTo(href, label) {
+          var a = el("a", null, label);
+          a.href = href;
+          a.rel = "noopener";
+          return a;
+        }
+
+        function artifactsCell(night) {
+          var wrap = el("div", "link-row");
+          var art = night.artifacts || {};
+          var any = false;
+
+          if (art.issue) {
+            wrap.appendChild(linkTo(art.issue, "Issue"));
+            any = true;
+          }
+          if (art.pr) {
+            wrap.appendChild(linkTo(art.pr, "Draft PR"));
+            any = true;
+          }
+          if (art.gist) {
+            wrap.appendChild(linkTo(art.gist, "Gist"));
+            any = true;
+          }
+          if (!any) wrap.appendChild(el("span", null, "—"));
+          return wrap;
+        }
+
+        function findingCell(night) {
+          var wrap = document.createDocumentFragment();
+          wrap.appendChild(el("p", null, night.finding || "—"));
+
+          if (night.hypothesis || night.evidence) {
+            var details = el("details");
+            details.appendChild(el("summary", null, "Hypothesis and evidence"));
+            if (night.hypothesis) {
+              var h = el("p");
+              h.appendChild(el("strong", null, "Frozen hypothesis: "));
+              h.appendChild(document.createTextNode(night.hypothesis));
+              details.appendChild(h);
+            }
+            if (night.evidence) {
+              var e = el("p");
+              e.appendChild(el("strong", null, "Evidence: "));
+              e.appendChild(document.createTextNode(night.evidence));
+              details.appendChild(e);
+            }
+            wrap.appendChild(details);
+          }
+          return wrap;
+        }
+
+        function cell(row, label, className) {
+          var td = el("td", className);
+          td.setAttribute("data-label", label);
+          row.appendChild(td);
+          return td;
+        }
+
+        function renderRow(night) {
+          var tr = el("tr");
+
+          cell(tr, "Date", "col-date").textContent = night.date || "—";
+          cell(tr, "Repository").textContent = night.repo || "—";
+
+          var surface = cell(tr, "Surface", "col-surface");
+          surface.appendChild(el("code", null, night.deep || "—"));
+          if (Array.isArray(night.scan) && night.scan.length) {
+            surface.appendChild(el("div", null, "scan: " + night.scan.join(", ")));
+          }
+
+          cell(tr, "Finding", "col-finding").appendChild(findingCell(night));
+
+          var verdict = String(night.verdict || "").toUpperCase();
+          var vCell = cell(tr, "Verdict");
+          vCell.appendChild(
+            el("span", "badge badge--" + (CLASS_FOR[verdict] || "inconclusive"), verdict || "—")
+          );
+
+          cell(tr, "Artifacts").appendChild(artifactsCell(night));
+
+          var wCell = cell(tr, "Witness", "col-witness");
+          var w = String(night.witness || "");
+          wCell.appendChild(el("code", null, w ? w.slice(0, 12) + "…" : "—"));
+          if (w) wCell.title = w;
+
+          return tr;
+        }
+
+        function matches(night) {
+          var verdict = String(night.verdict || "").toUpperCase();
+          if (activeVerdict !== "ALL" && verdict !== activeVerdict) return false;
+          if (!query) return true;
+
+          var haystack = [
+            night.date,
+            night.repo,
+            night.deep,
+            Array.isArray(night.scan) ? night.scan.join(" ") : "",
+            night.hypothesis,
+            night.finding,
+            night.evidence,
+            verdict
+          ]
+            .join(" ")
+            .toLowerCase();
+
+          return haystack.indexOf(query) > -1;
+        }
+
+        function renderTable() {
+          if (!body) return;
+          var visible = nights.filter(matches);
+
+          body.textContent = "";
+
+          if (!visible.length) {
+            var tr = el("tr");
+            var td = el("td", "empty", "No nights match this filter.");
+            td.colSpan = 7;
+            tr.appendChild(td);
+            body.appendChild(tr);
+          } else {
+            visible.forEach(function (night) {
+              body.appendChild(renderRow(night));
+            });
+          }
+
+          if (countEl) {
+            countEl.textContent =
+              "Showing " + visible.length + " of " + nights.length + " nights.";
+          }
+        }
+
+        function renderStats() {
+          var counts = { ACCEPT: 0, REJECT: 0, INCONCLUSIVE: 0 };
+          var repos = {};
+          var prs = 0;
+          var dates = [];
+
+          nights.forEach(function (night) {
+            var v = String(night.verdict || "").toUpperCase();
+            if (counts[v] != null) counts[v] += 1;
+            if (night.repo) repos[night.repo] = true;
+            if (night.artifacts && night.artifacts.pr) prs += 1;
+            if (night.date) dates.push(night.date);
+          });
+
+          dates.sort();
+          var repoNames = Object.keys(repos);
+          var total = nights.length;
+
+          function set(sel, value) {
+            var node = document.querySelector(sel);
+            if (node) node.textContent = value;
+          }
+
+          set("[data-stat-nights]", String(total));
+          set(
+            "[data-stat-range]",
+            dates.length ? dates[0] + " → " + dates[dates.length - 1] : ""
+          );
+          set("[data-stat-accept]", String(counts.ACCEPT));
+          set(
+            "[data-stat-accept-pct]",
+            total ? Math.round((counts.ACCEPT / total) * 100) + "% of nights" : ""
+          );
+          set("[data-stat-prs]", String(prs));
+          set("[data-stat-repos]", String(repoNames.length));
+          set("[data-stat-repo-names]", repoNames.join(", "));
+
+          if (!distEl) return;
+          distEl.textContent = "";
+
+          VERDICTS.forEach(function (verdict) {
+            var n = counts[verdict];
+            var pct = total ? (n / total) * 100 : 0;
+
+            var row = el("div", "dist__row");
+            row.style.setProperty("--v", "var(--" + CLASS_FOR[verdict] + ")");
+
+            row.appendChild(el("span", "dist__label", verdict));
+
+            var track = el("div", "dist__track");
+            var fill = el("span", "dist__fill");
+            fill.style.width = pct.toFixed(1) + "%";
+            track.appendChild(fill);
+            row.appendChild(track);
+
+            row.appendChild(
+              el("span", "dist__count", n + " (" + Math.round(pct) + "%)")
+            );
+            distEl.appendChild(row);
+          });
+        }
+
+        /* --------------------------------------------------------- filters */
+
+        chips.forEach(function (chip) {
+          chip.addEventListener("click", function () {
+            activeVerdict = chip.getAttribute("data-filter");
+            chips.forEach(function (other) {
+              other.setAttribute(
+                "aria-pressed",
+                other === chip ? "true" : "false"
+              );
+            });
+            renderTable();
+          });
+        });
+
+        if (searchEl) {
+          searchEl.addEventListener("input", function () {
+            query = searchEl.value.trim().toLowerCase();
+            renderTable();
+          });
+        }
+
+        /* ------------------------------------------------------------ load */
+
+        function apply(data, source) {
+          var payload = normalize(data);
+          nights = payload.nights.slice().sort(function (a, b) {
+            return String(b.date || "").localeCompare(String(a.date || ""));
+          });
+          renderStats();
+          renderTable();
+          if (sourceEl) {
+            sourceEl.textContent =
+              "Source: " + source + (payload.note ? " — " + payload.note : "");
+          }
+        }
+
+        function loadFallback() {
+          var data = readFallback();
+          if (data) {
+            apply(data, "embedded sample (data/ledger.json unavailable)");
+          } else if (body) {
+            body.textContent = "";
+            var tr = el("tr");
+            var td = el("td", "empty", "The ledger could not be loaded.");
+            td.colSpan = 7;
+            tr.appendChild(td);
+            body.appendChild(tr);
+          }
+        }
+
+        function load() {
+          if (typeof window.fetch !== "function") {
+            loadFallback();
+            return;
+          }
+          window
+            .fetch("./data/ledger.json", { cache: "no-cache" })
+            .then(function (res) {
+              if (!res.ok) throw new Error("HTTP " + res.status);
+              return res.json();
+            })
+            .then(function (data) {
+              apply(data, "data/ledger.json");
+            })
+            .catch(function () {
+              loadFallback();
+            });
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", load);
+        } else {
+          load();
+        }
+      })();
+    </script>
+  </body>
+</html>
