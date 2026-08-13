@@ -7,9 +7,16 @@
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",
   "homepage": "https://github.com/ruvnet/dream-machine",
-  "repository": { "type": "git", "url": "https://github.com/ruvnet/dream-machine.git" },
-  "workspaces": ["packages/*"],
-  "engines": { "node": ">=18" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/dream-machine.git"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "npm run -ws --if-present build",
     "test": "vitest run",
@@ -19,9 +26,12 @@
     "clean": "rm -rf packages/*/dist coverage"
   },
   "devDependencies": {
+    "@eslint/js": "^9.15.0",
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "eslint": "^9.15.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
-    "@vitest/coverage-v8": "^2.1.0"
+    "typescript-eslint": "^8.15.0",
+    "vitest": "^2.1.0"
   }
 }
