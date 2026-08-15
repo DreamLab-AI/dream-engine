@@ -52,7 +52,7 @@
   },
   "evaluatorEntrypoints": {
     "bench": "npm test",
-    "darwin": "npx @metaharness/darwin evolve . --sandbox mock"
+    "darwin": "RUVLLM_TIMEOUT_MS=180000 npx @metaharness/darwin evolve . --sandbox mock --mutator ruvllm --ruvllm-url http://127.0.0.1:8084 --ruvllm-model qwen3.8-27B"
   },
   "adrConvention": "4-digit",
   "competitors": [
