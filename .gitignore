@@ -5,3 +5,7 @@ coverage/
 .DS_Store
 .env
 .dream/
+
+# Agentic tool scaffolding (session-local, not part of the engine)
+.agentic-qe/
+.claude-flow/
