@@ -28,6 +28,15 @@ filename, the CLI surface, or the compiled routine prompt would turn every
 upstream change to those files into a merge conflict — so they stay exactly as
 rUv ships them.
 
+## Fork-specific design
+
+Design records that belong to this fork's direction (not upstream) live under
+[`docs/dream-engine/`](docs/dream-engine/) — a namespace with no upstream
+counterpart, so it never conflicts with `git merge upstream/main`:
+
+- [ADR-DL-001: Meta-harness optimisation](docs/dream-engine/ADR-DL-001-meta-harness-optimisation.md)
+  — closing the outer loop, informed by AutoDesign (arXiv:2608.13560).
+
 ## Tracking upstream
 
 The `upstream` remote points at rUv's repo (its push URL is disabled so nothing
