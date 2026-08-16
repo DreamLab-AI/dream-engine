@@ -272,6 +272,109 @@ export function learningSignals(rows: LedgerRow[], opts: SignalOptions = {}): Le
   };
 }
 
+// ---------------------------------------------------------------------------
+// Harness-change proposer — the smallest real instance of the AutoDesign outer
+// loop (arXiv:2608.13560; see docs/dream-engine/ADR-DL-001). Reads the learning
+// signals (the optimisation record ℒ, already distilled by learningSignals) and
+// proposes AT MOST ONE bounded, single-component harness change. Deterministic
+// and side-effect free: it never mutates config and never merges — output is a
+// draft for a human to weigh, preserving "evaluation is not promotion".
+// ---------------------------------------------------------------------------
+
+/**
+ * The five harness components (AutoDesign §2.1). Restricting a proposal to a
+ * single component keeps credit assignment interpretable: a change and its
+ * effect are attributable to one named surface.
+ */
+export type HarnessComponent =
+  | 'context-memory' // the ledger, prompts, ingested context, reusable skills
+  | 'tools-specs' // evaluator entrypoints, config constraints, provenance
+  | 'execution-runtime' // build step, sandbox, model/runtime availability
+  | 'orchestration' // slot rotation, DEEP/SCAN surfaces, candidate sizing, budgets
+  | 'evaluation-feedback'; // evaluators, adversarial critic, acceptance thresholds
+
+/** All harness components, in a stable order — for iteration and validation. */
+export const HARNESS_COMPONENTS: readonly HarnessComponent[] = [
+  'context-memory',
+  'tools-specs',
+  'execution-runtime',
+  'orchestration',
+  'evaluation-feedback',
+] as const;
+
+export interface HarnessProposal {
+  /** The single component this proposal touches (AutoDesign: one per iteration). */
+  component: HarnessComponent;
+  /** The learning-signal field that triggered the proposal. */
+  trigger: keyof LearningSignals;
+  /** Why the change is proposed, grounded in the signal. */
+  rationale: string;
+  /** A bounded, human-reviewable action to consider — never auto-applied. */
+  suggestedAction: string;
+}
+
+/**
+ * Propose at most one bounded harness change from the learning signals.
+ *
+ * Signals are considered in descending severity — a stalled merge pipeline is
+ * more existential than a stuck search direction — and the first that fires
+ * wins, so exactly one component is ever proposed per call (or none). This is
+ * intentionally deterministic and rule-based: a v0 optimiser `P` whose output
+ * is auditable and testable, not an LLM re-derivation.
+ */
+export function proposeHarnessChange(signals: LearningSignals): HarnessProposal | null {
+  if (signals.zeroMergeStreak) {
+    return {
+      component: 'orchestration',
+      trigger: 'zeroMergeStreak',
+      rationale:
+        `No candidate PR has merged across the last ${signals.nightsConsidered} night(s) ` +
+        'considered — candidates are likely too large or too risky to land.',
+      suggestedAction:
+        'Narrow candidate scope in the orchestration component: reduce the per-night ' +
+        'change budget and prefer the smallest viable candidate until a merge lands.',
+    };
+  }
+  if (signals.lowScoreStreak) {
+    return {
+      component: 'evaluation-feedback',
+      trigger: 'lowScoreStreak',
+      rationale:
+        'The last three gist self-scores were all below 5 — the harness is producing ' +
+        'weak candidates that the current critic still lets through.',
+      suggestedAction:
+        'Tighten the evaluation-feedback component: strengthen the adversarial critic or ' +
+        'raise the acceptance threshold so weak candidates are rejected earlier.',
+    };
+  }
+  if (signals.blockedEvalStreak) {
+    return {
+      component: 'execution-runtime',
+      trigger: 'blockedEvalStreak',
+      rationale:
+        'The last three nights all evaluated as blocked — the runtime cannot reach the ' +
+        'model, so every measurement is inconclusive.',
+      suggestedAction:
+        'Repair the execution-runtime component: restore model/API access, or bias the ' +
+        'rotation to no-model-call candidates that still yield a real measurement.',
+    };
+  }
+  if (signals.duplicateDirections.length > 0) {
+    const [first] = signals.duplicateDirections;
+    return {
+      component: 'context-memory',
+      trigger: 'duplicateDirections',
+      rationale:
+        `The direction "${first}" has recurred at least three times — the harness keeps ` +
+        're-proposing an exhausted line the ledger already records.',
+      suggestedAction:
+        'Feed the exhausted direction back into the context-memory component: exclude it ' +
+        'from research seeds so the search moves to unexplored surfaces.',
+    };
+  }
+  return null;
+}
+
 /** Verdict distribution over a ledger — used by the TUI and dashboard. */
 export function verdictStats(rows: LedgerRow[]): Record<string, number> {
   const stats: Record<string, number> = { ACCEPT: 0, REJECT: 0, INCONCLUSIVE: 0, other: 0 };

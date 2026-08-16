@@ -7,10 +7,13 @@ import {
   verifyLedger,
   learningSignals,
   parsePriorFates,
+  proposeHarnessChange,
+  HARNESS_COMPONENTS,
   verdictStats,
   escapeCell,
   LEDGER_COLUMNS,
   type LedgerRow,
+  type LearningSignals,
 } from './index.js';
 
 function row(over: Partial<LedgerRow> = {}): LedgerRow {
@@ -182,6 +185,91 @@ describe('learning signals', () => {
     for (let i = 0; i < 5; i++) l = appendRow(l, row({ evaluated: 'blocked', verdict: 'INCONCLUSIVE' }));
     const { rows } = parseLedger(l);
     expect(learningSignals(rows).blockedEvalStreak).toBe(true);
+  });
+});
+
+describe('proposeHarnessChange', () => {
+  function signals(over: Partial<LearningSignals> = {}): LearningSignals {
+    return {
+      zeroMergeStreak: false,
+      duplicateDirections: [],
+      lowScoreStreak: false,
+      blockedEvalStreak: false,
+      nightsConsidered: 5,
+      ...over,
+    };
+  }
+
+  it('returns null when no signal fires', () => {
+    expect(proposeHarnessChange(signals())).toBeNull();
+  });
+
+  it('maps zeroMergeStreak → orchestration', () => {
+    const p = proposeHarnessChange(signals({ zeroMergeStreak: true }));
+    expect(p).toMatchObject({ component: 'orchestration', trigger: 'zeroMergeStreak' });
+    expect(p!.rationale).toContain('5'); // nightsConsidered surfaced in the rationale
+  });
+
+  it('maps lowScoreStreak → evaluation-feedback', () => {
+    expect(proposeHarnessChange(signals({ lowScoreStreak: true }))).toMatchObject({
+      component: 'evaluation-feedback',
+      trigger: 'lowScoreStreak',
+    });
+  });
+
+  it('maps blockedEvalStreak → execution-runtime', () => {
+    expect(proposeHarnessChange(signals({ blockedEvalStreak: true }))).toMatchObject({
+      component: 'execution-runtime',
+      trigger: 'blockedEvalStreak',
+    });
+  });
+
+  it('maps duplicateDirections → context-memory and names the direction', () => {
+    const p = proposeHarnessChange(signals({ duplicateDirections: ['router turn credit'] }));
+    expect(p).toMatchObject({ component: 'context-memory', trigger: 'duplicateDirections' });
+    expect(p!.rationale).toContain('router turn credit');
+  });
+
+  it('proposes exactly one component in strict severity order', () => {
+    // All four signals firing at once → zeroMergeStreak wins (most existential).
+    const all = signals({
+      zeroMergeStreak: true,
+      lowScoreStreak: true,
+      blockedEvalStreak: true,
+      duplicateDirections: ['x y z'],
+    });
+    expect(proposeHarnessChange(all)!.trigger).toBe('zeroMergeStreak');
+    // Next tier: lowScore beats blockedEval + duplicate.
+    expect(
+      proposeHarnessChange(
+        signals({ lowScoreStreak: true, blockedEvalStreak: true, duplicateDirections: ['x y z'] }),
+      )!.trigger,
+    ).toBe('lowScoreStreak');
+    // Then blockedEval beats duplicate.
+    expect(
+      proposeHarnessChange(signals({ blockedEvalStreak: true, duplicateDirections: ['x y z'] }))!
+        .trigger,
+    ).toBe('blockedEvalStreak');
+  });
+
+  it('every proposal targets a known harness component with non-empty guidance', () => {
+    const each: Partial<LearningSignals>[] = [
+      { zeroMergeStreak: true },
+      { lowScoreStreak: true },
+      { blockedEvalStreak: true },
+      { duplicateDirections: ['a b c'] },
+    ];
+    for (const s of each) {
+      const p = proposeHarnessChange(signals(s))!;
+      expect(HARNESS_COMPONENTS).toContain(p.component);
+      expect(p.rationale.length).toBeGreaterThan(0);
+      expect(p.suggestedAction.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('exposes five unique harness components', () => {
+    expect(HARNESS_COMPONENTS).toHaveLength(5);
+    expect(new Set(HARNESS_COMPONENTS).size).toBe(5);
   });
 });
 

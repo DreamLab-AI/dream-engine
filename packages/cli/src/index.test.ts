@@ -155,6 +155,53 @@ describe('ledger', () => {
     expect(r.err).toContain('--merged expects a comma-separated PR number list');
     expect(r.err).not.toContain('is not a function');
   });
+  it('signals without --propose stays backward-compatible (bare signals object)', async () => {
+    const r = await run(['ledger', 'signals', '--path', 'L.md'], mockIO({ 'L.md': ledgerMd }));
+    const out = JSON.parse(r.out);
+    expect(out).toHaveProperty('zeroMergeStreak');
+    expect(out).not.toHaveProperty('proposal');
+  });
+  it('signals --propose emits {signals, proposal}; zeroMergeStreak → orchestration draft', async () => {
+    const r = await run(['ledger', 'signals', '--path', 'L.md', '--propose'], mockIO({ 'L.md': ledgerMd }));
+    expect(r.code).toBe(0);
+    const out = JSON.parse(r.out);
+    expect(out.signals).toHaveProperty('zeroMergeStreak', true);
+    expect(out.proposal).toMatchObject({ component: 'orchestration', trigger: 'zeroMergeStreak' });
+  });
+  it('signals --propose yields proposal: null once the streak clears and no other signal fires', async () => {
+    const r = await run(
+      ['ledger', 'signals', '--path', 'L.md', '--merged', '181', '--propose'],
+      mockIO({ 'L.md': ledgerMd }),
+    );
+    const out = JSON.parse(r.out);
+    expect(out.signals.zeroMergeStreak).toBe(false);
+    expect(out.proposal).toBeNull();
+  });
+  it('signals --scores makes lowScoreStreak reachable → evaluation-feedback proposal', async () => {
+    // Clear the higher-priority zeroMergeStreak (--merged) so the low-score branch surfaces.
+    const r = await run(
+      ['ledger', 'signals', '--path', 'L.md', '--merged', '181', '--scores', '2,3,4', '--propose'],
+      mockIO({ 'L.md': ledgerMd }),
+    );
+    const out = JSON.parse(r.out);
+    expect(out.signals.lowScoreStreak).toBe(true);
+    expect(out.proposal).toMatchObject({ component: 'evaluation-feedback', trigger: 'lowScoreStreak' });
+  });
+  it('signals --scores keeps a legitimate 0 and drops empty tokens ("0,,0,0")', async () => {
+    const r = await run(
+      ['ledger', 'signals', '--path', 'L.md', '--merged', '181', '--scores', '0,,0,0', '--propose'],
+      mockIO({ 'L.md': ledgerMd }),
+    );
+    // "0,,0,0" → empties dropped, zeros kept → [0,0,0] → all three < 5 → streak true.
+    // A naive filter(Boolean) would drop the zeros → [] → false, so this pins the behaviour.
+    expect(JSON.parse(r.out).signals.lowScoreStreak).toBe(true);
+  });
+  it('signals rejects a value-less --scores with a clear usage error, not a crash', async () => {
+    const r = await run(['ledger', 'signals', '--path', 'L.md', '--scores'], mockIO({ 'L.md': ledgerMd }));
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('--scores expects a comma-separated list');
+    expect(r.err).not.toContain('is not a function');
+  });
   it('append writes a row (bootstraps ledger if missing)', async () => {
     const io = mockIO();
     const r = await run(

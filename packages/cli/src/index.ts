@@ -12,6 +12,7 @@ import {
   appendRow,
   emptyLedger,
   learningSignals,
+  proposeHarnessChange,
   verdictStats,
   type LedgerRow,
 } from '@dream-machine/ledger';
@@ -91,10 +92,13 @@ Commands:
   compile [config] [--out FILE]                        Compile config → routine prompt
   schedule [config] [--out FILE] [--env ID]            Emit the /schedule routine body
   ledger verify   [--path LEDGER.md]                   Structurally verify a ledger
-  ledger signals  [--path L] [--merged "7,12"]          Print STEP 1.1 learning signals
-                                                         (--merged: known-merged PR numbers;
-                                                         omitted → zeroMergeStreak defaults
-                                                         to a worst-case, unverified true)
+  ledger signals  [--path L]                           Print STEP 1.1 learning signals
+                  [--merged "7,12"] [--scores "7,4,3"] [--propose]
+                    --merged:  known-merged PR numbers (omitted → zeroMergeStreak
+                               defaults to a worst-case, unverified true)
+                    --scores:  recent gist self-scores 0–10, most-recent last
+                    --propose: also emit one bounded, single-component harness
+                               suggestion — a draft, never applied
   ledger stats    [--path LEDGER.md]                   Verdict distribution
   ledger append   --path L --date .. --deep .. ...     Append one row
   witness stamp   <report-file> <commit>               Compute the witness triple
@@ -221,7 +225,30 @@ export async function run(argv: string[], io: IO): Promise<RunResult> {
                   .filter(Boolean),
               )
             : undefined;
-          sink.log(JSON.stringify(learningSignals(rows, { mergedPrNumbers }), null, 2));
+          // --scores populates recentScores (the source lowScoreStreak needs) — same
+          // value-less guard as --merged, since a bare `--scores` parses to boolean true.
+          if (flags.scores === true) {
+            sink.error('ledger signals: --scores expects a comma-separated list of recent gist self-scores (0–10), e.g. --scores "7,4,3"');
+            return { code: 1, out: sink.out, err: sink.err };
+          }
+          const scoresFlag = flags.scores as string | undefined;
+          const recentScores = scoresFlag
+            ? scoresFlag
+                .split(',')
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0) // keep a legit 0; drop empties from "7,,3"
+                .map(Number)
+                .filter((n) => Number.isFinite(n))
+            : undefined;
+          const signals = learningSignals(rows, { mergedPrNumbers, recentScores });
+          // --propose: emit the smallest instance of the AutoDesign outer loop —
+          // at most one bounded, single-component harness suggestion derived from
+          // the signals. A draft only; it never mutates config (see ADR-DL-001).
+          if (flags.propose) {
+            sink.log(JSON.stringify({ signals, proposal: proposeHarnessChange(signals) }, null, 2));
+          } else {
+            sink.log(JSON.stringify(signals, null, 2));
+          }
           return { code: 0, out: sink.out, err: sink.err };
         }
         if (sub === 'stats') {
