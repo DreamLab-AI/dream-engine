@@ -1,7 +1,7 @@
 {
   "name": "dream-machine",
   "version": "0.1.1",
-  "description": "The Dream Machine — a config-driven engine for nightly, cloud-scheduled, evidence-gated repository evolution. It never merges; a human does.",
+  "description": "The Dream Engine — a config-driven engine for nightly, cloud-scheduled, evidence-gated repository evolution. It never merges; a human does.",
   "type": "module",
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",

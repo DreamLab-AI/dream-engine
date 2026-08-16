@@ -1,5 +1,5 @@
 /**
- * dream4d — a four-dimensional hero for the Dream Machine.
+ * dream4d — a four-dimensional hero for the Dream Engine.
  *
  * A tesseract (4-cube) turning through its fourth axis, rendered with three.js.
  * The conceit: the 4th axis is TIME. One full rotation through w is one night.

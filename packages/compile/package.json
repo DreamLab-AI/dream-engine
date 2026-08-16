@@ -1,7 +1,7 @@
 {
   "name": "@dream-machine/compile",
   "version": "0.1.0",
-  "description": "Compile a dream.config into the full Dream Machine nightly routine prompt — one source, many target repos.",
+  "description": "Compile a dream.config into the full Dream Engine nightly routine prompt — one source, many target repos.",
   "type": "module",
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",

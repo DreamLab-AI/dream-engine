@@ -1,7 +1,7 @@
 /**
  * @dream-machine/witness
  *
- * The Dream Machine's provenance stamp. Every nightly report is bound to the
+ * The Dream Engine's provenance stamp. Every nightly report is bound to the
  * exact commit it ran against by a double hash:
  *
  *     REPORT_HASH = sha256(report_bytes)

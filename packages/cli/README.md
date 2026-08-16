@@ -22,7 +22,7 @@ npx dream-machine compile dream.config.json --out PROMPT.md
 
 ---
 
-The Dream Machine wakes up in an isolated cloud session once a night, forms **one
+The Dream Engine wakes up in an isolated cloud session once a night, forms **one
 falsifiable hypothesis** about your repository, measures it against the repo's
 real evaluators, and writes down what it learned — whether or not the answer was
 the one it hoped for. Then it goes back to sleep, leaving behind a gist, an

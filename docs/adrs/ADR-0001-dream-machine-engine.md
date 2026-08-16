@@ -1,4 +1,4 @@
-# ADR-0001: The Dream Machine engine — a config-driven, evidence-gated nightly evolution loop composed from the ruvnet stack
+# ADR-0001: The Dream Engine engine — a config-driven, evidence-gated nightly evolution loop composed from the ruvnet stack
 
 - **Status**: Accepted — engine v0.1.0 shipped (compile/ledger/witness/schedule/memory + `dream-machine` CLI/TUI, 85 tests). The two production routines (`ruvnet/ruflo`, `ruvnet/metaharness`) remain the reference implementations this engine subsumes.
 - **Date**: 2026-08-13
@@ -49,7 +49,7 @@ Three forces make this the right moment to extract an engine:
 
 ## 2. Decision
 
-Build **the Dream Machine**: a config-driven engine that compiles a
+Build **the Dream Engine**: a config-driven engine that compiles a
 `dream.config` for a target repository into the routine prompt, backed by a
 small toolkit for the pipeline's durable-state and provenance mechanics, and
 delegating the evaluation-heavy stages to the ruvnet packages that already
@@ -147,7 +147,7 @@ implementation; do not introduce dependencies merely to satisfy this prompt."
   until a callable scheduling API is confirmed — shipping an unverified API
   wrapper would be exactly the overclaim the pipeline's own discipline forbids.
 - **This repo is itself a candidate target.** Once the engine runs, a
-  `dream.config` for `ruvnet/dream-machine` would let the Dream Machine dream
+  `dream.config` for `ruvnet/dream-machine` would let the Dream Engine dream
   about itself — deferred until the engine exists, and noted here as the
   natural closing of the loop, not a v1 commitment.
 
@@ -169,7 +169,7 @@ implementation; do not introduce dependencies merely to satisfy this prompt."
   Rejected (same reasoning as ADR-251): the loop needs an agentic session with
   parallel research and judgment, not a CI step, and keeping evolution
   authority out of the repo's own CI credentials is a security feature.
-- **Fold the engine into `ruvnet/metaharness`.** Rejected: the Dream Machine is
+- **Fold the engine into `ruvnet/metaharness`.** Rejected: the Dream Engine is
   repo-agnostic by construction and drives *other* repos (Ruflo included);
   binding it to one target's release cadence and ADR series would re-entangle
   exactly what this extraction separates. A standalone repo keeps the
