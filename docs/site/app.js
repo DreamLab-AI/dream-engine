@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Dream Engine — shared front-end behaviour
+   Dream Machine — shared front-end behaviour
    Everything is feature-detected and fails soft: with JS off or an API
    missing, all content stays readable and every command stays selectable.
    ========================================================================== */

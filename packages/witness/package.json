@@ -1,7 +1,7 @@
 {
   "name": "@dream-machine/witness",
   "version": "0.1.0",
-  "description": "Witness provenance for the Dream Engine — sha256(sha256(report) + commit) stamp & 5-step verify.",
+  "description": "Witness provenance for the Dream Machine — sha256(sha256(report) + commit) stamp & 5-step verify.",
   "type": "module",
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",

@@ -1,7 +1,7 @@
 {
   "name": "@dream-machine/schedule",
   "version": "0.1.0",
-  "description": "Emit the cloud /schedule routine body for a Dream Engine target (compile → paste, or automate once an API is available).",
+  "description": "Emit the cloud /schedule routine body for a Dream Machine target (compile → paste, or automate once an API is available).",
   "type": "module",
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",

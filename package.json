@@ -2,7 +2,7 @@
   "name": "dream-machine-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "The Dream Engine — config-driven, evidence-gated nightly repository evolution (workspace root)",
+  "description": "The Dream Machine — config-driven, evidence-gated nightly repository evolution (workspace root)",
   "type": "module",
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",

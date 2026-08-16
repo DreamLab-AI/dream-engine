@@ -1,5 +1,5 @@
 /**
- * The Dream Engine TUI — a dependency-free ANSI dashboard rendered from a
+ * The Dream Machine TUI — a dependency-free ANSI dashboard rendered from a
  * ledger. `renderDashboard` is pure (ledger string → framebuffer string) so it
  * can be snapshot-tested and turned into an SVG "termshot" without a terminal.
  */

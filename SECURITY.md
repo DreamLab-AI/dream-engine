@@ -10,7 +10,7 @@ We aim to acknowledge within 72 hours.
 
 ## Threat model & design guarantees
 
-The Dream Engine runs an autonomous nightly loop against a repository. Its
+The Dream Machine runs an autonomous nightly loop against a repository. Its
 safety rests on a small set of invariants, enforced in code and CI:
 
 - **Evaluation is not promotion.** The nightly session never merges and never

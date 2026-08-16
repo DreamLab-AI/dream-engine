@@ -1,7 +1,7 @@
 {
   "name": "@dream-machine/ledger",
   "version": "0.1.0",
-  "description": "The Dream Engine ledger — parse/append/verify the 10-column LEDGER.md and compute nightly learning signals.",
+  "description": "The Dream Machine ledger — parse/append/verify the 10-column LEDGER.md and compute nightly learning signals.",
   "type": "module",
   "license": "MIT",
   "author": "rUv <ruv@ruv.net>",

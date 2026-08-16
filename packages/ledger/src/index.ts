@@ -1,7 +1,7 @@
 /**
  * @dream-machine/ledger
  *
- * The ledger is the Dream Engine's only durable cross-night memory. Every
+ * The ledger is the Dream Machine's only durable cross-night memory. Every
  * nightly run appends exactly one row to `docs/dream-cycle/LEDGER.md`, a
  * fixed 10-column GitHub-flavored-markdown table:
  *

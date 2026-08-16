@@ -21,9 +21,10 @@
 > continuation of the Dream Machine, taken in a direction that intersects the
 > agentbox agent estate. It is derived from — and credits — rUv's original
 > **[`ruvnet/dream-machine`](https://github.com/ruvnet/dream-machine)**
-> ([live walkthrough](https://ruvnet.github.io/dream-machine/)). This repository
-> is an independent fork; changes flow in one direction (we do not push branches
-> or PRs back upstream). See [Origin & credit](#origin--credit).
+> ([live walkthrough](https://ruvnet.github.io/dream-machine/)). This is a
+> **tracking fork** — it keeps merging rUv's ongoing development and does not
+> push branches or PRs back. See [Origin & credit](#origin--credit) and
+> [FORK.md](FORK.md).
 
 ```bash
 npx dream-machine init --repo owner/name --out dream.config.json
@@ -230,11 +231,14 @@ the human-only merge boundary) is his.
 [DreamLab-AI](https://github.com/DreamLab-AI) forked it to take the engine in an
 internal direction that intersects the **agentbox** agent estate — sovereign
 mutations via the Loom, the Rust dream-engine acceptance path, and estate-specific
-evaluators. This is a hard fork: it lives at
-[`DreamLab-AI/dream-engine`](https://github.com/DreamLab-AI/dream-engine),
-tracks upstream only by this reference, and does **not** push branches or PRs
-back to `ruvnet/dream-machine`. To pull future upstream work, add it as a remote
-manually (`git remote add upstream https://github.com/ruvnet/dream-machine`).
+evaluators. It lives at
+[`DreamLab-AI/dream-engine`](https://github.com/DreamLab-AI/dream-engine) and
+**tracks upstream**: rUv's ongoing development is pulled in via the `upstream`
+remote (`git fetch upstream && git merge upstream/main`); we do not push branches
+or PRs back. To keep those merges clean, the fork deliberately keeps rUv's
+internal naming (`dream-machine`, `@dream-machine/*`, `dream.config.json`, the
+compiled routine prompt) byte-for-byte — only this README's front-door branding
+reads *Dream Engine*. The full rationale and sync recipe live in [FORK.md](FORK.md).
 
 ## License
 
