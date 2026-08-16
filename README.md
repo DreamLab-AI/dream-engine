@@ -1,23 +1,30 @@
 <div align="center">
 
-<a href="https://ruvnet.github.io/dream-machine/" title="Open the live site — interactive 4D hero"><img src="docs/media/hero.jpg" alt="Dream Machine — one honest cycle, every single night" width="100%"></a>
+<img src="docs/media/hero.jpg" alt="Dream Engine — one honest cycle, every single night" width="100%">
 
-# ☾ Dream Machine
+# ☾ Dream Engine
 
 **A config-driven engine for nightly, cloud-scheduled, evidence-gated repository evolution.**
 
-[![CI](https://github.com/ruvnet/dream-machine/actions/workflows/ci.yml/badge.svg)](https://github.com/ruvnet/dream-machine/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/ruvnet/dream-machine/actions/workflows/codeql.yml/badge.svg)](https://github.com/ruvnet/dream-machine/actions/workflows/codeql.yml)
-[![npm](https://img.shields.io/npm/v/dream-machine?color=8b5cf6)](https://www.npmjs.com/package/dream-machine)
+[![CI](https://github.com/DreamLab-AI/dream-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/DreamLab-AI/dream-engine/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/DreamLab-AI/dream-engine/actions/workflows/codeql.yml/badge.svg)](https://github.com/DreamLab-AI/dream-engine/actions/workflows/codeql.yml)
 [![license](https://img.shields.io/badge/license-MIT-22d3ee)](LICENSE)
-[![docs](https://img.shields.io/badge/docs-ruvnet.github.io%2Fdream--machine-e879f9)](https://ruvnet.github.io/dream-machine/)
 
-**[Website & walkthrough →](https://ruvnet.github.io/dream-machine/)** · **[Dashboard](https://ruvnet.github.io/dream-machine/dashboard.html)** · **[Tutorials](https://ruvnet.github.io/dream-machine/tutorials.html)** · **[ADR-0001](docs/adrs/ADR-0001-dream-machine-engine.md)**
+**[ADR-0001](docs/adrs/ADR-0001-dream-machine-engine.md)**
 
 </div>
 
 > Freeze the model. Evolve the harness. **Evaluation is not promotion** — the
 > machine never merges; a human does.
+
+> **Dream Engine** is [DreamLab-AI](https://github.com/DreamLab-AI)'s internal
+> continuation of the Dream Machine, taken in a direction that intersects the
+> agentbox agent estate. It is derived from — and credits — rUv's original
+> **[`ruvnet/dream-machine`](https://github.com/ruvnet/dream-machine)**
+> ([live walkthrough](https://ruvnet.github.io/dream-machine/)). This is a
+> **tracking fork** — it keeps merging rUv's ongoing development and does not
+> push branches or PRs back. See [Origin & credit](#origin--credit) and
+> [FORK.md](FORK.md).
 
 ```bash
 npx dream-machine init --repo owner/name --out dream.config.json
@@ -28,7 +35,7 @@ npx dream-machine compile dream.config.json --out PROMPT.md
 
 ## What it is
 
-The Dream Machine turns *"run one research-and-evolution cycle against a
+The Dream Engine turns *"run one research-and-evolution cycle against a
 repository every night"* into a **config-compiled engine** instead of a
 hand-maintained megaprompt. It wakes up in an isolated cloud session, forms one
 falsifiable hypothesis, measures it against the repo's real evaluators, and
@@ -39,7 +46,7 @@ It is the generalization of two routines already running nightly against
 [`ruvnet/ruflo`](https://github.com/ruvnet/ruflo) and
 [`ruvnet/metaharness`](https://github.com/ruvnet/metaharness). Both are ~800-line
 prompts running the same 26-step pipeline; they differ only in a small,
-well-defined per-repo delta. The Dream Machine factors the shared spine into an
+well-defined per-repo delta. The Dream Engine factors the shared spine into an
 engine and the differences into a `dream.config`.
 
 ## The nightly pipeline
@@ -81,11 +88,11 @@ dream-machine tui --path docs/dream-cycle/LEDGER.md            # the dashboard, 
 A browser dashboard renders the ledger as recent nights, verdict distribution,
 and per-night evidence — the same data the TUI shows.
 
-<div align="center"><a href="https://ruvnet.github.io/dream-machine/dashboard.html" title="Open the live management dashboard"><img src="docs/media/dashboard.jpg" alt="The Dream Machine management console" width="100%"></a></div>
+<div align="center"><a href="https://ruvnet.github.io/dream-machine/dashboard.html" title="Open the live management dashboard"><img src="docs/media/dashboard.jpg" alt="The Dream Engine management console" width="100%"></a></div>
 
 ## Schedule it — nightly, autonomous, always improving
 
-The Dream Machine is built to run itself on a schedule. In **Claude Code**, the
+The Dream Engine is built to run itself on a schedule. In **Claude Code**, the
 built-in **`/schedule`** command creates a cloud routine that runs the pipeline
 against your repo every night — autonomous research, evaluation, and
 improvement that compounds while you sleep.
@@ -107,7 +114,7 @@ repo. This is the exact prompt that runs against this repository every night —
 just change the repo slug:
 
 ```text
-You are the Dream Machine nightly runner for ruvnet/dream-machine, checked out fresh on main.
+You are the Dream Engine nightly runner for DreamLab-AI/dream-engine, checked out fresh on main.
 
 STEP A — build the engine (a fresh checkout has no dist/):
   npm ci && npm run build || true          # a wasm/NAPI failure is a recorded degradation, not a stop
@@ -191,7 +198,7 @@ backends** — a night without any of them is a *degraded* night, not a failed o
 
 ## Safety
 
-The Dream Machine runs autonomously, so its guarantees are enforced in code and
+The Dream Engine runs autonomously, so its guarantees are enforced in code and
 CI, not just documented (see [SECURITY.md](SECURITY.md) and
 [ADR-0001](docs/adrs/ADR-0001-dream-machine-engine.md)):
 
@@ -213,6 +220,27 @@ The design answers a known failure mode of open-loop autonomous research agents
 loops with ~5% follow-through). The promotion gate, adversarial critic,
 reward-hack check, and human-only merge boundary exist precisely because of them.
 
+## Origin & credit
+
+Dream Engine began as **[`ruvnet/dream-machine`](https://github.com/ruvnet/dream-machine)**
+by [rUv](https://github.com/ruvnet) — a config-driven engine for nightly,
+evidence-gated repository evolution. All the foundational design (the
+compile→schedule→witness pipeline, the promotion gate, the adversarial critic,
+the human-only merge boundary) is his.
+
+[DreamLab-AI](https://github.com/DreamLab-AI) forked it to take the engine in an
+internal direction that intersects the **agentbox** agent estate — sovereign
+mutations via the Loom, the Rust dream-engine acceptance path, and estate-specific
+evaluators. It lives at
+[`DreamLab-AI/dream-engine`](https://github.com/DreamLab-AI/dream-engine) and
+**tracks upstream**: rUv's ongoing development is pulled in via the `upstream`
+remote (`git fetch upstream && git merge upstream/main`); we do not push branches
+or PRs back. To keep those merges clean, the fork deliberately keeps rUv's
+internal naming (`dream-machine`, `@dream-machine/*`, `dream.config.json`, the
+compiled routine prompt) byte-for-byte — only this README's front-door branding
+reads *Dream Engine*. The full rationale and sync recipe live in [FORK.md](FORK.md).
+
 ## License
 
-MIT © [rUv](https://github.com/ruvnet)
+MIT — original work © [rUv](https://github.com/ruvnet) `<ruv@ruv.net>`;
+fork modifications © DreamLab-AI contributors. See [LICENSE](LICENSE).
