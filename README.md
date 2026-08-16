@@ -17,14 +17,16 @@
 > Freeze the model. Evolve the harness. **Evaluation is not promotion** — the
 > machine never merges; a human does.
 
-> **Dream Engine** is [DreamLab-AI](https://github.com/DreamLab-AI)'s internal
-> continuation of the Dream Machine, taken in a direction that intersects the
-> agentbox agent estate. It is derived from — and credits — rUv's original
+> **Dream Engine is how the [Dynamic Agentic Mesh](https://github.com/DreamLab-AI/VisionFlow)
+> improves itself** — the nightly self-improvement loop any repository in the
+> ecosystem can run: form one falsifiable hypothesis, measure it against the
+> repo's real evaluators, open a *draft* PR a human merges. It is
+> [DreamLab-AI](https://github.com/DreamLab-AI)'s continuation of rUv's
 > **[`ruvnet/dream-machine`](https://github.com/ruvnet/dream-machine)**
-> ([live walkthrough](https://ruvnet.github.io/dream-machine/)). This is a
-> **tracking fork** — it keeps merging rUv's ongoing development and does not
-> push branches or PRs back. See [Origin & credit](#origin--credit) and
-> [FORK.md](FORK.md).
+> ([live walkthrough](https://ruvnet.github.io/dream-machine/)) — derived from it,
+> crediting it, and [tracking it upstream](FORK.md). See
+> [In the VisionFlow ecosystem](#in-the-visionflow-ecosystem),
+> [History & lineage](#history--lineage), and [Origin & credit](#origin--credit).
 
 ```bash
 npx dream-machine init --repo owner/name --out dream.config.json
@@ -48,6 +50,36 @@ It is the generalization of two routines already running nightly against
 prompts running the same 26-step pipeline; they differ only in a small,
 well-defined per-repo delta. The Dream Engine factors the shared spine into an
 engine and the differences into a `dream.config`.
+
+## In the VisionFlow ecosystem
+
+Dreaming is the [Dynamic Agentic Mesh](https://github.com/DreamLab-AI/VisionFlow)'s
+**nightly self-improvement substrate** — the mesh's own thesis turned reflexive. The
+mesh promotes the human from *router* to *judgment broker*: agents observe and
+propose; a human holds the decision at the intersections a machine should not close
+on its own. Dreaming applies that boundary to the repositories' **own evolution** —
+every night an agent proposes, and the merge is a human signature. *Evaluation is not
+promotion* is the same rule the [forum](https://github.com/DreamLab-AI/nostr-rust-forum)
+enforces for governance, wired into the development loop.
+
+It composes with the rest of the mesh rather than duplicating it:
+
+- **Grounded** — a night's research can query the [Ontology Loom](https://github.com/DreamLab-AI/loom)
+  so hypotheses are grounded in the shared, reasoned ontology rather than parametric
+  guesswork.
+- **Witnessed** — every report is bound to its commit by a reproducible
+  double-sha256, the same provenance discipline the mesh uses for its evidence.
+- **Ledgered** — the append-only `LEDGER.md` is the honest, dated status record the
+  ecosystem canon asks of every substrate.
+- **Sovereign-ready** — the estate direction runs it as a container-local
+  orchestrator over the [agentbox](https://github.com/DreamLab-AI/agentbox) fleet,
+  one repository per cycle.
+
+**Maturity — stated honestly.** The single-repo loop is real and running: it drives
+[`DreamLab-AI/VisionFlow`](https://github.com/DreamLab-AI/VisionFlow) itself today
+(`dream.config.json`, a link-integrity evaluator, a dated `docs/dream-cycle/LEDGER.md`).
+The estate-wide orchestrator, and a `did:nostr` identity so a dream cycle is a
+first-class signed mesh actor, are in progress — tracked in the ledger, not claimed here.
 
 ## The nightly pipeline
 
@@ -143,10 +175,12 @@ falsifiable hypothesis → build a concrete candidate → evaluate parent vs.
 candidate on your real benchmarks → adversarial critique + reward-hack check →
 bounded Darwin evolution → witnessed evidence → gist + issue + **draft** PR → one
 ledger row. Win, lose, or draw, it records what it learned so tomorrow's search
-space is smaller. **This repository runs exactly this loop on itself** (cron
+space is smaller. **rUv's upstream runs exactly this loop on itself** (cron
 `0 9 * * *`) — browse its
 [dream-cycle issues](https://github.com/ruvnet/dream-machine/issues?q=label%3Adream-cycle),
-gists, and draft PRs to see it in action.
+gists, and draft PRs to see it in action. In the mesh, the same loop drives
+[`DreamLab-AI/VisionFlow`](https://github.com/DreamLab-AI/VisionFlow) today, with the
+estate-wide orchestrator following (see [In the VisionFlow ecosystem](#in-the-visionflow-ecosystem)).
 
 > No `dream.config`? `npx dream-machine init --repo owner/name` scaffolds one.
 > A night with no API key still runs — it reports `LLM_EVAL=blocked`, an honest
@@ -213,12 +247,29 @@ CI, not just documented (see [SECURITY.md](SECURITY.md) and
 - **Witnessed provenance** — every report is bound to its commit by a
   reproducible double-sha256 anyone can re-derive.
 
-## Prior art
+## History & lineage
 
-The design answers a known failure mode of open-loop autonomous research agents
-(Sakana AI's "The AI Scientist" reward-hacking incident; AutoGPT/BabyAGI-era
-loops with ~5% follow-through). The promotion gate, adversarial critic,
-reward-hack check, and human-only merge boundary exist precisely because of them.
+The name is older than the tool. M.M. Waldrop's *The Dream Machine* (2001) told the
+story of J.C.R. Licklider and the people who made computing personal — the machine
+that dreams a better version of itself is not a new idea.
+
+The engine descends from **rUv's [`ruvnet/dream-machine`](https://github.com/ruvnet/dream-machine)**:
+a config-driven generalisation of two routines already running nightly against
+[`ruvnet/ruflo`](https://github.com/ruvnet/ruflo) and
+[`ruvnet/metaharness`](https://github.com/ruvnet/metaharness), and a sibling of rUv's
+broader **DREAM AI** work on recursive self-optimisation. Its guardrails answer a
+documented failure mode of open-loop autonomous research agents — Sakana AI's "The AI
+Scientist" reward-hacking incident, AutoGPT/BabyAGI-era loops with ~5% follow-through.
+The promotion gate, adversarial critic, reward-hack check, and human-only merge
+boundary exist precisely because of them.
+
+The research thread keeps sharpening the design. **AutoDesign: Meta-Harness
+Optimization for Long-Horizon Agentic Design**
+([arXiv:2608.13560](https://arxiv.org/abs/2608.13560)) states the same thesis
+formally — *freeze the model, evolve the harness* — with an outer loop that reads an
+optimisation record and proposes one bounded, gated harness change. That is the
+direction of [ADR-DL-001](docs/dream-engine/ADR-DL-001-meta-harness-optimisation.md);
+its first step (`ledger signals --propose`) already ships here.
 
 ## Origin & credit
 
@@ -230,15 +281,22 @@ the human-only merge boundary) is his.
 
 [DreamLab-AI](https://github.com/DreamLab-AI) forked it to take the engine in an
 internal direction that intersects the **agentbox** agent estate — sovereign
-mutations via the Loom, the Rust dream-engine acceptance path, and estate-specific
-evaluators. It lives at
+mutations via the Loom, the Rust dream-engine acceptance path, estate-specific
+evaluators, and an orchestrator that runs the loop across the whole mesh.
+
+**Why the internal name is *Dream Engine*.** In the ecosystem's own vocabulary,
+"dreaming" is the self-improvement substrate and the Rust acceptance path is the
+"dream engine" — so the fork's front door adopts that name to place it inside the
+mesh and to distinguish the ecosystem's estate-wide loop from rUv's upstream tool.
+The divergence is real (multi-repo orchestration, `did:nostr` provenance,
+Loom-grounded research), but the rename is deliberately skin-deep: it lives at
 [`DreamLab-AI/dream-engine`](https://github.com/DreamLab-AI/dream-engine) and
-**tracks upstream**: rUv's ongoing development is pulled in via the `upstream`
-remote (`git fetch upstream && git merge upstream/main`); we do not push branches
-or PRs back. To keep those merges clean, the fork deliberately keeps rUv's
-internal naming (`dream-machine`, `@dream-machine/*`, `dream.config.json`, the
-compiled routine prompt) byte-for-byte — only this README's front-door branding
-reads *Dream Engine*. The full rationale and sync recipe live in [FORK.md](FORK.md).
+**tracks upstream** — rUv's ongoing development is pulled in via the `upstream`
+remote (`git fetch upstream && git merge upstream/main`); we do not push branches or
+PRs back. To keep those merges clean, the fork keeps rUv's naming
+(`dream-machine`, `@dream-machine/*`, `dream.config.json`, the compiled routine
+prompt) byte-for-byte — only this README's branding reads *Dream Engine*. The full
+rationale and sync recipe live in [FORK.md](FORK.md).
 
 ## License
 
