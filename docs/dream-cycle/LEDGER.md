@@ -14,3 +14,5 @@
 | 2026-08-16 | ledger-signals | Given the persisted ledger rows for 2026-08-15 carry empty `prior-night fates` ( | NONE | NONE | yes | ACCEPT |  | da74cb43142a |  |
 | 2026-08-16 | ledger-signals | Given the Darwin evaluator at commit `8c945e3` runs with `--sandbox mock --mutat | NONE | NONE | yes | ACCEPT |  | 4e40f4930fa3 |  |
 | 2026-08-16 | ledger-signals | zeroMergeStreak permanently miscalibrated (CLI never wires mergedPrNumbers); now derived from Prior-night fates #N:FATE tokens (parsePriorFates), unioned with our --merged override | #14 | #15 | yes | ACCEPT | npm test 96->100, 0 regressions | 4fac9b71 | consolidated from ruvnet/dream-machine PR #15; upstream fate tokens omitted here (their PR numbers differ from this fork's) |
+| 2026-08-17 | evaluation-adapters | Given the Darwin evaluator at commit `569285b` configured with `--sandbox mock - | NONE | NONE | yes | ACCEPT |  | 7ecbf140d180 |  |
+| 2026-08-17 | evaluation-adapters | Given the Darwin evaluator at commit `569285b` configured with `--sandbox mock - | NONE | NONE | yes | ACCEPT |  | 9bf1005b390a |  |
