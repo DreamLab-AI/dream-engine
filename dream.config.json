@@ -1,5 +1,5 @@
 {
-  "repo": "ruvnet/dream-machine",
+  "repo": "DreamLab-AI/dream-engine",
   "cron": "0 9 * * *",
   "slots": [
     {
@@ -72,5 +72,5 @@
     "dream-cycle",
     "research"
   ],
-  "autoMerge": true
+  "autoMerge": false
 }
