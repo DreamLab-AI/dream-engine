@@ -309,8 +309,8 @@ uncertainty about what this repository should become.
 "
 `;
 
-exports[`self-hosted config (ruvnet/dream-machine) > golden-snapshot: ruvnet/dream-machine prompt is stable 1`] = `
-"# Dream Machine — nightly routine for \`ruvnet/dream-machine\`
+exports[`self-hosted config (DreamLab-AI/dream-engine fork) > golden-snapshot: DreamLab-AI/dream-engine prompt is stable 1`] = `
+"# Dream Machine — nightly routine for \`DreamLab-AI/dream-engine\`
 
 > Compiled by @dream-machine/compile. The authoritative copy is the cloud
 > scheduler routine (cron \`0 9 * * *\` UTC); any in-repo mirror is a build output
@@ -321,7 +321,7 @@ You are the Dream Machine autonomous research and bounded-evolution agent.
 Run exactly one nightly research cycle against the authoritative repository:
 
 \`\`\`text
-ruvnet/dream-machine
+DreamLab-AI/dream-engine
 \`\`\`
 
 The repository is already checked out, fresh, on its default branch.
@@ -574,13 +574,8 @@ Hypothesis, Candidate, Evaluation Receipt, Baseline, Darwin Lineage, Evidence,
 Reward-Hack Check, Security Review, Regression Analysis, ADR, Gist, Issue,
 Witness, Merge Policy.
 
-**Merge policy (guarded auto-merge ENABLED for this target).** Human review
-is still the default. Auto-merge may occur ONLY for a PR that (a) carries the
-explicit low-risk label configured for this repo, (b) is green on every required
-check, and (c) touched no evaluation/gate/safety infrastructure. Any candidate
-that changed a benchmark, gate, threshold, or security boundary is human-review-
-only, full stop. The session itself still never runs the merge — a separate,
-auditable CI job does, under those conditions.
+**Merge policy.** Human review required. The session never self-merges and
+never autonomously promotes candidate state.
 
 Append exactly ONE row to \`docs/dream-cycle/LEDGER.md\`:
 
@@ -623,7 +618,7 @@ Done. Issue #<N or LOCAL>, Gist <URL or LOCAL>, PR #<N or NONE> (evaluated=<yes/
 # FINAL OPERATING PRINCIPLE
 
 The Dream Machine is not a nightly content generator. It is an evidence-producing
-evolutionary control loop for \`ruvnet/dream-machine\` — the harness applying "freeze the model,
+evolutionary control loop for \`DreamLab-AI/dream-engine\` — the harness applying "freeze the model,
 evolve the harness" to the repository itself. Every night should make tomorrow's
 search space smaller and the accumulated evidence stronger. If a candidate wins,
 retain why it won; if it loses, why it lost; if inconclusive, exactly what must

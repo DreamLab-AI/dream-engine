@@ -9,3 +9,4 @@ coverage/
 # Agentic tool scaffolding (session-local, not part of the engine)
 .agentic-qe/
 .claude-flow/
+.dream-standby

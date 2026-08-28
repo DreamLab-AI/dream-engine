@@ -144,7 +144,7 @@ describe('defaults', () => {
 // synthetic fixture — none of them would catch a regression that broke this
 // repo's real, committed config. Read it the same way `dream-machine compile
 // dream.config.json` does, and golden-snapshot it.
-describe('self-hosted config (ruvnet/dream-machine)', () => {
+describe('self-hosted config (DreamLab-AI/dream-engine fork)', () => {
   const selfConfig: DreamConfig = JSON.parse(
     readFileSync(join(process.cwd(), 'dream.config.json'), 'utf8'),
   );
@@ -153,15 +153,15 @@ describe('self-hosted config (ruvnet/dream-machine)', () => {
     expect(validateConfig(selfConfig).ok).toBe(true);
   });
 
-  it('resolves autoMerge: true (the one config in the wild that enables it)', () => {
-    expect(withDefaults(selfConfig).autoMerge).toBe(true);
+  it('resolves autoMerge: false (fork policy: human merge gate, no auto-merge)', () => {
+    expect(withDefaults(selfConfig).autoMerge).toBe(false);
   });
 
   it('compiles deterministically', () => {
     expect(compile(selfConfig)).toBe(compile(selfConfig));
   });
 
-  it('golden-snapshot: ruvnet/dream-machine prompt is stable', () => {
+  it('golden-snapshot: DreamLab-AI/dream-engine prompt is stable', () => {
     expect(compile(selfConfig)).toMatchSnapshot();
   });
 });
