@@ -17,3 +17,4 @@
 | 2026-08-17 | evaluation-adapters | Given the Darwin evaluator at commit `569285b` configured with `--sandbox mock - | NONE | NONE | yes | ACCEPT |  | 7ecbf140d180 |  |
 | 2026-08-17 | evaluation-adapters | Given the Darwin evaluator at commit `569285b` configured with `--sandbox mock - | NONE | NONE | yes | ACCEPT |  | 9bf1005b390a |  |
 | 2026-08-28 | ledger-signals | fate reconciliation (agentbox operator audit): judgment-broker queue showed #9/#11/#15 as pending-merge; their changes landed 2026-08-13..15 (#7/#9 consolidated into the fork by human merge, #11/#15 merged in upstream ruvnet/dream-machine whose PR numbering this ledger borrowed) — recording terminal fates so the queue clears | NONE | NONE | no | INCONCLUSIVE |  | operator | #7:MERGED #9:MERGED #11:MERGED #15:MERGED |
+| 2026-09-01 | ledger-signals | INCONCLUSIVE — see report | NONE | NONE | yes | INCONCLUSIVE |  | bdb6735f5b3b |  |
