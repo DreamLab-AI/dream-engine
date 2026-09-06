@@ -26,11 +26,6 @@ jobs:
       - name: Ensure Jekyll is disabled
         run: touch docs/site/.nojekyll
       - uses: actions/configure-pages@v6
-        with:
-          # Pages has never been enabled on this repo (GET /pages returns 404), so
-          # configure-pages must create the Pages site itself using the job's
-          # `pages: write` token instead of failing with "Get Pages site failed".
-          enablement: true
       - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/site
