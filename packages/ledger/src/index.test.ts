@@ -106,6 +106,20 @@ describe('verifyLedger', () => {
     expect(r.errors.join()).toMatch(/evaluated/);
   });
 
+  it('accepts the non-night verdicts and an n/a evaluated column', () => {
+    // Regression: verifyLedger gated on its own copy of the vocabulary, so an
+    // operator row (verdict OPERATOR, evaluated n/a) passed the row contract and
+    // was then rejected here. Both now read the same constants from rowContract.
+    let l = emptyLedger();
+    l = appendRow(l, row({ date: '2026-09-07', verdict: 'OPERATOR', evaluated: 'n/a' }));
+    l = appendRow(l, row({ date: '2026-09-08', verdict: 'HANDOFF', evaluated: 'n/a' }));
+    l = appendRow(l, row({ date: '2026-09-09', verdict: 'BLOCKED-ENV', evaluated: 'blocked' }));
+    const r = verifyLedger(l);
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.rowCount).toBe(3);
+  });
+
   it('flags a missing header', () => {
     const r = verifyLedger('just some text, no table');
     expect(r.ok).toBe(false);

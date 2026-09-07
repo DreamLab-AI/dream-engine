@@ -1,7 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseRow, validateLedger, validateRow } from "./rowContract";
+import {
+  LEDGER_VERDICTS,
+  NIGHT_VERDICTS,
+  NON_NIGHT_VERDICTS,
+  parseRow,
+  validateLedger,
+  validateRow,
+} from "./rowContract";
 
 const ENFORCE_FROM = "2026-09-06";
 
@@ -61,6 +68,50 @@ describe("rowContract unit rules", () => {
     const cells = [...COMPLIANT];
     cells[9] = "#7:MERGED #8:OPEN #9:STALE";
     expect(rulesOf(cells)).toEqual([]);
+  });
+
+  // Verdict vocabulary. The three night outcomes are the ADR-0001 invariant; the
+  // non-night tokens exist because the engine's dry streak counts INCONCLUSIVE and
+  // ignores everything else, so filing an operator handoff or an environment block
+  // as INCONCLUSIVE parks the repo on the strength of work nobody attempted.
+  it.each([...NIGHT_VERDICTS])("accepts the night verdict %s", (verdict) => {
+    const cells = [...COMPLIANT];
+    cells[6] = verdict;
+    // ACCEPT is the only token that additionally requires a PR and a witness,
+    // both of which COMPLIANT already carries.
+    expect(rulesOf(cells)).toEqual([]);
+  });
+
+  it.each([...NON_NIGHT_VERDICTS])("accepts the non-night verdict %s", (verdict) => {
+    const cells = [...COMPLIANT];
+    cells[6] = verdict;
+    cells[5] = "n/a";
+    expect(rulesOf(cells)).toEqual([]);
+  });
+
+  it("still rejects a verdict outside the vocabulary", () => {
+    const cells = [...COMPLIANT];
+    cells[6] = "MAYBE";
+    expect(rulesOf(cells)).toContain("verdict-vocab");
+  });
+
+  it("does not let a non-night verdict borrow the ACCEPT-only rules", () => {
+    // OPERATOR rows legitimately carry no PR and no witness; only ACCEPT is held
+    // to those, so widening the vocabulary must not widen those two rules.
+    const cells = [...COMPLIANT];
+    cells[6] = "OPERATOR";
+    cells[4] = "NONE";
+    cells[8] = "";
+    const rules = rulesOf(cells);
+    expect(rules).not.toContain("accept-without-pr");
+    expect(rules).not.toContain("accept-without-witness");
+  });
+
+  it("keeps the night and non-night vocabularies disjoint", () => {
+    // A token in both sets would make the dry-streak distinction meaningless.
+    const overlap = NIGHT_VERDICTS.filter((v) => (NON_NIGHT_VERDICTS as readonly string[]).includes(v));
+    expect(overlap).toEqual([]);
+    expect(LEDGER_VERDICTS).toHaveLength(NIGHT_VERDICTS.length + NON_NIGHT_VERDICTS.length);
   });
 
   it("grandfathers rows dated before the enforcement cutoff", () => {

@@ -39,6 +39,15 @@ Every night ends in exactly one verdict — **`ACCEPT`**, **`REJECT`**, or
 clean measurement is a **successful** night. The engine optimizes for shrinking
 tomorrow's search space, not for producing PRs.
 
+Those three are *night* outcomes. A ledger row that records something which was
+never a night carries a different token — **`BLOCKED-ENV`** (the environment
+stopped a night starting), **`HANDOFF`** (the work passed to another actor), or
+**`OPERATOR`** (a human acted on the repo outside the loop), with `n/a` in the
+Evaluated column. The distinction is load-bearing: the engine counts
+`INCONCLUSIVE` rows toward the dry streak that parks a repo and ignores the
+other tokens, so filing an operator handoff as `INCONCLUSIVE` would park the
+repo over work nobody attempted. Vocabulary: `packages/ledger/src/rowContract.ts`.
+
 ## Commands
 
 | Command | What it does |

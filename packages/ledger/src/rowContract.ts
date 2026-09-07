@@ -4,12 +4,51 @@
 // frozen-hypothesis leakage); prior-night fates are token-only (#N:FATE with
 // FATE in MERGED|CLOSED|OPEN|STALE); ACCEPT rows track a PR and carry a witness.
 // Rows dated before `enforceFrom` are grandfathered.
+//
+// This module is the single source of the row vocabulary. `index.ts` imports
+// these constants rather than restating them, because a validator that
+// disagrees with the verifier is worse than neither.
 
 export interface RowViolation {
   date: string;
   rule: string;
   detail: string;
 }
+
+/**
+ * Verdicts a completed dream NIGHT may end in — exactly one, never a fourth.
+ * This is the three-state invariant of ADR-0001 and the compiled prompt, and it
+ * is unchanged: a night that ran still resolves to accept, reject, or "could not
+ * distinguish candidate from baseline".
+ */
+export const NIGHT_VERDICTS = ["ACCEPT", "REJECT", "INCONCLUSIVE"] as const;
+
+/**
+ * Verdicts for ledger rows that are NOT nights. A row can record something other
+ * than a completed experiment — an environment that never let one start, a
+ * handoff, an operator acting directly on the repo — and such a row must be
+ * distinguishable from a night that ran and could not decide.
+ *
+ * The distinction is load-bearing downstream, not cosmetic: the engine counts
+ * INCONCLUSIVE rows toward the dry streak that parks a repo, and ignores any
+ * other token. Filing an operator handoff as INCONCLUSIVE therefore pushes the
+ * repo toward being parked on the strength of work that was never attempted.
+ *
+ * - BLOCKED-ENV: the environment prevented the night from running at all.
+ * - HANDOFF:     the night handed its work to another actor rather than deciding.
+ * - OPERATOR:    a human/operator acted on the repo outside the nightly loop.
+ */
+export const NON_NIGHT_VERDICTS = ["BLOCKED-ENV", "HANDOFF", "OPERATOR"] as const;
+
+/** Every verdict token a ledger row may carry. */
+export const LEDGER_VERDICTS: readonly string[] = [...NIGHT_VERDICTS, ...NON_NIGHT_VERDICTS];
+
+/**
+ * Evaluated-column vocabulary. "n/a" belongs to non-night rows: an operator
+ * handoff did not evaluate anything, and saying "no" would imply a night chose
+ * not to.
+ */
+export const LEDGER_EVALUATED: readonly string[] = ["yes", "no", "blocked", "n/a"];
 
 const FATE_TOKEN = /^#\d+:(MERGED|CLOSED|OPEN|STALE)$/;
 
@@ -45,7 +84,7 @@ export function validateRow(cells: string[], enforceFrom: string): RowViolation[
   }
 
   const verdict = at(6);
-  if (!/^(ACCEPT|REJECT|INCONCLUSIVE)$/.test(verdict)) {
+  if (!LEDGER_VERDICTS.includes(verdict)) {
     flag("verdict-vocab", `unrecognised verdict "${verdict}"`);
   }
   if (verdict === "ACCEPT" && (at(4) === "NONE" || at(4) === "")) {

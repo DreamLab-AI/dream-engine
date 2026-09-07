@@ -12,6 +12,8 @@
  * next night — instead of the model re-deriving them from prose every time.
  */
 
+import { LEDGER_EVALUATED, LEDGER_VERDICTS } from "./rowContract.js";
+
 export const LEDGER_COLUMNS = [
   'Date',
   'Deep',
@@ -25,8 +27,22 @@ export const LEDGER_COLUMNS = [
   'Prior-night fates',
 ] as const;
 
-export type Verdict = 'ACCEPT' | 'REJECT' | 'INCONCLUSIVE';
-export type Evaluated = 'yes' | 'no' | 'blocked';
+/**
+ * A night's outcome, or a marker that the row is not a night at all. The first
+ * three are the ADR-0001 three-state invariant; the rest describe rows that
+ * record something other than a completed experiment. The split matters
+ * downstream: the engine's dry streak counts INCONCLUSIVE and ignores the rest,
+ * so an operator handoff filed as INCONCLUSIVE parks the repo on work nobody
+ * attempted. Vocabulary lives in rowContract.ts.
+ */
+export type Verdict =
+  | 'ACCEPT'
+  | 'REJECT'
+  | 'INCONCLUSIVE'
+  | 'BLOCKED-ENV'
+  | 'HANDOFF'
+  | 'OPERATOR';
+export type Evaluated = 'yes' | 'no' | 'blocked' | 'n/a';
 
 export interface LedgerRow {
   date: string; // YYYY-MM-DD
@@ -145,8 +161,10 @@ export function appendRow(markdown: string, row: LedgerRow): string {
   return `${base}\n${renderRow(row)}\n`;
 }
 
-const VERDICTS: readonly string[] = ['ACCEPT', 'REJECT', 'INCONCLUSIVE'];
-const EVALS: readonly string[] = ['yes', 'no', 'blocked'];
+// Imported, never restated: verifyLedger and the row contract must agree, or a
+// row passes one gate and fails the other.
+const VERDICTS = LEDGER_VERDICTS;
+const EVALS = LEDGER_EVALUATED;
 
 export interface VerifyResult {
   ok: boolean;
