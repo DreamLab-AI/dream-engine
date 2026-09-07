@@ -20,6 +20,7 @@ import { stamp, verify, verifySteps } from '@dream-machine/witness';
 import { serializeRoutine, scheduleInstructions } from '@dream-machine/schedule';
 import { renderDashboard } from './tui.js';
 import { classifyEntrypointResult, type ExecResult } from './entrypoint.js';
+import { checkDarwinBoundsFromStdout } from './darwinBounds.js';
 
 export const VERSION = '0.1.1';
 
@@ -104,6 +105,8 @@ Commands:
   witness stamp   <report-file> <commit>               Compute the witness triple
   witness verify  <report-file> <commit> <witness>     Verify a claimed witness
   verify-entrypoint <label> --cmd "<command>"           Classify an evaluator entrypoint's liveness
+                                                       exit 0 live / 1 blocked / 2 suspicious-silent;
+                                                       label darwin also checks ADR-0003 bounds (3 = violated)
   tui             [--path LEDGER.md] [--no-color]      Render the dashboard
   version | --version                                  Print version
   help    | --help                                     This help
@@ -343,6 +346,37 @@ export async function run(argv: string[], io: IO): Promise<RunResult> {
         const result = await io.exec(cmd);
         const check = classifyEntrypointResult(result);
         sink.log(`${label}: ${check.verdict} (exit ${check.code}) — ${check.reason}`);
+
+        // ADR-0003: a live darwin evaluator can still have run out of policy. On
+        // 2026-09-07 it returned outcome=PASSED with five candidates in generation 2,
+        // against the documented <=4/generation bound, and nothing noticed. Check the
+        // leaderboard it just printed.
+        //
+        // This is DETECTION, not enforcement. verify-entrypoint is an operator
+        // diagnostic; the nightly gate lives in the external annexe runner, so a
+        // violation here cannot fail a night or block a merge — it only makes the
+        // breach loud for whoever ran the command.
+        if (label === 'darwin' && check.verdict === 'live') {
+          // promotedLineages is passed as 0 EXPLICITLY and is therefore UNCHECKED on
+          // this path: the leaderboard exposes `Winner:`/`Lineage:` lines but no
+          // promotion count, so 2 of the 3 step-10 bounds are checked here, not 3.
+          // Passing 0 silently and claiming all three would be the overstatement
+          // ADR-0002 was written against.
+          const bounds = checkDarwinBoundsFromStdout(result.stdout, 0);
+          if (!bounds.ok) {
+            sink.error(`${label}: darwin bounds VIOLATED (leaderboard ${bounds.parseStatus})`);
+            for (const violation of bounds.violations) {
+              sink.error(`  - ${violation}`);
+            }
+            sink.error('  note: promotedLineages unchecked on this path — see ADR-0003');
+            return { code: 3, out: sink.out, err: sink.err };
+          }
+          sink.log(
+            `${label}: darwin bounds ok — depth ${bounds.generations}, ` +
+              `max ${bounds.maxCandidatesPerGeneration} candidates/generation`,
+          );
+        }
+
         const code = check.verdict === 'live' ? 0 : check.verdict === 'blocked' ? 1 : 2;
         return { code, out: sink.out, err: sink.err };
       }
