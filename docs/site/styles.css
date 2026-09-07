@@ -1505,7 +1505,7 @@ dl.fields dd {
     padding-top: 0.2em;
   }
 
-  .table-scroll {
+  .table-scroll--ledger {
     overflow-x: visible;
     background: transparent;
     border: 0;
