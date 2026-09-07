@@ -18,3 +18,9 @@
 | 2026-08-17 | evaluation-adapters | Given the Darwin evaluator at commit `569285b` configured with `--sandbox mock - | NONE | NONE | yes | ACCEPT |  | 9bf1005b390a |  |
 | 2026-08-28 | ledger-signals | fate reconciliation (agentbox operator audit): judgment-broker queue showed #9/#11/#15 as pending-merge; their changes landed 2026-08-13..15 (#7/#9 consolidated into the fork by human merge, #11/#15 merged in upstream ruvnet/dream-machine whose PR numbering this ledger borrowed) — recording terminal fates so the queue clears | NONE | NONE | no | INCONCLUSIVE |  | operator | #7:MERGED #9:MERGED #11:MERGED #15:MERGED |
 | 2026-09-01 | ledger-signals | INCONCLUSIVE — see report | NONE | NONE | yes | INCONCLUSIVE |  | bdb6735f5b3b |  |
+| 2026-09-02 | evaluation-adapters | Given the Darwin evaluator at commit `7c30573a2d73c8fa4c67a43042d7c0b204eefa13`  | NONE | NONE | yes | ACCEPT |  | ca5d950d60bc |  |
+| 2026-09-03 | security-adversarial | Given the dream-machine tree at commit `7c30573a2d73c8fa4c67a43042d7c0b204eefa13 | NONE | NONE | yes | ACCEPT |  | 1a4711f76d90 |  |
+| 2026-09-04 | developer-experience | Given commit `7c30573a2d73c8fa4c67a43042d7c0b204eefa13` with `tui` declared amon | NONE | NONE | yes | ACCEPT |  | 270d82f5fb87 |  |
+| 2026-09-05 | compiler-parity | Given the dream-engine tree at commit `7c30573a2d73c8fa4c67a43042d7c0b204eefa13` | NONE | NONE | yes | ACCEPT |  | 492a9831cd9b |  |
+| 2026-09-06 | ledger-signals | ledger row-contract validator added; last 5 rows (09-01..05) all violate format | NONE | https://github.com/DreamLab-AI/dream-engine/pull/10 | yes | ACCEPT |  | d288b79b6292 |  |
+| 2026-09-07 | evaluation-adapters | darwin gen2 ran 5 candidates (≤4/gen bound broken); evaluator still PASSED | NONE | https://github.com/DreamLab-AI/dream-engine/pull/11 | yes | ACCEPT |  | cae9a2589672 |  |
