@@ -24,4 +24,4 @@
 | 2026-09-05 | compiler-parity | Given the dream-engine tree at commit `7c30573a2d73c8fa4c67a43042d7c0b204eefa13` | NONE | NONE | yes | ACCEPT |  | 492a9831cd9b |  |
 | 2026-09-06 | ledger-signals | ledger row-contract validator added; last 5 rows (09-01..05) all violate format | NONE | https://github.com/DreamLab-AI/dream-engine/pull/10 | yes | ACCEPT |  | d288b79b6292 |  |
 | 2026-09-07 | evaluation-adapters | darwin gen2 ran 5 candidates (≤4/gen bound broken); evaluator still PASSED | NONE | https://github.com/DreamLab-AI/dream-engine/pull/11 | yes | ACCEPT |  | cae9a2589672 |  |
-| 2026-09-07 | operator-handoff | OPERATOR: PR #11 landed as ADR-0003; darwin bound guard in verify-entrypoint | NONE | https://github.com/DreamLab-AI/dream-engine/pull/11 | no | INCONCLUSIVE |  | operator | #11:MERGED |
+| 2026-09-07 | operator-handoff | OPERATOR: PR #11 landed as ADR-0003; darwin bound guard in verify-entrypoint | NONE | https://github.com/DreamLab-AI/dream-engine/pull/11 | n/a | OPERATOR |  | operator | #11:MERGED |
