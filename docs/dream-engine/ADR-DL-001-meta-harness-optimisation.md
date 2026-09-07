@@ -129,3 +129,15 @@ of the outer loop.
 - [ADR-0001](../adrs/ADR-0001-dream-machine-engine.md) — the engine (inner loop,
   promotion gate, human-only merge).
 - [FORK.md](../../FORK.md) — fork identity and upstream-tracking policy.
+
+## Closeout extension — 2026-09-04
+
+Scope: Outer-loop prerequisites. Work packages: CP-01/07/08. Historical decisions, dates and upstream/fork ownership remain unchanged. This is a local estate-review addendum, not upstream ratification. Accountable roles: DreamLab dream-engine maintainer and agentbox runtime maintainer; upstream changes follow their owning project process.
+
+This fork-specific proposal remains proposed. The inner operational service lacks candidate re-evaluation and a deterministic required-check veto, so it does not yet supply a trustworthy optimisation target for an outer loop.
+
+**Acceptance condition:** First close inner-loop evidence and recovery. Then freeze independent training/dev evaluation, keep held-out data unavailable to the optimiser, bind each single-component change to receipts, and demonstrate rejection of train-only gains or evaluator tampering.
+
+Dependencies: release identity, shared-memory integrity, fair durable scheduling and the human review path. Reopen on compiler, evaluator, verdict parser, persistence or scheduler changes. Current toolkit revision: `7c30573a2d73c8fa4c67a43042d7c0b204eefa13`; operational service evidence is separately pinned in the receipt.
+
+See [self-improvement review](../../../VisionFlow/docs/estate-review/self-improvement.md) and [source/parser receipt](../../../VisionFlow/docs/estate-review/evidence/dream-snapshot.json). Existing local test results do not certify a deployed nightly cycle.

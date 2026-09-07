@@ -105,3 +105,15 @@ this classifier before it is allowed to influence a night's `EVALUATED`/
   replacement fix (Grade A, fetched directly).
 - `pytest` exit code 5 ("no tests were collected") — closest prior art for a
   dedicated "ran clean but did zero real work" signal (Grade B).
+
+## Closeout extension — 2026-09-04
+
+Scope: Evaluator liveness and deterministic verdict. Work packages: CP-01/07/08. Historical decisions, dates and upstream/fork ownership remain unchanged. This is a local estate-review addendum, not upstream ratification. Accountable roles: DreamLab dream-engine maintainer and agentbox runtime maintainer; upstream changes follow their owning project process.
+
+The optional entrypoint classifier is implemented as a toolkit CLI surface; the inspected Rust service evaluator loop does not invoke it. Non-zero evaluation becomes BLOCKED text, and zero-exit FAIL text is passed to the model.
+
+**Acceptance condition:** Wire or equivalently implement typed required-check classification in the actual service. Reject missing, silent, blocked and explicit-failure evaluators deterministically; preserve stderr and prove a broken candidate cannot receive ACCEPT.
+
+Dependencies: release identity, shared-memory integrity, fair durable scheduling and the human review path. Reopen on compiler, evaluator, verdict parser, persistence or scheduler changes. Current toolkit revision: `7c30573a2d73c8fa4c67a43042d7c0b204eefa13`; operational service evidence is separately pinned in the receipt.
+
+See [self-improvement review](../../../VisionFlow/docs/estate-review/self-improvement.md) and [source/parser receipt](../../../VisionFlow/docs/estate-review/evidence/dream-snapshot.json). Existing local test results do not certify a deployed nightly cycle.

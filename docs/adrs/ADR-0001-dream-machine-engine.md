@@ -221,3 +221,19 @@ This ADR is satisfied when:
   Darwin stage's conceptual neighbors); classical champion/challenger +
   shadow-deployment MLOps (the promotion-gate design applied to LLM-harness
   evolution).
+
+## Closeout extension — 2026-09-04
+
+Scope: Toolkit and runtime boundaries. Work packages: CP-01/07/08. Historical decisions, dates and upstream/fork ownership remain unchanged. This is a local estate-review addendum, not upstream ratification. Accountable roles: DreamLab dream-engine maintainer and agentbox runtime maintainer; upstream changes follow their owning project process.
+
+The TypeScript compiler/toolkit and the agentbox Rust service are separate execution paths. Toolkit tests do not establish that the service evaluates its generated candidate.
+
+**Acceptance condition:** Bind baseline, candidate tree, evaluator versions/configuration and raw receipts to a single run identity. Require candidate evaluation and a typed acceptance gate before describing an accepted report as a verified improvement.
+
+Dependencies: release identity, shared-memory integrity, fair durable scheduling and the human review path. Reopen on compiler, evaluator, verdict parser, persistence or scheduler changes. Current toolkit revision: `7c30573a2d73c8fa4c67a43042d7c0b204eefa13`; operational service evidence is separately pinned in the receipt.
+
+See [self-improvement review](../../../VisionFlow/docs/estate-review/self-improvement.md) and [source/parser receipt](../../../VisionFlow/docs/estate-review/evidence/dream-snapshot.json). Existing local test results do not certify a deployed nightly cycle.
+
+## Node support closeout — 2026-09-07
+
+The CLI now declares Node >=20, matching the root package and hosted 20/22/24 matrix; root and CLI workspace-lock engine entries agree. The focused ledger/CLI suite passes 94 tests, including the real ledger contract. No package release or fresh hosted matrix success is inferred from this local run. See the [estate execution report](../../../VisionFlow/docs/estate-review/closeout/2026-09-07-execution-canon.md).
