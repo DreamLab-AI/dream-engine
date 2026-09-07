@@ -349,6 +349,7 @@ research document with no actionable finding is not.
 Repo-specific disciplines that bind every quantitative claim tonight:
 - evaluation-is-not-promotion
 - witness-every-quantitative-claim
+- pinned-evaluator-entrypoints: darwin is pinned to @metaharness/darwin@0.10.2 (the version npm resolved on 2026-09-07) because an unpinned npx runs whatever resolves that night, leaving a bound breach unattributable to a harness build; bump deliberately and record the version in the receipt
 
 # STEP 0: COMPUTE CONTEXT
 
@@ -402,7 +403,7 @@ Probe what is actually available:
 
 \`\`\`bash
 node packages/cli/dist/bin.js version || true
-npm test --silent 2>&1 | tail -5 || true
+set -o pipefail; npm test --silent 2>&1 | tail -5
 \`\`\`
 
 Do not assume a capability exists because this prompt mentions it. Record per
@@ -495,7 +496,7 @@ real evaluator, then the candidate on the identical corpus/policy.
 
 Evaluator entrypoints for this repo:
 - bench: \`npm test\`
-- darwin: \`RUVLLM_TIMEOUT_MS=180000 npx @metaharness/darwin evolve . --sandbox mock --mutator ruvllm --ruvllm-url http://127.0.0.1:8084 --ruvllm-model qwen3.8-27B\`
+- darwin: \`RUVLLM_TIMEOUT_MS=180000 npx @metaharness/darwin@0.10.2 evolve . --sandbox mock --mutator ruvllm --ruvllm-url http://127.0.0.1:8084 --ruvllm-model qwen3.8-27B\`
 
 Do not infer results from logs. Preserve the real receipt. If evaluation is
 blocked by infrastructure/credentials: \`EVALUATED=blocked / VERDICT=INCONCLUSIVE\`
