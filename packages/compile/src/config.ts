@@ -99,6 +99,21 @@ export function validateConfig(config: Partial<DreamConfig>): ValidationResult {
       if (!/^\d+$/.test(k)) errors.push(`bonusModuli key "${k}" must be an integer`);
     }
   }
+  if (config.adrConvention !== undefined) {
+    const conv = config.adrConvention;
+    if (conv !== '3-digit' && conv !== '4-digit') {
+      if (typeof conv === 'object' && conv !== null) {
+        if (!Number.isInteger(conv.pad) || conv.pad < 1) {
+          errors.push('adrConvention.pad must be an integer >= 1');
+        }
+        if (typeof conv.dir !== 'string' || conv.dir.trim() === '') {
+          errors.push('adrConvention.dir must be a non-empty string');
+        }
+      } else {
+        errors.push('adrConvention must be "3-digit", "4-digit", or { pad, dir }');
+      }
+    }
+  }
   return { ok: errors.length === 0, errors, warnings };
 }
 

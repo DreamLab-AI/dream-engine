@@ -49,6 +49,29 @@ describe('validateConfig', () => {
   it('rejects a non-integer bonus modulus key', () => {
     expect(validateConfig({ ...metaharness, bonusModuli: { x: 'y' } }).ok).toBe(false);
   });
+  it('rejects a malformed adrConvention instead of corrupting STEP 19 paths', () => {
+    const bad = [
+      '5-digit',
+      42,
+      null,
+      { pad: 0, dir: 'docs/adrs' },
+      { pad: 1.5, dir: 'docs/adrs' },
+      { pad: 4, dir: '' },
+      { pad: 4 },
+    ] as unknown as DreamConfig['adrConvention'][];
+    for (const conv of bad) {
+      const r = validateConfig({ ...metaharness, adrConvention: conv });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join()).toMatch(/adrConvention/);
+    }
+  });
+  it('accepts "3-digit", "4-digit" and a well-formed { pad, dir } object', () => {
+    expect(validateConfig(metaharness).ok).toBe(true); // '3-digit'
+    expect(validateConfig({ ...metaharness, adrConvention: '4-digit' }).ok).toBe(true);
+    expect(
+      validateConfig({ ...metaharness, adrConvention: { pad: 3, dir: 'docs/decisions' } }).ok,
+    ).toBe(true);
+  });
 });
 
 describe('compile', () => {
