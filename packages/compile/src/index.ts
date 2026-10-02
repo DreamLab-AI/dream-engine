@@ -266,7 +266,7 @@ touch a threshold, rely on an undocumented cache? Any unresolved signal blocks
 ACCEPT. If the corpus predates tonight, sanity-check it hasn't gone soft.
 
 Bounded Darwin (only after basic evaluation clears, only if available):
-≤3 generations × ≤4 candidates × 1 promoted lineage, frozen fitness function
+≤3 generations × ≤5 candidates × 1 promoted lineage, frozen fitness function
 recorded before running, failed mutations persisted. Darwin may never rewrite
 tests/gold data, change thresholds, disable safety, expand permissions, merge,
 or publish.

@@ -291,8 +291,9 @@ describe('verify-entrypoint', () => {
   });
 
   // ADR-0003. The real 2026-09-07 REQUIRED-evaluator leaderboard (run ab4ced4e48b76e83):
-  // outcome=PASSED, exit 0, and five candidates in generation 2 against the <=4 bound.
-  // A live verdict alone said nothing about it.
+  // outcome=PASSED, exit 0, and five candidates in generation 2 against the then <=4
+  // bound. ADR-0005 raised the bound to 5 to match darwin@0.10.2's five-surface map, so
+  // this fixture is now the compliant ceiling and a sixth g2 row is the breach.
   const DARWIN_LEADERBOARD_2026_09_07 = [
     'Darwin Mode — leaderboard',
     '  0.765  baseline  [planner]  safety=1.00  pass=0.60 ◀ winner',
@@ -311,31 +312,97 @@ describe('verify-entrypoint', () => {
     'Delta over baseline: +0.000',
   ].join('\n');
 
+  const DARWIN_LEADERBOARD_SIX_IN_G2 = DARWIN_LEADERBOARD_2026_09_07.replace(
+    '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
+    [
+      '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
+      '  0.765  g2_v5  [planner]  safety=1.00  pass=0.60',
+    ].join('\n'),
+  );
+
   it('exits 3 when a live darwin run breaches its step-10 bounds', async () => {
     const io = mockIOWithExec(async () => ({
       code: 0,
-      stdout: DARWIN_LEADERBOARD_2026_09_07,
+      stdout: DARWIN_LEADERBOARD_SIX_IN_G2,
       stderr: '',
     }));
     const r = await run(['verify-entrypoint', 'darwin', '--cmd', 'npx @metaharness/darwin'], io);
     expect(r.out).toContain('darwin: live');
     expect(r.code).toBe(3);
     expect(r.err).toContain('darwin bounds VIOLATED');
-    expect(r.err).toContain('g2 candidates=5 > 4');
+    expect(r.err).toContain('g2 candidates=6 > 5');
     // The promoted-lineage bound is not checked on this path; say so rather than
     // implying all three bounds passed.
     expect(r.err).toContain('promotedLineages unchecked');
   });
 
   it('still exits 0 for a live darwin run that respects the bounds', async () => {
-    const compliant = DARWIN_LEADERBOARD_2026_09_07.split('\n')
-      .filter((line) => !line.includes('g2_v4'))
-      .join('\n');
-    const io = mockIOWithExec(async () => ({ code: 0, stdout: compliant, stderr: '' }));
+    // Five in g2 — the real 2026-09-07 shape — is within the ADR-0005 bound.
+    const io = mockIOWithExec(async () => ({
+      code: 0,
+      stdout: DARWIN_LEADERBOARD_2026_09_07,
+      stderr: '',
+    }));
     const r = await run(['verify-entrypoint', 'darwin', '--cmd', 'npx @metaharness/darwin'], io);
     expect(r.code).toBe(0);
-    expect(r.out).toContain('darwin bounds ok');
+    expect(r.out).toContain('darwin bounds ok — depth 2, max 5 candidates/generation');
     expect(r.err).not.toContain('VIOLATED');
+  });
+
+  // ADR-0005 lever E: scripts/darwin-entrypoint.sh runs darwin THROUGH
+  // verify-entrypoint, so the evaluator receipt must still carry darwin's own
+  // output (the leaderboard), not only the verdict line.
+  it('--passthrough echoes the command output ahead of the verdict', async () => {
+    const io = mockIOWithExec(async () => ({
+      code: 0,
+      stdout: DARWIN_LEADERBOARD_2026_09_07,
+      stderr: 'darwin: ruvllm mutator warming up',
+    }));
+    const r = await run(
+      ['verify-entrypoint', 'darwin', '--passthrough', '--cmd', 'npx @metaharness/darwin'],
+      io,
+    );
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('g2_v4  [scorePolicy]');
+    expect(r.out.indexOf('Delta over baseline')).toBeLessThan(r.out.indexOf('darwin: live'));
+    expect(r.err).toContain('ruvllm mutator warming up');
+  });
+
+  it('--passthrough still exits 3 on a breach, with the leaderboard in the receipt', async () => {
+    const io = mockIOWithExec(async () => ({
+      code: 0,
+      stdout: DARWIN_LEADERBOARD_SIX_IN_G2,
+      stderr: '',
+    }));
+    const r = await run(
+      ['verify-entrypoint', 'darwin', '--cmd', 'npx @metaharness/darwin', '--passthrough'],
+      io,
+    );
+    expect(r.code).toBe(3);
+    expect(r.out).toContain('g2_v5  [planner]');
+    expect(r.err).toContain('g2 candidates=6 > 5');
+  });
+
+  it('--passthrough echoes a blocked command\'s output too', async () => {
+    const io = mockIOWithExec(async () => ({ code: 1, stdout: 'partial', stderr: 'npm error' }));
+    const r = await run(
+      ['verify-entrypoint', 'darwin', '--passthrough', '--cmd', 'npx @metaharness/darwin'],
+      io,
+    );
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('partial');
+    expect(r.out).toContain('darwin: blocked');
+  });
+
+  it('does not echo the command output without --passthrough', async () => {
+    const io = mockIOWithExec(async () => ({
+      code: 0,
+      stdout: DARWIN_LEADERBOARD_2026_09_07,
+      stderr: 'noise',
+    }));
+    const r = await run(['verify-entrypoint', 'darwin', '--cmd', 'npx @metaharness/darwin'], io);
+    expect(r.out).not.toContain('g2_v4');
+    expect(r.err).not.toContain('noise');
   });
 
   it('leaves non-darwin labels unaffected by the bounds check', async () => {

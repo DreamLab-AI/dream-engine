@@ -1,6 +1,6 @@
 # ADR-0003: Darwin generation/candidate bounds are machine-checked as a fail-visible diagnostic, not a gate veto
 
-- **Status**: Accepted
+- **Status**: Accepted — amended by ADR-0005 (candidate bound raised to ≤ 5 per generation; the darwin entrypoint now fails on a breach, so §2's "detection, not enforcement" no longer holds for the annexe's darwin evaluator)
 - **Date**: 2026-09-07
 - **Related**: ADR-0001 §2.3 ("Evaluation is delegated, never reimplemented"), ADR-0002 (evaluator entrypoints classified live/blocked/suspicious-silent before EVALUATED is recorded)
 - **Deciders**: dream-cycle nightly session (evaluation-adapters, SCAN=flywheel/darwin), 2026-09-07; operator integration, 2026-09-07
