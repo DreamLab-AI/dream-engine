@@ -164,4 +164,19 @@ describe('self-hosted config (DreamLab-AI/dream-engine fork)', () => {
   it('golden-snapshot: DreamLab-AI/dream-engine prompt is stable', () => {
     expect(compile(selfConfig)).toMatchSnapshot();
   });
+
+  // Supply-chain regression guard (scans: redblue, supply-chain). The
+  // pinned-evaluator-entrypoints discipline is prose until a test fails: an
+  // unpinned npx @metaharness/darwin executes whatever the registry resolves
+  // that night. Every darwin mention in the self-hosted compiled prompt must
+  // be an exact semver pin, and all mentions must agree on one version, so an
+  // unpin, a range, or an unrecorded bump fails bench.
+  it('compiles the nightly prompt with darwin pinned to exactly one version', () => {
+    const prompt = compile(selfConfig);
+    const mentions = prompt.match(/@metaharness\/darwin(?:@[\w.-]+)?/g) ?? [];
+    expect(mentions.length).toBeGreaterThan(0);
+    const pins = mentions.filter((m) => /^@metaharness\/darwin@\d+\.\d+\.\d+$/.test(m));
+    expect(pins).toHaveLength(mentions.length);
+    expect(new Set(pins).size).toBe(1);
+  });
 });
