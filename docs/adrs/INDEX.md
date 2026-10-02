@@ -9,8 +9,9 @@ Alternatives Considered → Test Contract → References.
 |-----|-------|--------|
 | [ADR-0001](./ADR-0001-dream-machine-engine.md) | The Dream Machine engine — a config-driven, evidence-gated nightly evolution loop composed from the ruvnet stack | Accepted (v0.1.0 shipped) |
 | [ADR-0002](./ADR-0002-dream-cycle-security-adversarial-entrypoint-liveness.md) | Evaluator entrypoints must be classified live/blocked/suspicious-silent before an EVALUATED verdict is recorded | Proposed |
-| [ADR-0003](./ADR-0003-darwin-bound-guard.md) | Darwin generation/candidate bounds are machine-checked as a fail-visible diagnostic, not a gate veto | Accepted |
+| [ADR-0003](./ADR-0003-darwin-bound-guard.md) | Darwin generation/candidate bounds are machine-checked as a fail-visible diagnostic, not a gate veto | Accepted (amended by ADR-0005) |
 | [ADR-0004](./ADR-0004-ledger-verdict-vocabulary.md) | Ledger rows that are not nights carry their own verdict tokens | Accepted |
+| [ADR-0005](./ADR-0005-darwin-bound-five.md) | Darwin's per-generation bound is five, and the darwin entrypoint fails on a bound breach | Accepted (amends ADR-0003) |
 
 ## How to amend
 

@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DARWIN_BOUNDS,
   checkDarwinBounds,
   checkDarwinBoundsFromStdout,
   parseLeaderboardRows,
 } from './darwinBounds';
 
 // Fixture: shape of the real 2026-09-07 REQUIRED-evaluator leaderboard
-// (run ab4ced4e48b76e83), which PASSED with g2 holding five candidates.
+// (run ab4ced4e48b76e83), which PASSED with g2 holding five candidates. Under
+// ADR-0003's original <=4 bound that was a breach; ADR-0005 aligned the bound
+// with darwin@0.10.2's five-surface map, so five is now the compliant ceiling.
 const LB_2026_09_07 = [
   'Darwin Mode — leaderboard',
   '  0.765  baseline  [planner]  safety=1.00  pass=0.60 ◀ winner',
@@ -25,9 +28,14 @@ const LB_2026_09_07 = [
   'Delta over baseline: +0.000',
 ].join('\n');
 
-const LB_COMPLIANT = LB_2026_09_07.split('\n')
-  .filter((line) => !line.includes('g2_v4'))
-  .join('\n');
+// One past the ADR-0005 ceiling: g2 gains a sixth candidate.
+const LB_SIX_IN_G2 = LB_2026_09_07.replace(
+  '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
+  [
+    '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
+    '  0.765  g2_v5  [planner]  safety=1.00  pass=0.60',
+  ].join('\n'),
+);
 
 describe('parseLeaderboardRows', () => {
   it('parses the real 2026-09-07 leaderboard: 1 baseline + 9 mutants', () => {
@@ -42,20 +50,28 @@ describe('parseLeaderboardRows', () => {
 });
 
 describe('checkDarwinBounds', () => {
-  it('flags the real 2026-09-07 run: g2 held 5 candidates (> 4)', () => {
+  it('caps candidates per generation at 5 (ADR-0005, amending ADR-0003)', () => {
+    expect(DARWIN_BOUNDS.maxCandidatesPerGeneration).toBe(5);
+    expect(DARWIN_BOUNDS.maxGenerations).toBe(3);
+    expect(DARWIN_BOUNDS.maxPromotedLineages).toBe(1);
+  });
+
+  it('accepts the real 2026-09-07 run: g2 held 5 candidates, within the bound', () => {
     const report = checkDarwinBoundsFromStdout(LB_2026_09_07, 0);
     expect(report.parseStatus).toBe('ok');
     expect(report.candidatesPerGeneration).toEqual({ 1: 4, 2: 5 });
     expect(report.maxCandidatesPerGeneration).toBe(5);
-    expect(report.ok).toBe(false);
-    expect(report.violations.join('\n')).toContain('g2 candidates=5 > 4');
-  });
-
-  it('accepts the same run with g2_v4 removed (compliant)', () => {
-    const report = checkDarwinBoundsFromStdout(LB_COMPLIANT, 0);
     expect(report.ok).toBe(true);
     expect(report.violations).toEqual([]);
-    expect(report.maxCandidatesPerGeneration).toBe(4);
+  });
+
+  it('flags 6 candidates in one generation (> 5)', () => {
+    const report = checkDarwinBoundsFromStdout(LB_SIX_IN_G2, 0);
+    expect(report.parseStatus).toBe('ok');
+    expect(report.candidatesPerGeneration).toEqual({ 1: 4, 2: 6 });
+    expect(report.maxCandidatesPerGeneration).toBe(6);
+    expect(report.ok).toBe(false);
+    expect(report.violations).toEqual(['g2 candidates=6 > 5']);
   });
 
   it('never counts baseline rows as generation candidates', () => {
@@ -76,7 +92,7 @@ describe('checkDarwinBounds', () => {
   });
 
   it('flags more than 1 promoted lineage', () => {
-    const rows = parseLeaderboardRows(LB_COMPLIANT);
+    const rows = parseLeaderboardRows(LB_2026_09_07);
     const report = checkDarwinBounds(rows, 2);
     expect(report.violations).toContain('promotedLineages=2 > 1');
   });

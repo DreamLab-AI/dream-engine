@@ -1,0 +1,15 @@
+Darwin Mode — leaderboard
+  0.765  baseline  [planner]  safety=1.00  pass=0.60 ◀ winner
+  0.765  g1_v0  [planner]  safety=1.00  pass=0.60
+  0.765  g1_v1  [toolPolicy]  safety=1.00  pass=0.60
+  0.765  g1_v2  [reviewer]  safety=1.00  pass=0.60
+  0.765  g1_v3  [toolPolicy]  safety=1.00  pass=0.60
+  0.765  g2_v0  [reviewer]  safety=1.00  pass=0.60
+  0.765  g2_v1  [planner]  safety=1.00  pass=0.60
+  0.765  g2_v2  [contextBuilder]  safety=1.00  pass=0.60
+  0.765  g2_v3  [toolPolicy]  safety=1.00  pass=0.60
+  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60
+
+Winner: baseline
+Lineage: baseline
+Delta over baseline: +0.000

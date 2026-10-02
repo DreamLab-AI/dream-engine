@@ -28,12 +28,12 @@
 | 2026-09-08 | security-adversarial | VETOED: ADR-0003 guard in-tree yet gate fail-open: g2=5 breach 2nd night, darwin | NONE | NONE | yes | INCONCLUSIVE |  | 3a8907c2fda9 |  |
 | 2026-09-09 | developer-experience | VETOED: Given the pinned darwin@0.10.2 run on dream-engine@a82dab2 whose receipt | NONE | NONE | yes | BLOCKED-ENV |  | 4acf367ac276 |  |
 | 2026-09-10 | compiler-parity | VETOED: compile goldens covered 4/5 schema surfaces; scorePolicy golden added (5 | NONE | VETOED | yes | REJECT |  | 6e3777004730 |  |
-| 2026-09-11 | ledger-signals | VETOED: INCONCLUSIVE — see report | NONE | NONE | yes | INCONCLUSIVE |  | 1bf0dad716ef |  |
+| 2026-09-11 | ledger-signals | No VERDICT line; bench and darwin receipts missing; gate vetoed | NONE | NONE | yes | INCONCLUSIVE |  | 1bf0dad716ef |  |
 | 2026-09-12 | evaluation-adapters | VETOED: g2=5 is structural: pinned darwin enumerates all 5 config surfaces at ge | NONE | NONE | yes | INCONCLUSIVE |  | b03d8d30e9ce |  |
 | 2026-09-13 | security-adversarial | VETOED: Gate veto keys on darwin exit code only; g2=5 breach 4th obs, 0 ACCEPTs  | NONE | NONE | yes | INCONCLUSIVE |  | d92b39d969db |  |
 | 2026-09-27 | evaluation-adapters | VETOED: Given the pinned darwin@0.10.2 structurally enumerates 5 config surfaces | NONE | NONE | yes | BLOCKED-ENV |  | 44ff7782903a |  |  |  |
-| 2026-09-28 | security-adversarial | Given the pinned-evaluator-entrypoints discipline is enforced only as prose in t | NONE | https://github.com/DreamLab-AI/dream-engine/pull/18 | yes | ACCEPT |  | 99846f8ae29f |  |  |  |
+| 2026-09-28 | security-adversarial | Darwin pin discipline is now a test: one exact pin or bench fails (fa6e42a) | NONE | https://github.com/DreamLab-AI/dream-engine/pull/18 | yes | ACCEPT |  | 99846f8ae29f |  |  |  |
 | 2026-09-29 | developer-experience | VETOED: Given `DashboardOptions.limit` is honored by `renderDashboard` but never | NONE | NONE | yes | BLOCKED-ENV |  | 6292c91fb471 |  |  |  |
-| 2026-09-30 | compiler-parity | Given `validateConfig` (`packages/compile/src/config.ts`, body shown) validates  | NONE | https://github.com/DreamLab-AI/dream-engine/pull/19 | yes | ACCEPT |  | 847508569d87 |  |  |  |
+| 2026-09-30 | compiler-parity | validateConfig now rejects a malformed adrConvention (5816164) | NONE | https://github.com/DreamLab-AI/dream-engine/pull/19 | yes | ACCEPT |  | 847508569d87 |  |  |  |
 | 2026-10-01 | ledger-signals | VETOED: Given `escapeCell` renders a literal pipe in a cell as `\` (`packages/le | NONE | NONE | yes | INCONCLUSIVE |  | 829ff1ef88ce |  |  |  |
 | 2026-10-02 | evaluation-adapters | VETOED: Updated maxCandidatesPerGeneration bound to 5 to match darwin@0.10.2 out | NONE | NONE | yes | BLOCKED-ENV |  | ee55ffc8351d |  |  |  |

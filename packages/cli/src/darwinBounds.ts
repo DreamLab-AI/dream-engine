@@ -1,16 +1,20 @@
 /**
  * Darwin bound policy — nightly pipeline step 10:
- *   generations ≤ 3, candidates/generation ≤ 4, promoted lineages ≤ 1.
+ *   generations ≤ 3, candidates/generation ≤ 5, promoted lineages ≤ 1.
  *
  * Motivation (2026-09-07, run ab4ced4e48b76e83): the REQUIRED darwin
  * evaluator returned outcome=PASSED while its leaderboard listed five
- * candidates in generation 2 (g2_v0..g2_v4) — a silent bound breach.
+ * candidates in generation 2 (g2_v0..g2_v4) — a silent breach of the then
+ * ≤ 4 bound. ADR-0005 later raised the bound to 5: darwin@0.10.2 mutates one
+ * candidate per surface of its five-surface map, so five is its behaviour.
  * This module makes the bound machine-checkable: additive-only and
  * dependency-free (pattern proven on 2026-09-06).
  *
- * This is DETECTION, not enforcement. Nothing here can veto a night: the
- * nightly gate lives in the external annexe runner, not in this repo. See
- * docs/adrs/ADR-0003-darwin-bound-guard.md.
+ * This module only DETECTS. It becomes enforcement through
+ * scripts/darwin-entrypoint.sh (ADR-0005), which runs darwin through
+ * `verify-entrypoint` so a breach fails the REQUIRED evaluator; the gate that
+ * honours that failure lives in the external annexe runner. See
+ * docs/adrs/ADR-0003-darwin-bound-guard.md and ADR-0005-darwin-bound-five.md.
  */
 
 export interface DarwinLeaderboardRow {
@@ -38,7 +42,8 @@ export interface DarwinBoundsReport {
 
 export const DARWIN_BOUNDS = {
   maxGenerations: 3,
-  maxCandidatesPerGeneration: 4,
+  // Aligned with darwin@0.10.2 behaviour (5-surface map) on 2026-10-02 per ADR-0005.
+  maxCandidatesPerGeneration: 5,
   maxPromotedLineages: 1,
 } as const;
 

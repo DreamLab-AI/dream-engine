@@ -105,8 +105,9 @@ Commands:
   witness stamp   <report-file> <commit>               Compute the witness triple
   witness verify  <report-file> <commit> <witness>     Verify a claimed witness
   verify-entrypoint <label> --cmd "<command>"           Classify an evaluator entrypoint's liveness
-                                                       exit 0 live / 1 blocked / 2 suspicious-silent;
+                  [--passthrough]                      exit 0 live / 1 blocked / 2 suspicious-silent;
                                                        label darwin also checks ADR-0003 bounds (3 = violated)
+                                                       --passthrough: echo the command's stdout/stderr first
   tui             [--path LEDGER.md] [--no-color]      Render the dashboard
   version | --version                                  Print version
   help    | --help                                     This help
@@ -344,18 +345,24 @@ export async function run(argv: string[], io: IO): Promise<RunResult> {
           return { code: 1, out: sink.out, err: sink.err };
         }
         const result = await io.exec(cmd);
+        if (flags.passthrough === true) {
+          // ADR-0005: when verify-entrypoint IS the evaluator (scripts/darwin-entrypoint.sh),
+          // the receipt must keep the command's own output, not only the verdict line.
+          if (result.stdout) sink.log(result.stdout.replace(/\n$/, ''));
+          if (result.stderr) sink.error(result.stderr.replace(/\n$/, ''));
+        }
         const check = classifyEntrypointResult(result);
         sink.log(`${label}: ${check.verdict} (exit ${check.code}) — ${check.reason}`);
 
         // ADR-0003: a live darwin evaluator can still have run out of policy. On
         // 2026-09-07 it returned outcome=PASSED with five candidates in generation 2,
-        // against the documented <=4/generation bound, and nothing noticed. Check the
-        // leaderboard it just printed.
+        // against the then-documented <=4/generation bound (raised to 5 by ADR-0005),
+        // and nothing noticed. Check the leaderboard it just printed.
         //
-        // This is DETECTION, not enforcement. verify-entrypoint is an operator
-        // diagnostic; the nightly gate lives in the external annexe runner, so a
-        // violation here cannot fail a night or block a merge — it only makes the
-        // breach loud for whoever ran the command.
+        // Exit 3 is detection here. It becomes enforcement only because
+        // scripts/darwin-entrypoint.sh (ADR-0005) makes this command the darwin
+        // evaluator, so a breach fails the REQUIRED evaluator in the annexe runner.
+        // Run by hand, it still only makes the breach loud.
         if (label === 'darwin' && check.verdict === 'live') {
           // promotedLineages is passed as 0 EXPLICITLY and is therefore UNCHECKED on
           // this path: the leaderboard exposes `Winner:`/`Lineage:` lines but no
