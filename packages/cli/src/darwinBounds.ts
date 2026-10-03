@@ -137,3 +137,67 @@ export function checkDarwinBoundsFromStdout(
 ): DarwinBoundsReport {
   return checkDarwinBounds(parseLeaderboardRows(stdout), promotedLineages);
 }
+
+const SCORED_ROW_RE = /^\s*([\d.]+)\s+(baseline|g\d+_v\d+)\s/;
+
+export interface DarwinUniformityReport {
+  /** true when no uniformity signal was emitted — diagnostic, never a bound. */
+  ok: boolean;
+  /** Human-readable signal; '' when ok. */
+  signal: string;
+  /** Leaderboard rows (baseline + mutants) from which a score was read. */
+  scoredRows: number;
+  /** Non-baseline rows from which a score was read. */
+  mutantsScored: number;
+  /** Distinct scores among mutants. Witness datum, not a threshold. */
+  distinctMutantScores: number;
+  /** Every scored mutant matched the baseline exactly (delta +0.000 shape). */
+  uniformWithBaseline: boolean;
+}
+
+/**
+ * Diagnostic for the mutator-diversity question carried since 2026-09-08 (and
+ * again 2026-09-29): every darwin leaderboard observed from the pinned
+ * @metaharness/darwin@0.10.2 against the :8084 ruvllm endpoint — the 2026-09-07
+ * run and every receipt from 2026-09-27 through 2026-10-03 — scores ALL mutants
+ * exactly at the baseline (uniform 0.765, Delta over baseline: +0.000). Such a
+ * leaderboard carries no selection signal: either the mutator proposed nothing
+ * distinguishable, or the endpoint is not really scoring (the 09-08 operator
+ * note names the Loom-façade possibility).
+ *
+ * Like this module's bounds before ADR-0005, this only DETECTS: it adds no
+ * violation and changes no exit code, and must not gate anything until a human
+ * decides the policy — tonight's live run is itself uniform, so wiring this in
+ * as a veto would fail every REQUIRED darwin evaluation until the endpoint or
+ * the mutator changes.
+ */
+export function checkDarwinScoreUniformity(stdout: string): DarwinUniformityReport {
+  const scored: { id: string; score: number }[] = [];
+  for (const line of stdout.split('\n')) {
+    const m = SCORED_ROW_RE.exec(line);
+    if (m) scored.push({ id: m[2], score: Number(m[1]) });
+  }
+  const mutants = scored.filter((r) => r.id !== 'baseline');
+  const baselineScore = scored.find((r) => r.id === 'baseline')?.score;
+  const distinctMutantScores = new Set(mutants.map((r) => r.score)).size;
+  const uniformWithBaseline =
+    baselineScore !== undefined &&
+    mutants.length >= 2 &&
+    mutants.every((r) => r.score === baselineScore);
+
+  let signal = '';
+  if (scored.length === 0) {
+    signal = 'score uniformity unassessed: 0 scored rows read';
+  } else if (uniformWithBaseline) {
+    signal = `score uniformity suspect: all ${mutants.length} mutants score exactly the baseline ${baselineScore}`;
+  }
+
+  return {
+    ok: signal === '',
+    signal,
+    scoredRows: scored.length,
+    mutantsScored: mutants.length,
+    distinctMutantScores,
+    uniformWithBaseline,
+  };
+}

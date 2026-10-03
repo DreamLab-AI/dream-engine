@@ -3,6 +3,7 @@ import {
   DARWIN_BOUNDS,
   checkDarwinBounds,
   checkDarwinBoundsFromStdout,
+  checkDarwinScoreUniformity,
   parseLeaderboardRows,
 } from './darwinBounds';
 
@@ -127,5 +128,50 @@ describe('checkDarwinBoundsFromStdout', () => {
     expect(report.parseStatus).toBe('unparsable');
     expect(report.ok).toBe(false);
     expect(report.violations[0]).toBe('leaderboard unparsable: 0 rows read');
+  });
+});
+
+// Mutator-diversity diagnostic (2026-10-03): the shape seen on every observed
+// pinned-darwin run — every mutant scored exactly at the baseline.
+const LB_ONE_MUTANT_DIFFERS = LB_2026_09_07.replace(
+  '  0.765  g2_v2  [contextBuilder]  safety=1.00  pass=0.60',
+  '  0.801  g2_v2  [contextBuilder]  safety=1.00  pass=0.64',
+);
+
+describe('checkDarwinScoreUniformity (diagnostic, never a bound)', () => {
+  it('flags the observed run shape: every mutant scores exactly the baseline', () => {
+    const r = checkDarwinScoreUniformity(LB_2026_09_07);
+    expect(r.uniformWithBaseline).toBe(true);
+    expect(r.scoredRows).toBe(10);
+    expect(r.mutantsScored).toBe(9);
+    expect(r.distinctMutantScores).toBe(1);
+    expect(r.ok).toBe(false);
+    expect(r.signal).toContain('all 9 mutants score exactly the baseline 0.765');
+  });
+
+  it('is clean when one mutant score differs from the baseline', () => {
+    const r = checkDarwinScoreUniformity(LB_ONE_MUTANT_DIFFERS);
+    expect(r.ok).toBe(true);
+    expect(r.signal).toBe('');
+    expect(r.uniformWithBaseline).toBe(false);
+    expect(r.distinctMutantScores).toBe(2);
+  });
+
+  it('does not flag a lone mutant that ties the baseline (too little evidence)', () => {
+    const lb = [
+      '  0.5  baseline  [planner]  safety=1.00  pass=0.30',
+      '  0.5  g1_v0  [planner]  safety=1.00  pass=0.30',
+    ].join('\n');
+    const r = checkDarwinScoreUniformity(lb);
+    expect(r.mutantsScored).toBe(1);
+    expect(r.uniformWithBaseline).toBe(false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('says unassessed when no scored rows can be read', () => {
+    const r = checkDarwinScoreUniformity('no leaderboard here');
+    expect(r.ok).toBe(false);
+    expect(r.scoredRows).toBe(0);
+    expect(r.signal).toContain('unassessed');
   });
 });
