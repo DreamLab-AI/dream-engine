@@ -6,6 +6,12 @@
 //   --leaderboard <file>  print this captured leaderboard on stdout
 //   --exit <n>            exit with status n (default 0)
 //   --report-args         print argv (JSON) and RUVLLM_TIMEOUT_MS on stderr
+//   --call-mutator        make ONE mutator call the way darwin@0.10.2's
+//                         RuvllmMutator does (POST <--ruvllm-url>/v1/chat/completions,
+//                         aborting if headers take longer than FAKE_DARWIN_ABORT_MS,
+//                         default 300 — darwin's hard-coded 30 s, scaled down) and
+//                         print the outcome on stderr
+/* global fetch, AbortController, setTimeout, clearTimeout */
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 
@@ -18,6 +24,35 @@ const flag = (name) => {
 if (argv.includes('--report-args')) {
   process.stderr.write(`fake-darwin argv=${JSON.stringify(argv)}\n`);
   process.stderr.write(`fake-darwin RUVLLM_TIMEOUT_MS=${process.env.RUVLLM_TIMEOUT_MS ?? ''}\n`);
+}
+if (argv.includes('--call-mutator')) {
+  const base = (flag('--ruvllm-url') ?? 'http://localhost:8080').replace(/\/$/, '');
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), Number(process.env.FAKE_DARWIN_ABORT_MS ?? 300));
+  let res;
+  try {
+    res = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: flag('--ruvllm-model') ?? 'local',
+        messages: [{ role: 'user', content: 'improve the planner surface' }],
+        max_tokens: 2000,
+        temperature: 0.4,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(tid);
+  } catch (e) {
+    process.stderr.write(`fake-darwin mutator unreachable (${e.message})\n`);
+  }
+  if (res) {
+    const j = await res.json();
+    const content = j.choices?.[0]?.message?.content;
+    process.stderr.write(
+      content ? `fake-darwin mutator content=${JSON.stringify(content)}\n` : 'fake-darwin mutator no content\n',
+    );
+  }
 }
 const leaderboard = flag('--leaderboard');
 if (leaderboard) process.stdout.write(readFileSync(leaderboard, 'utf8'));

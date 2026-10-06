@@ -15,6 +15,13 @@
 # dream-engine admission check (darwin recognised by package name, refused
 # without --sandbox mock|agent) and the compiled-prompt pin test both still see it.
 #
+# With --mutator ruvllm, darwin's mutator is routed through a loopback shim
+# (packages/cli/src/loomShim.ts, ADR-0007) that turns the Ontology Loom's
+# scaffold off and outlasts darwin@0.10.2's hard-coded 30 s fetch abort, so
+# RUVLLM_TIMEOUT_MS takes effect. Without it every mutation is a no-op and every
+# mutant scores the baseline (the 0.765 nights). The shim logs one line per
+# mutator call and a per-verdict summary to stderr, into the receipt.
+#
 # Exit status:
 #   0   darwin live, bounds respected
 #   1   darwin failed (blocked)
@@ -38,6 +45,8 @@ die() {
 # there is exactly one version. An unpinned npx runs whatever resolves tonight.
 pins=()
 sandbox=""
+mutator=""
+ruvllm_url=""
 prev=""
 for arg in "$@"; do
   case "$arg" in
@@ -49,9 +58,15 @@ for arg in "$@"; do
     @metaharness/darwin | metaharness-darwin)
       die 64 "darwin must be pinned to an exact version, got unpinned '$arg'"
       ;;
-    --sandbox=*) sandbox=${arg#--sandbox=} ;;
+    # darwin@0.10.2 reads only the `--flag value` spelling and silently ignores
+    # `--flag=value`: `--sandbox=mock` would run the default real sandbox.
+    --sandbox=* | --mutator=* | --ruvllm-url=* | --ruvllm-model=*)
+      die 64 "darwin ignores '$arg': write '${arg%%=*} ${arg#*=}' (darwin reads only the space-separated form)"
+      ;;
   esac
   [ "$prev" = "--sandbox" ] && sandbox=$arg
+  [ "$prev" = "--mutator" ] && mutator=$arg
+  [ "$prev" = "--ruvllm-url" ] && ruvllm_url=$arg
   prev=$arg
 done
 
@@ -67,13 +82,65 @@ case "$sandbox" in
   *) die 64 "darwin sandbox '$sandbox' refused: use --sandbox mock or --sandbox agent" ;;
 esac
 
+# ADR-0007: the Loom door must be named; darwin's localhost:8080 default is
+# never the Loom, and an unreachable mutator silently no-ops every mutation.
+if [ "$mutator" = "ruvllm" ] && [ -z "$ruvllm_url" ]; then
+  die 64 "darwin --mutator ruvllm needs an explicit --ruvllm-url (the Loom door)"
+fi
+
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cli="$repo_root/packages/cli/dist/bin.js"
 [ -f "$cli" ] || die 69 "$cli not found: run 'npm ci && npm run build' first"
+
+shim_pid=""
+shim_dir=""
+stop_shim() {
+  if [ -n "$shim_pid" ]; then
+    # TERM makes the shim print its per-verdict summary; wait so it lands
+    # in the receipt before this script exits.
+    kill -TERM "$shim_pid" 2>/dev/null || true
+    wait "$shim_pid" 2>/dev/null || true
+    shim_pid=""
+  fi
+  [ -n "$shim_dir" ] && rm -rf -- "$shim_dir"
+  shim_dir=""
+}
+trap stop_shim EXIT
+
+if [ "$mutator" = "ruvllm" ]; then
+  shim_bin="$repo_root/packages/cli/dist/loomShimBin.js"
+  [ -f "$shim_bin" ] || die 69 "$shim_bin not found: run 'npm ci && npm run build' first"
+  shim_dir=$(mktemp -d)
+  node "$shim_bin" --upstream "$ruvllm_url" --url-file "$shim_dir/url" &
+  shim_pid=$!
+  for _ in $(seq 1 100); do
+    [ -s "$shim_dir/url" ] && break
+    kill -0 "$shim_pid" 2>/dev/null || die 1 "loom shim exited before it was ready"
+    sleep 0.1
+  done
+  [ -s "$shim_dir/url" ] || die 1 "loom shim not ready after 10 s"
+  shim_url=$(cat -- "$shim_dir/url")
+
+  # Point darwin at the shim; every other argument passes through verbatim.
+  args=()
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--ruvllm-url" ]; then
+      args+=("$shim_url")
+    else
+      args+=("$arg")
+    fi
+    prev=$arg
+  done
+  set -- "${args[@]}"
+fi
 
 # Re-quote the argv into one shell-safe string for --cmd; verify-entrypoint
 # runs it through a shell, so arguments with spaces or metacharacters survive.
 printf -v darwin_cmd '%q ' "$@"
 
 cd -- "$repo_root"
-exec node "$cli" verify-entrypoint darwin --passthrough --cmd "${darwin_cmd% }"
+status=0
+node "$cli" verify-entrypoint darwin --passthrough --cmd "${darwin_cmd% }" || status=$?
+stop_shim
+exit "$status"

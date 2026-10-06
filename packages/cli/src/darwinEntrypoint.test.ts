@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
+import { afterEach, describe, expect, it } from 'vitest';
+import { spawn, spawnSync } from 'node:child_process';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -97,10 +99,84 @@ describe('scripts/darwin-entrypoint.sh', () => {
     ['a command that is not darwin', ['node', FAKE, '--leaderboard', LB_FIVE, '--sandbox', 'mock']],
     ['the default real sandbox', ['node', FAKE, PIN, 'evolve', '.', '--leaderboard', LB_FIVE]],
     ['an explicit real sandbox', ['node', FAKE, PIN, 'evolve', '.', '--sandbox', 'real']],
+    // darwin reads only `--flag value`; `--sandbox=mock` would run the real sandbox.
+    ['a --sandbox=mock spelling darwin ignores', ['node', FAKE, PIN, 'evolve', '.', '--sandbox=mock']],
+    ['a --ruvllm-url=URL spelling darwin ignores', [...stub('--mutator', 'ruvllm'), '--ruvllm-url=http://x']],
   ])('refuses %s with exit 64 before running anything', (_name, args) => {
     const r = runScript([...args, '--report-args']);
     expect(r.code).toBe(64);
     expect(r.stderr).toContain('darwin-entrypoint:');
+    expect(r.stderr).not.toContain('fake-darwin argv=');
+  });
+});
+
+// ADR-0007: with --mutator ruvllm, the script routes darwin's mutator through
+// the loopback Loom shim. These cases run the script asynchronously so an
+// in-process fake Loom can answer while the script is running.
+describe('scripts/darwin-entrypoint.sh with the ruvllm mutator', () => {
+  let loom: Server | undefined;
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => (loom ? loom.close(() => resolve()) : resolve()));
+    loom = undefined;
+  });
+
+  /** Fake Loom: records request bodies; answers like the real one after `delayMs`. */
+  async function fakeLoom(delayMs: number) {
+    const seen: Record<string, unknown>[] = [];
+    loom = createServer(async (req, res) => {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      const parsed = JSON.parse(body) as { loom_options?: { scaffold?: boolean } };
+      seen.push(parsed);
+      const content =
+        parsed.loom_options?.scaffold === false
+          ? 'export const maxAttempts = 5;\n'
+          : '_Served verbatim from the Ontology Loom (generation: x); no model generation was performed._';
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ choices: [{ index: 0, finish_reason: 'stop', message: { content } }] }));
+      }, delayMs);
+    });
+    await new Promise<void>((resolve) => loom!.listen(0, '127.0.0.1', resolve));
+    return { url: `http://127.0.0.1:${(loom.address() as AddressInfo).port}`, seen };
+  }
+
+  function runScriptAsync(args: string[], env: Record<string, string> = {}) {
+    return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
+      const child = spawn(SCRIPT, args, { cwd: ROOT, env: { ...process.env, ...env } });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => (stdout += d));
+      child.stderr.on('data', (d) => (stderr += d));
+      child.on('close', (code) => resolve({ code, stdout, stderr }));
+    });
+  }
+
+  it('reaches the model: scaffold off, and a slow answer outlives darwin\'s header timeout', async () => {
+    const fake = await fakeLoom(800); // longer than the stub's 300 ms abort
+    const r = await runScriptAsync(
+      stub('--mutator', 'ruvllm', '--ruvllm-url', fake.url, '--ruvllm-model', 'qwen3.8-27B',
+        '--call-mutator', '--leaderboard', LB_FIVE),
+      { RUVLLM_TIMEOUT_MS: '5000' },
+    );
+    expect(r.stderr).toContain('fake-darwin mutator content="export const maxAttempts = 5;\\n"');
+    expect(fake.seen).toHaveLength(1);
+    expect(fake.seen[0]).toMatchObject({ model: 'qwen3.8-27B', loom_options: { scaffold: false } });
+    expect(r.stderr).toMatch(/loom-shim: .*ok=1/);
+    expect(r.code).toBe(0);
+  });
+
+  it('leaves a non-ruvllm darwin run untouched', async () => {
+    const r = await runScriptAsync(stub('--leaderboard', LB_FIVE, '--report-args'));
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toContain('loom-shim');
+  });
+
+  it('refuses a ruvllm mutator with no --ruvllm-url, as the Loom door must be explicit', async () => {
+    const r = await runScriptAsync(stub('--mutator', 'ruvllm', '--leaderboard', LB_FIVE, '--report-args'));
+    expect(r.code).toBe(64);
+    expect(r.stderr).toContain('--ruvllm-url');
     expect(r.stderr).not.toContain('fake-darwin argv=');
   });
 });
