@@ -80,6 +80,29 @@ The script also refuses (exit 64):
   `loom_options` itself or reads `RUVLLM_TIMEOUT_MS`, the shim is harmless but
   redundant.
 
+## 3a. Measured after the fix (2026-10-06)
+
+A real run of the configured command through the shim:
+
+- `loom-shim: summary ok=20 scaffold=0 truncated=0 empty=0 upstream-error=0`.
+  All 20 mutations were real model edits (35–68 s each, about 18 minutes
+  total).
+- The leaderboard was still uniform at 0.765, and the script exited 3. The
+  only score-relevant edits were `.slice(0, 30)` → `.slice(0, 40)` (g2_v2,
+  g3_v4) and `maxAttempts` 3 → 4 (g3_v1). Both fall between rungs of the mock
+  ladder, which needs a context width of 50 for 0.875 and 70 for 0.985
+  (checked with darwin's own `extractSurfaceParams` and `scoreVariant`). The
+  mutator sees only stderr (`task mock-4 unsolved after 3 attempts`), never
+  the stdout trace that says the agent was `blind`, so it has no signal to
+  widen the window far enough.
+- The same entrypoint with darwin's deterministic mutator gives a varied
+  leaderboard (winner g2_v5 at 0.875, delta +0.110) and exits 0.
+
+The uniformity that remains is therefore real. Mutations happen, but none of
+them reaches a rung the mock sandbox rewards. Whether to keep the LLM mutator
+and accept ADR-0006 failures, switch to the deterministic mutator, or relax
+ADR-0006 is an operator decision, outside this record.
+
 ## 4. Alternatives considered
 
 - **Point darwin at the model port (:8085) directly.** Rejected: estate policy
