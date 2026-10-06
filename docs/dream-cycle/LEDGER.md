@@ -37,8 +37,8 @@
 | 2026-09-30 | compiler-parity | validateConfig now rejects a malformed adrConvention (5816164) | NONE | https://github.com/DreamLab-AI/dream-engine/pull/19 | yes | ACCEPT |  | 847508569d87 |  |  |  |
 | 2026-10-01 | ledger-signals | VETOED: Given `escapeCell` renders a literal pipe in a cell as `\` (`packages/le | NONE | NONE | yes | INCONCLUSIVE |  | 829ff1ef88ce |  |  |  |
 | 2026-10-02 | evaluation-adapters | VETOED: Updated maxCandidatesPerGeneration bound to 5 to match darwin@0.10.2 out | NONE | NONE | yes | BLOCKED-ENV |  | ee55ffc8351d |  |  |  |
-| 2026-10-03 | security-adversarial | Given every pinned-darwin leaderboard observed (2026-09-07 run; folded receipts  | NONE | https://github.com/DreamLab-AI/dream-engine/pull/21 | yes | ACCEPT |  | f6b941585a3c |  |  |  |
-| 2026-10-04 | developer-experience | VETOED: Given `escapeCell` renders a literal pipe in a cell as `\` (`packages/le | NONE | https://github.com/DreamLab-AI/dream-engine/pull/22 | yes | ACCEPT |  | c35da17fd617 |  |  |  |
+| 2026-10-03 | security-adversarial | New checkDarwinScoreUniformity flags leaderboards where all mutants tie baseline | NONE | https://github.com/DreamLab-AI/dream-engine/pull/21 | yes | ACCEPT |  | f6b941585a3c |  |  |  |
+| 2026-10-04 | developer-experience | Bench red on the 10-03 row only; rewrote its finding, bench and darwin pass | NONE | https://github.com/DreamLab-AI/dream-engine/pull/22 | yes | ACCEPT |  | c35da17fd617 |  |  |  |
 | 2026-10-04 | developer-experience | validateConfig now rejects a malformed adrConvention (5816164) | NONE | PERSIST-LOCAL | yes | ACCEPT |  | bd972b37f37a |  |  |  |
-| 2026-10-05 | compiler-parity | VETOED: VETOED: Updated maxCandidatesPerGeneration bound to 5 to match darwin@0. | NONE | NONE | yes | BLOCKED-ENV |  | e3bbab427018 |  |  |  |
-| 2026-10-06 | ledger-signals | VETOED: Updated maxCandidatesPerGeneration bound to 5 to match darwin@0.10.2 out | NONE | https://github.com/DreamLab-AI/dream-engine/pull/23 | yes | ACCEPT |  | 3e348c630519 |  |  |  |
+| 2026-10-05 | compiler-parity | Bench red on the 10-03 row; repair patch did not apply to LEDGER.md | NONE | NONE | yes | BLOCKED-ENV |  | e3bbab427018 |  |  |  |
+| 2026-10-06 | ledger-signals | Bench red on the 10-03 row again; same repair as PR #22, bench and darwin pass | NONE | https://github.com/DreamLab-AI/dream-engine/pull/23 | yes | ACCEPT |  | 3e348c630519 |  |  |  |
