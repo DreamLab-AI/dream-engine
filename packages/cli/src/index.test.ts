@@ -293,7 +293,7 @@ describe('verify-entrypoint', () => {
   // ADR-0003. The real 2026-09-07 REQUIRED-evaluator leaderboard (run ab4ced4e48b76e83):
   // outcome=PASSED, exit 0, and five candidates in generation 2 against the then <=4
   // bound. ADR-0005 raised the bound to 5 to match darwin@0.10.2's five-surface map, so
-  // this fixture is now the compliant ceiling and a sixth g2 row is the breach.
+  // its shape is within bounds; its uniform 0.765 scores fail it under ADR-0006.
   const DARWIN_LEADERBOARD_2026_09_07 = [
     'Darwin Mode — leaderboard',
     '  0.765  baseline  [planner]  safety=1.00  pass=0.60 ◀ winner',
@@ -312,11 +312,30 @@ describe('verify-entrypoint', () => {
     'Delta over baseline: +0.000',
   ].join('\n');
 
-  const DARWIN_LEADERBOARD_SIX_IN_G2 = DARWIN_LEADERBOARD_2026_09_07.replace(
-    '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
+  // The same 4 + 5 shape with discriminating scores: the compliant ceiling.
+  const DARWIN_LEADERBOARD_VARIED = [
+    'Darwin Mode — leaderboard',
+    '  0.812  g2_v1  [planner]  safety=1.00  pass=0.66 ◀ winner',
+    '  0.798  g2_v3  [toolPolicy]  safety=1.00  pass=0.64',
+    '  0.781  g1_v0  [planner]  safety=1.00  pass=0.62',
+    '  0.774  g2_v0  [reviewer]  safety=1.00  pass=0.61',
+    '  0.765  baseline  [planner]  safety=1.00  pass=0.60',
+    '  0.765  g1_v2  [reviewer]  safety=1.00  pass=0.60',
+    '  0.752  g1_v1  [toolPolicy]  safety=1.00  pass=0.58',
+    '  0.749  g2_v2  [contextBuilder]  safety=1.00  pass=0.58',
+    '  0.741  g1_v3  [toolPolicy]  safety=1.00  pass=0.57',
+    '  0.733  g2_v4  [scorePolicy]  safety=1.00  pass=0.56',
+    '',
+    'Winner: g2_v1',
+    'Lineage: baseline → g1_v0 → g2_v1',
+    'Delta over baseline: +0.047',
+  ].join('\n');
+
+  const DARWIN_LEADERBOARD_SIX_IN_G2 = DARWIN_LEADERBOARD_VARIED.replace(
+    '  0.733  g2_v4  [scorePolicy]  safety=1.00  pass=0.56',
     [
-      '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
-      '  0.765  g2_v5  [planner]  safety=1.00  pass=0.60',
+      '  0.733  g2_v4  [scorePolicy]  safety=1.00  pass=0.56',
+      '  0.728  g2_v5  [planner]  safety=1.00  pass=0.55',
     ].join('\n'),
   );
 
@@ -336,11 +355,28 @@ describe('verify-entrypoint', () => {
     expect(r.err).toContain('promotedLineages unchecked');
   });
 
-  it('still exits 0 for a live darwin run that respects the bounds', async () => {
-    // Five in g2 — the real 2026-09-07 shape — is within the ADR-0005 bound.
+  // The real 2026-09-07 run sits inside the step-10 bounds, but every mutant scored
+  // 0.765: the scorer judged nothing, so the result is untrustworthy and fails the
+  // same way a bound breach does.
+  it('exits 3 when every scored mutant has the identical score', async () => {
     const io = mockIOWithExec(async () => ({
       code: 0,
       stdout: DARWIN_LEADERBOARD_2026_09_07,
+      stderr: '',
+    }));
+    const r = await run(['verify-entrypoint', 'darwin', '--cmd', 'npx @metaharness/darwin'], io);
+    expect(r.out).toContain('darwin: live');
+    expect(r.code).toBe(3);
+    expect(r.err).toContain('darwin bounds VIOLATED (leaderboard ok)');
+    expect(r.err).toContain('  - score uniformity: all 9 mutants score 0.765, equal to baseline');
+    expect(r.out).not.toContain('bounds ok');
+  });
+
+  it('still exits 0 for a live darwin run that respects the bounds', async () => {
+    // Five in g2 is within the ADR-0005 bound, and the scores discriminate.
+    const io = mockIOWithExec(async () => ({
+      code: 0,
+      stdout: DARWIN_LEADERBOARD_VARIED,
       stderr: '',
     }));
     const r = await run(['verify-entrypoint', 'darwin', '--cmd', 'npx @metaharness/darwin'], io);
@@ -355,7 +391,7 @@ describe('verify-entrypoint', () => {
   it('--passthrough echoes the command output ahead of the verdict', async () => {
     const io = mockIOWithExec(async () => ({
       code: 0,
-      stdout: DARWIN_LEADERBOARD_2026_09_07,
+      stdout: DARWIN_LEADERBOARD_VARIED,
       stderr: 'darwin: ruvllm mutator warming up',
     }));
     const r = await run(

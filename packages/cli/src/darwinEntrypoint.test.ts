@@ -16,7 +16,8 @@ const SCRIPT = join(ROOT, 'scripts/darwin-entrypoint.sh');
 const FIXTURES = 'packages/cli/test-fixtures';
 const FAKE = `${FIXTURES}/fake-darwin.mjs`;
 const PIN = '@metaharness/darwin@0.10.2';
-const LB_FIVE = `${FIXTURES}/darwin-leaderboard-2026-09-07.txt`;
+const LB_FIVE = `${FIXTURES}/darwin-leaderboard-varied.txt`;
+const LB_UNIFORM = `${FIXTURES}/darwin-leaderboard-2026-09-07.txt`;
 const LB_SIX = `${FIXTURES}/darwin-leaderboard-six-in-g2.txt`;
 
 function runScript(args: string[], env: Record<string, string> = {}) {
@@ -48,6 +49,14 @@ describe('scripts/darwin-entrypoint.sh', () => {
     expect(r.stdout).toContain('g2_v4  [scorePolicy]');
     expect(r.stdout).toContain('darwin: live');
     expect(r.stdout).toContain('darwin bounds ok — depth 2, max 5 candidates/generation');
+  });
+
+  it('exits 3 when every mutant scores the same (real 2026-09-07 leaderboard)', () => {
+    const r = runScript(stub('--leaderboard', LB_UNIFORM));
+    expect(r.code).toBe(3);
+    expect(r.stdout).toContain('Delta over baseline: +0.000');
+    expect(r.stderr).toContain('darwin bounds VIOLATED');
+    expect(r.stderr).toContain('score uniformity: all 9 mutants score 0.765');
   });
 
   it('exits 3 on a bound breach (6 candidates in g2)', () => {

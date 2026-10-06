@@ -19,7 +19,8 @@
 #   0   darwin live, bounds respected
 #   1   darwin failed (blocked)
 #   2   darwin exited 0 with no output (suspicious-silent)
-#   3   darwin live but its leaderboard breached a bound, or could not be parsed
+#   3   darwin live but its leaderboard breached a bound, could not be parsed,
+#       or scored every mutant identically (ADR-0006)
 #   64  refused: the command is not an exact-pinned darwin run in a mock/agent sandbox
 #   69  the CLI is not built (run `npm run build`)
 set -euo pipefail
