@@ -357,7 +357,9 @@ export async function run(argv: string[], io: IO): Promise<RunResult> {
         // ADR-0003: a live darwin evaluator can still have run out of policy. On
         // 2026-09-07 it returned outcome=PASSED with five candidates in generation 2,
         // against the then-documented <=4/generation bound (raised to 5 by ADR-0005),
-        // and nothing noticed. Check the leaderboard it just printed.
+        // and nothing noticed. Check the leaderboard it just printed. The same check
+        // fails a leaderboard whose mutants all score identically (ADR-0006): the
+        // scorer judged nothing, so the run is untrustworthy, not compliant.
         //
         // Exit 3 is detection here. It becomes enforcement only because
         // scripts/darwin-entrypoint.sh (ADR-0005) makes this command the darwin

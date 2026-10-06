@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   DARWIN_BOUNDS,
   checkDarwinBounds,
@@ -10,7 +11,8 @@ import {
 // Fixture: shape of the real 2026-09-07 REQUIRED-evaluator leaderboard
 // (run ab4ced4e48b76e83), which PASSED with g2 holding five candidates. Under
 // ADR-0003's original <=4 bound that was a breach; ADR-0005 aligned the bound
-// with darwin@0.10.2's five-surface map, so five is now the compliant ceiling.
+// with darwin@0.10.2's five-surface map, so five is within bounds. Every mutant
+// scores 0.765, though, so ADR-0006 fails it as a non-discriminating scorer.
 const LB_2026_09_07 = [
   'Darwin Mode — leaderboard',
   '  0.765  baseline  [planner]  safety=1.00  pass=0.60 ◀ winner',
@@ -29,13 +31,17 @@ const LB_2026_09_07 = [
   'Delta over baseline: +0.000',
 ].join('\n');
 
+// A discriminating leaderboard of the same 4 + 5 shape: mutant scores differ,
+// so the scorer is actually judging. This is the compliant ceiling.
+const LB_VARIED = readFileSync(
+  new URL('../test-fixtures/darwin-leaderboard-varied.txt', import.meta.url),
+  'utf8',
+);
+
 // One past the ADR-0005 ceiling: g2 gains a sixth candidate.
-const LB_SIX_IN_G2 = LB_2026_09_07.replace(
-  '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
-  [
-    '  0.765  g2_v4  [scorePolicy]  safety=1.00  pass=0.60',
-    '  0.765  g2_v5  [planner]  safety=1.00  pass=0.60',
-  ].join('\n'),
+const LB_SIX_IN_G2 = readFileSync(
+  new URL('../test-fixtures/darwin-leaderboard-six-in-g2.txt', import.meta.url),
+  'utf8',
 );
 
 describe('parseLeaderboardRows', () => {
@@ -43,6 +49,13 @@ describe('parseLeaderboardRows', () => {
     const rows = parseLeaderboardRows(LB_2026_09_07);
     expect(rows).toHaveLength(10);
     expect(rows.filter((r) => r.id === 'baseline')).toHaveLength(1);
+    expect(rows.every((r) => r.score === 0.765)).toBe(true);
+  });
+
+  it('reads each row\'s score and generation', () => {
+    const rows = parseLeaderboardRows(LB_VARIED);
+    expect(rows[0]).toEqual({ id: 'g2_v1', generation: 2, score: 0.812 });
+    expect(rows.find((r) => r.id === 'baseline')).toEqual({ id: 'baseline', generation: 0, score: 0.765 });
   });
 
   it('returns [] when no leaderboard lines are present', () => {
@@ -57,11 +70,13 @@ describe('checkDarwinBounds', () => {
     expect(DARWIN_BOUNDS.maxPromotedLineages).toBe(1);
   });
 
-  it('accepts the real 2026-09-07 run: g2 held 5 candidates, within the bound', () => {
-    const report = checkDarwinBoundsFromStdout(LB_2026_09_07, 0);
+  it('accepts 5 candidates in g2 with discriminating scores, within the bound', () => {
+    const report = checkDarwinBoundsFromStdout(LB_VARIED, 0);
     expect(report.parseStatus).toBe('ok');
     expect(report.candidatesPerGeneration).toEqual({ 1: 4, 2: 5 });
     expect(report.maxCandidatesPerGeneration).toBe(5);
+    expect(report.mutantsScored).toBe(9);
+    expect(report.distinctMutantScores).toBe(9);
     expect(report.ok).toBe(true);
     expect(report.violations).toEqual([]);
   });
@@ -93,7 +108,7 @@ describe('checkDarwinBounds', () => {
   });
 
   it('flags more than 1 promoted lineage', () => {
-    const rows = parseLeaderboardRows(LB_2026_09_07);
+    const rows = parseLeaderboardRows(LB_VARIED);
     const report = checkDarwinBounds(rows, 2);
     expect(report.violations).toContain('promotedLineages=2 > 1');
   });
@@ -131,47 +146,56 @@ describe('checkDarwinBoundsFromStdout', () => {
   });
 });
 
-// Mutator-diversity diagnostic (2026-10-03): the shape seen on every observed
-// pinned-darwin run — every mutant scored exactly at the baseline.
-const LB_ONE_MUTANT_DIFFERS = LB_2026_09_07.replace(
-  '  0.765  g2_v2  [contextBuilder]  safety=1.00  pass=0.60',
-  '  0.801  g2_v2  [contextBuilder]  safety=1.00  pass=0.64',
-);
-
-describe('checkDarwinScoreUniformity (diagnostic, never a bound)', () => {
-  it('flags the observed run shape: every mutant scores exactly the baseline', () => {
-    const r = checkDarwinScoreUniformity(LB_2026_09_07);
-    expect(r.uniformWithBaseline).toBe(true);
-    expect(r.scoredRows).toBe(10);
-    expect(r.mutantsScored).toBe(9);
-    expect(r.distinctMutantScores).toBe(1);
-    expect(r.ok).toBe(false);
-    expect(r.signal).toContain('all 9 mutants score exactly the baseline 0.765');
+// Score uniformity (2026-10-03, wired in 2026-10-06): the shape seen on every
+// observed pinned-darwin run — every mutant scored identically — means the scorer
+// is not discriminating, so the leaderboard's winner is an artefact.
+describe('score uniformity', () => {
+  it('flags the real 2026-09-07 run: all 9 mutants score 0.765, equal to baseline', () => {
+    const report = checkDarwinBoundsFromStdout(LB_2026_09_07, 0);
+    expect(report.ok).toBe(false);
+    expect(report.mutantsScored).toBe(9);
+    expect(report.distinctMutantScores).toBe(1);
+    // Within the step-10 bounds: uniformity is the only violation.
+    expect(report.violations).toEqual([
+      'score uniformity: all 9 mutants score 0.765, equal to baseline — scorer not discriminating',
+    ]);
   });
 
-  it('is clean when one mutant score differs from the baseline', () => {
-    const r = checkDarwinScoreUniformity(LB_ONE_MUTANT_DIFFERS);
-    expect(r.ok).toBe(true);
-    expect(r.signal).toBe('');
-    expect(r.uniformWithBaseline).toBe(false);
-    expect(r.distinctMutantScores).toBe(2);
+  it('flags mutants that agree with each other but not the baseline', () => {
+    const lb = [
+      '  0.700  baseline  [planner]  safety=1.00  pass=0.50',
+      '  0.900  g1_v0  [planner]  safety=1.00  pass=0.80',
+      '  0.900  g1_v1  [reviewer]  safety=1.00  pass=0.80',
+    ].join('\n');
+    const r = checkDarwinScoreUniformity(parseLeaderboardRows(lb));
+    expect(r.violation).toBe('score uniformity: all 2 mutants score 0.9, baseline 0.7 — scorer not discriminating');
   });
 
-  it('does not flag a lone mutant that ties the baseline (too little evidence)', () => {
+  it('is clean when a single mutant score differs', () => {
+    const lb = LB_2026_09_07.replace(
+      '  0.765  g2_v2  [contextBuilder]  safety=1.00  pass=0.60',
+      '  0.801  g2_v2  [contextBuilder]  safety=1.00  pass=0.64',
+    );
+    const report = checkDarwinBoundsFromStdout(lb, 0);
+    expect(report.distinctMutantScores).toBe(2);
+    expect(report.ok).toBe(true);
+    expect(report.violations).toEqual([]);
+  });
+
+  it('does not flag fewer than 2 scored mutants (too little evidence)', () => {
     const lb = [
       '  0.5  baseline  [planner]  safety=1.00  pass=0.30',
       '  0.5  g1_v0  [planner]  safety=1.00  pass=0.30',
     ].join('\n');
-    const r = checkDarwinScoreUniformity(lb);
-    expect(r.mutantsScored).toBe(1);
-    expect(r.uniformWithBaseline).toBe(false);
-    expect(r.ok).toBe(true);
+    const report = checkDarwinBoundsFromStdout(lb, 0);
+    expect(report.mutantsScored).toBe(1);
+    expect(report.ok).toBe(true);
   });
 
-  it('says unassessed when no scored rows can be read', () => {
-    const r = checkDarwinScoreUniformity('no leaderboard here');
-    expect(r.ok).toBe(false);
-    expect(r.scoredRows).toBe(0);
-    expect(r.signal).toContain('unassessed');
+  it('ignores hand-built rows with no score', () => {
+    const rows = [0, 1, 2].map((v) => ({ id: `g1_v${v}`, generation: 1 }));
+    const r = checkDarwinScoreUniformity(rows);
+    expect(r.mutantsScored).toBe(0);
+    expect(r.violation).toBe('');
   });
 });

@@ -9,7 +9,6 @@ Darwin Mode — leaderboard
   0.749  g2_v2  [contextBuilder]  safety=1.00  pass=0.58
   0.741  g1_v3  [toolPolicy]  safety=1.00  pass=0.57
   0.733  g2_v4  [scorePolicy]  safety=1.00  pass=0.56
-  0.728  g2_v5  [planner]  safety=1.00  pass=0.55
 
 Winner: g2_v1
 Lineage: baseline → g1_v0 → g2_v1

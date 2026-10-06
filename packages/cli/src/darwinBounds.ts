@@ -10,16 +10,25 @@
  * This module makes the bound machine-checkable: additive-only and
  * dependency-free (pattern proven on 2026-09-06).
  *
+ * It also fails a leaderboard where two or more mutants all score identically
+ * (ADR-0006): such a scorer is not discriminating.
+ *
  * This module only DETECTS. It becomes enforcement through
  * scripts/darwin-entrypoint.sh (ADR-0005), which runs darwin through
  * `verify-entrypoint` so a breach fails the REQUIRED evaluator; the gate that
  * honours that failure lives in the external annexe runner. See
- * docs/adrs/ADR-0003-darwin-bound-guard.md and ADR-0005-darwin-bound-five.md.
+ * docs/adrs/ADR-0003-darwin-bound-guard.md, ADR-0005-darwin-bound-five.md and
+ * ADR-0006-darwin-score-uniformity.md.
  */
 
 export interface DarwinLeaderboardRow {
   id: string;
   generation: number;
+  /**
+   * The row's leaderboard score. Always set by `parseLeaderboardRows`; a row
+   * built by hand without one is left out of the score-uniformity check.
+   */
+  score?: number;
 }
 
 export interface DarwinBoundsReport {
@@ -37,6 +46,10 @@ export interface DarwinBoundsReport {
   candidatesPerGeneration: Record<number, number>;
   maxCandidatesPerGeneration: number;
   promotedLineages: number;
+  /** Non-baseline rows that carry a score. */
+  mutantsScored: number;
+  /** Distinct scores among those mutants; 1 with ≥ 2 mutants is a violation. */
+  distinctMutantScores: number;
   violations: string[];
 }
 
@@ -47,24 +60,26 @@ export const DARWIN_BOUNDS = {
   maxPromotedLineages: 1,
 } as const;
 
-const ROW_RE = /^\s*[\d.]+\s+(baseline|g(\d+)_v(\d+))\s/;
+const ROW_RE = /^\s*([\d.]+)\s+(baseline|g(\d+)_v(\d+))\s/;
 
 export function parseLeaderboardRows(stdout: string): DarwinLeaderboardRow[] {
   const rows: DarwinLeaderboardRow[] = [];
   for (const line of stdout.split('\n')) {
     const m = ROW_RE.exec(line);
     if (!m) continue;
+    const score = Number(m[1]);
     rows.push(
-      m[1] === 'baseline'
-        ? { id: 'baseline', generation: 0 }
-        : { id: m[1], generation: Number(m[2]) },
+      m[2] === 'baseline'
+        ? { id: 'baseline', generation: 0, score }
+        : { id: m[2], generation: Number(m[3]), score },
     );
   }
   return rows;
 }
 
 /**
- * Check a parsed leaderboard against DARWIN_BOUNDS.
+ * Check a parsed leaderboard against DARWIN_BOUNDS, and that its scores
+ * discriminate (see `checkDarwinScoreUniformity`).
  *
  * Fail-visible by construction: an empty row set reports
  * `parseStatus: 'unparsable'` AND `ok: false`. The two can never disagree, so a
@@ -103,6 +118,9 @@ export function checkDarwinBounds(
       );
     }
   }
+  const uniformity = checkDarwinScoreUniformity(rows);
+  if (uniformity.violation) violations.push(uniformity.violation);
+
   if (promotedLineages > DARWIN_BOUNDS.maxPromotedLineages) {
     violations.push(
       `promotedLineages=${promotedLineages} > ${DARWIN_BOUNDS.maxPromotedLineages}`,
@@ -122,6 +140,8 @@ export function checkDarwinBounds(
     candidatesPerGeneration,
     maxCandidatesPerGeneration: maxCandidates,
     promotedLineages,
+    mutantsScored: uniformity.mutantsScored,
+    distinctMutantScores: uniformity.distinctMutantScores,
     violations,
   };
 }
@@ -138,66 +158,41 @@ export function checkDarwinBoundsFromStdout(
   return checkDarwinBounds(parseLeaderboardRows(stdout), promotedLineages);
 }
 
-const SCORED_ROW_RE = /^\s*([\d.]+)\s+(baseline|g\d+_v\d+)\s/;
-
 export interface DarwinUniformityReport {
-  /** true when no uniformity signal was emitted — diagnostic, never a bound. */
-  ok: boolean;
-  /** Human-readable signal; '' when ok. */
-  signal: string;
-  /** Leaderboard rows (baseline + mutants) from which a score was read. */
-  scoredRows: number;
-  /** Non-baseline rows from which a score was read. */
+  /** Non-baseline rows that carry a score. */
   mutantsScored: number;
-  /** Distinct scores among mutants. Witness datum, not a threshold. */
+  /** Distinct scores among those mutants. */
   distinctMutantScores: number;
-  /** Every scored mutant matched the baseline exactly (delta +0.000 shape). */
-  uniformWithBaseline: boolean;
+  /** The violation line for `DarwinBoundsReport.violations`, or '' when none. */
+  violation: string;
 }
 
 /**
- * Diagnostic for the mutator-diversity question carried since 2026-09-08 (and
- * again 2026-09-29): every darwin leaderboard observed from the pinned
- * @metaharness/darwin@0.10.2 against the :8084 ruvllm endpoint — the 2026-09-07
- * run and every receipt from 2026-09-27 through 2026-10-03 — scores ALL mutants
- * exactly at the baseline (uniform 0.765, Delta over baseline: +0.000). Such a
- * leaderboard carries no selection signal: either the mutator proposed nothing
- * distinguishable, or the endpoint is not really scoring (the 09-08 operator
- * note names the Loom-façade possibility).
+ * Score-uniformity check, part of `checkDarwinBounds`.
  *
- * Like this module's bounds before ADR-0005, this only DETECTS: it adds no
- * violation and changes no exit code, and must not gate anything until a human
- * decides the policy — tonight's live run is itself uniform, so wiring this in
- * as a veto would fail every REQUIRED darwin evaluation until the endpoint or
- * the mutator changes.
+ * A leaderboard where two or more scored mutants all carry the identical score
+ * has no selection signal: the scorer returned a default, a fallback answer, or
+ * a parse-error value rather than judging the candidates. The 2026-09-07 run
+ * (run ab4ced4e48b76e83) and every pinned @metaharness/darwin@0.10.2 receipt
+ * since have this shape: every mutant at 0.765, "Delta over baseline: +0.000".
+ * Its winner is then an artefact, not a result, so the run fails the bound check
+ * the same way an over-wide generation does.
+ *
+ * Fewer than two scored mutants is too little evidence and is not a violation;
+ * the baseline row is reported against but never counted as a mutant.
  */
-export function checkDarwinScoreUniformity(stdout: string): DarwinUniformityReport {
-  const scored: { id: string; score: number }[] = [];
-  for (const line of stdout.split('\n')) {
-    const m = SCORED_ROW_RE.exec(line);
-    if (m) scored.push({ id: m[2], score: Number(m[1]) });
+export function checkDarwinScoreUniformity(rows: DarwinLeaderboardRow[]): DarwinUniformityReport {
+  const scores: number[] = [];
+  for (const row of rows) {
+    if (row.id !== 'baseline' && row.score !== undefined) scores.push(row.score);
   }
-  const mutants = scored.filter((r) => r.id !== 'baseline');
-  const baselineScore = scored.find((r) => r.id === 'baseline')?.score;
-  const distinctMutantScores = new Set(mutants.map((r) => r.score)).size;
-  const uniformWithBaseline =
-    baselineScore !== undefined &&
-    mutants.length >= 2 &&
-    mutants.every((r) => r.score === baselineScore);
-
-  let signal = '';
-  if (scored.length === 0) {
-    signal = 'score uniformity unassessed: 0 scored rows read';
-  } else if (uniformWithBaseline) {
-    signal = `score uniformity suspect: all ${mutants.length} mutants score exactly the baseline ${baselineScore}`;
+  const distinct = new Set(scores);
+  let violation = '';
+  if (scores.length >= 2 && distinct.size === 1) {
+    const baseline = rows.find((r) => r.id === 'baseline')?.score;
+    const relation =
+      baseline === undefined ? '' : baseline === scores[0] ? ', equal to baseline' : `, baseline ${baseline}`;
+    violation = `score uniformity: all ${scores.length} mutants score ${scores[0]}${relation} — scorer not discriminating`;
   }
-
-  return {
-    ok: signal === '',
-    signal,
-    scoredRows: scored.length,
-    mutantsScored: mutants.length,
-    distinctMutantScores,
-    uniformWithBaseline,
-  };
+  return { mutantsScored: scores.length, distinctMutantScores: distinct.size, violation };
 }
