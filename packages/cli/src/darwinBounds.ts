@@ -50,6 +50,11 @@ export interface DarwinBoundsReport {
   mutantsScored: number;
   /** Distinct scores among those mutants; 1 with ≥ 2 mutants is a violation. */
   distinctMutantScores: number;
+  /**
+   * Non-failing receipt note, or '' when none: set when a uniform leaderboard
+   * passes because the run made real mutations (ADR-0007).
+   */
+  note: string;
   violations: string[];
 }
 
@@ -87,9 +92,19 @@ export function parseLeaderboardRows(stdout: string): DarwinLeaderboardRow[] {
  * parser did not understand — precisely the failure mode the module exists to
  * eliminate.
  */
+export interface DarwinBoundsOptions {
+  /**
+   * Real model edits the run made, from the Loom shim's `ok` count (ruvllm
+   * mutator, ADR-0007). Undefined when there is no shim count (the
+   * deterministic mutator); the uniformity rule then stays strict.
+   */
+  realMutations?: number;
+}
+
 export function checkDarwinBounds(
   rows: DarwinLeaderboardRow[],
   promotedLineages: number,
+  opts: DarwinBoundsOptions = {},
 ): DarwinBoundsReport {
   const perGen = new Map<number, number>();
   for (const row of rows) {
@@ -118,7 +133,7 @@ export function checkDarwinBounds(
       );
     }
   }
-  const uniformity = checkDarwinScoreUniformity(rows);
+  const uniformity = checkDarwinScoreUniformity(rows, opts.realMutations);
   if (uniformity.violation) violations.push(uniformity.violation);
 
   if (promotedLineages > DARWIN_BOUNDS.maxPromotedLineages) {
@@ -142,6 +157,7 @@ export function checkDarwinBounds(
     promotedLineages,
     mutantsScored: uniformity.mutantsScored,
     distinctMutantScores: uniformity.distinctMutantScores,
+    note: uniformity.note,
     violations,
   };
 }
@@ -154,8 +170,9 @@ export function checkDarwinBounds(
 export function checkDarwinBoundsFromStdout(
   stdout: string,
   promotedLineages: number,
+  opts: DarwinBoundsOptions = {},
 ): DarwinBoundsReport {
-  return checkDarwinBounds(parseLeaderboardRows(stdout), promotedLineages);
+  return checkDarwinBounds(parseLeaderboardRows(stdout), promotedLineages, opts);
 }
 
 export interface DarwinUniformityReport {
@@ -165,6 +182,8 @@ export interface DarwinUniformityReport {
   distinctMutantScores: number;
   /** The violation line for `DarwinBoundsReport.violations`, or '' when none. */
   violation: string;
+  /** Non-failing note for the receipt, or '' when none. */
+  note: string;
 }
 
 /**
@@ -180,19 +199,42 @@ export interface DarwinUniformityReport {
  *
  * Fewer than two scored mutants is too little evidence and is not a violation;
  * the baseline row is reported against but never counted as a mutant.
+ *
+ * Amended by ADR-0007. The check exists to catch an INERT pipeline: on those
+ * nights no mutation was ever applied (the Loom served scaffold pages, darwin
+ * discarded them), and uniformity was the only visible symptom. When the Loom
+ * shim reports `realMutations` > 0, the model did edit the surfaces and a
+ * uniform board is an honest "no score-moving edit" — a note, not a failure.
+ * `realMutations === 0` is still a violation, naming the cause. With no count
+ * at all (`undefined`: the deterministic mutator runs without a shim, so there
+ * is nothing to count) the original strict rule applies unchanged.
  */
-export function checkDarwinScoreUniformity(rows: DarwinLeaderboardRow[]): DarwinUniformityReport {
+export function checkDarwinScoreUniformity(
+  rows: DarwinLeaderboardRow[],
+  realMutations?: number,
+): DarwinUniformityReport {
   const scores: number[] = [];
   for (const row of rows) {
     if (row.id !== 'baseline' && row.score !== undefined) scores.push(row.score);
   }
   const distinct = new Set(scores);
   let violation = '';
+  let note = '';
   if (scores.length >= 2 && distinct.size === 1) {
     const baseline = rows.find((r) => r.id === 'baseline')?.score;
+    const head = `score uniformity: all ${scores.length} mutants score ${scores[0]}`;
     const relation =
       baseline === undefined ? '' : baseline === scores[0] ? ', equal to baseline' : `, baseline ${baseline}`;
-    violation = `score uniformity: all ${scores.length} mutants score ${scores[0]}${relation} — scorer not discriminating`;
+    if (realMutations === undefined) {
+      violation = `${head}${relation} — scorer not discriminating`;
+    } else if (realMutations <= 0) {
+      violation = `${head}${relation} — 0 real mutations: the mutator made no edit`;
+    } else {
+      const against =
+        baseline === undefined ? '' : baseline === scores[0] ? ' (= baseline)' : ` (baseline ${baseline})`;
+      const noun = realMutations === 1 ? 'mutation' : 'mutations';
+      note = `no improvement found: ${realMutations} real ${noun}, all scored ${scores[0]}${against}`;
+    }
   }
-  return { mutantsScored: scores.length, distinctMutantScores: distinct.size, violation };
+  return { mutantsScored: scores.length, distinctMutantScores: distinct.size, violation, note };
 }

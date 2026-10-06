@@ -20,6 +20,7 @@
  * completion (a scaffold page, a completion cut off by max_tokens, an error,
  * a timeout) becomes `{"choices":[]}`, which darwin records as a no-op.
  */
+import { writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -83,6 +84,12 @@ export interface LoomShimOptions {
   log: (line: string) => void;
   /** Loopback port to bind; 0 picks a free one. */
   port?: number;
+  /**
+   * Rewritten with the per-verdict counts (JSON) after every mutator call, so
+   * `verify-entrypoint --shim-stats` can read them once darwin exits. Never
+   * written before the first call: no file means the shim served nothing.
+   */
+  statsFile?: string;
 }
 
 export interface LoomShim {
@@ -119,6 +126,11 @@ export async function startLoomShim(opts: LoomShimOptions): Promise<LoomShim> {
     'upstream-error': 0,
   };
   let seq = 0;
+  // Synchronous write: the count must be on disk before darwin sees the reply.
+  const record = (verdict: LoomVerdict) => {
+    counts[verdict]++;
+    if (opts.statsFile) writeFileSync(opts.statsFile, JSON.stringify(counts), 'utf8');
+  };
 
   const handle = async (req: IncomingMessage, res: ServerResponse) => {
     const id = ++seq;
@@ -153,14 +165,14 @@ export async function startLoomShim(opts: LoomShimOptions): Promise<LoomShim> {
       out = { choices: [] };
       detail = (e as Error).message;
     }
-    counts[verdict]++;
+    record(verdict);
     opts.log(`loom-shim: #${id} ${verdict} in ${Date.now() - started}ms (${detail})`);
     res.end(JSON.stringify(out));
   };
 
   const server = createServer((req, res) => {
     handle(req, res).catch((e: Error) => {
-      counts['upstream-error']++;
+      record('upstream-error');
       opts.log(`loom-shim: request failed: ${e.message}`);
       if (!res.headersSent) res.writeHead(200, { 'content-type': 'application/json' });
       res.end('{"choices":[]}');

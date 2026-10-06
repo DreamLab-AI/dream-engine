@@ -371,7 +371,38 @@ export async function run(argv: string[], io: IO): Promise<RunResult> {
           // promotion count, so 2 of the 3 step-10 bounds are checked here, not 3.
           // Passing 0 silently and claiming all three would be the overstatement
           // ADR-0002 was written against.
-          const bounds = checkDarwinBoundsFromStdout(result.stdout, 0);
+          //
+          // ADR-0007: --shim-stats (set by scripts/darwin-entrypoint.sh for the
+          // ruvllm mutator) names the Loom shim's per-verdict counts. Its `ok`
+          // count is the number of real model edits; a uniform leaderboard then
+          // fails only when that is 0. A missing or unreadable file counts as 0,
+          // so a broken shim can never pass silently. Without the flag (the
+          // deterministic mutator, no shim) the strict uniformity rule stands.
+          let realMutations: number | undefined;
+          const statsPath = flags['shim-stats'];
+          if (typeof statsPath === 'string') {
+            realMutations = 0;
+            let raw: string | undefined;
+            try {
+              raw = await io.readFile(statsPath);
+            } catch {
+              sink.error(`${label}: loom shim summary missing at ${statsPath} — counted as 0 real mutations`);
+            }
+            if (raw !== undefined) {
+              let ok: unknown;
+              try {
+                ok = (JSON.parse(raw) as { ok?: unknown }).ok;
+              } catch {
+                ok = undefined;
+              }
+              if (typeof ok === 'number' && Number.isInteger(ok) && ok >= 0) {
+                realMutations = ok;
+              } else {
+                sink.error(`${label}: loom shim summary unreadable at ${statsPath} — counted as 0 real mutations`);
+              }
+            }
+          }
+          const bounds = checkDarwinBoundsFromStdout(result.stdout, 0, { realMutations });
           if (!bounds.ok) {
             sink.error(`${label}: darwin bounds VIOLATED (leaderboard ${bounds.parseStatus})`);
             for (const violation of bounds.violations) {
@@ -380,6 +411,7 @@ export async function run(argv: string[], io: IO): Promise<RunResult> {
             sink.error('  note: promotedLineages unchecked on this path — see ADR-0003');
             return { code: 3, out: sink.out, err: sink.err };
           }
+          if (bounds.note) sink.log(`${label}: ${bounds.note}`);
           sink.log(
             `${label}: darwin bounds ok — depth ${bounds.generations}, ` +
               `max ${bounds.maxCandidatesPerGeneration} candidates/generation`,

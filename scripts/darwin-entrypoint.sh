@@ -20,14 +20,18 @@
 # scaffold off and outlasts darwin@0.10.2's hard-coded 30 s fetch abort, so
 # RUVLLM_TIMEOUT_MS takes effect. Without it every mutation is a no-op and every
 # mutant scores the baseline (the 0.765 nights). The shim logs one line per
-# mutator call and a per-verdict summary to stderr, into the receipt.
+# mutator call and a per-verdict summary to stderr, into the receipt, and writes
+# its counts to a stats file that verify-entrypoint reads (--shim-stats).
 #
 # Exit status:
 #   0   darwin live, bounds respected
 #   1   darwin failed (blocked)
 #   2   darwin exited 0 with no output (suspicious-silent)
 #   3   darwin live but its leaderboard breached a bound, could not be parsed,
-#       or scored every mutant identically (ADR-0006)
+#       or scored every mutant identically (ADR-0006) with no real mutation:
+#       for --mutator ruvllm, uniformity fails only when the shim counted 0
+#       real model edits or left no summary; otherwise it is a receipt note
+#       ("no improvement found", ADR-0007). Without the shim the rule is strict.
 #   64  refused: the command is not an exact-pinned darwin run in a mock/agent sandbox
 #   69  the CLI is not built (run `npm run build`)
 set -euo pipefail
@@ -94,6 +98,7 @@ cli="$repo_root/packages/cli/dist/bin.js"
 
 shim_pid=""
 shim_dir=""
+shim_stats=""
 stop_shim() {
   if [ -n "$shim_pid" ]; then
     # TERM makes the shim print its per-verdict summary; wait so it lands
@@ -111,7 +116,8 @@ if [ "$mutator" = "ruvllm" ]; then
   shim_bin="$repo_root/packages/cli/dist/loomShimBin.js"
   [ -f "$shim_bin" ] || die 69 "$shim_bin not found: run 'npm ci && npm run build' first"
   shim_dir=$(mktemp -d)
-  node "$shim_bin" --upstream "$ruvllm_url" --url-file "$shim_dir/url" &
+  shim_stats="$shim_dir/stats.json"
+  node "$shim_bin" --upstream "$ruvllm_url" --url-file "$shim_dir/url" --stats-file "$shim_stats" &
   shim_pid=$!
   for _ in $(seq 1 100); do
     [ -s "$shim_dir/url" ] && break
@@ -139,8 +145,13 @@ fi
 # runs it through a shell, so arguments with spaces or metacharacters survive.
 printf -v darwin_cmd '%q ' "$@"
 
+# ADR-0007: with the shim, verify-entrypoint reads its real-mutation count, and a
+# uniform leaderboard fails only when that count is 0 (or the summary is missing).
+verify_extra=()
+[ -n "$shim_stats" ] && verify_extra=(--shim-stats "$shim_stats")
+
 cd -- "$repo_root"
 status=0
-node "$cli" verify-entrypoint darwin --passthrough --cmd "${darwin_cmd% }" || status=$?
+node "$cli" verify-entrypoint darwin --passthrough "${verify_extra[@]}" --cmd "${darwin_cmd% }" || status=$?
 stop_shim
 exit "$status"

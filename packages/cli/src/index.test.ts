@@ -372,6 +372,56 @@ describe('verify-entrypoint', () => {
     expect(r.out).not.toContain('bounds ok');
   });
 
+  // ADR-0007 amendment: --shim-stats names the Loom shim's per-verdict counts.
+  // A uniform leaderboard then fails only when the shim saw no real model edit.
+  describe('with --shim-stats (ruvllm mutator)', () => {
+    const uniform = () => mockIOWithExec(async () => ({ code: 0, stdout: DARWIN_LEADERBOARD_2026_09_07, stderr: '' }));
+    const withStats = (io: IO, json: string) => {
+      (io as IO & { files: Record<string, string> }).files['/shim/stats.json'] = json;
+      return io;
+    };
+    const argv = ['verify-entrypoint', 'darwin', '--cmd', 'npx @metaharness/darwin', '--shim-stats', '/shim/stats.json'];
+
+    it('exits 3 when the shim made 0 real mutations', async () => {
+      const io = withStats(uniform(), '{"ok":0,"scaffold":20,"truncated":0,"empty":0,"upstream-error":0}');
+      const r = await run(argv, io);
+      expect(r.code).toBe(3);
+      expect(r.err).toContain('0 real mutations: the mutator made no edit');
+    });
+
+    it('exits 0 with a non-failing note when real mutations scored the baseline', async () => {
+      const io = withStats(uniform(), '{"ok":20,"scaffold":0,"truncated":0,"empty":0,"upstream-error":0}');
+      const r = await run(argv, io);
+      expect(r.code).toBe(0);
+      expect(r.err).not.toContain('VIOLATED');
+      expect(r.out).toContain('darwin: no improvement found: 20 real mutations, all scored 0.765 (= baseline)');
+      expect(r.out).toContain('darwin bounds ok');
+    });
+
+    it('treats a missing shim summary as 0 real mutations', async () => {
+      const r = await run(argv, uniform());
+      expect(r.code).toBe(3);
+      expect(r.err).toContain('darwin: loom shim summary missing at /shim/stats.json — counted as 0 real mutations');
+      expect(r.err).toContain('0 real mutations: the mutator made no edit');
+    });
+
+    it('treats an unreadable shim summary as 0 real mutations', async () => {
+      const r = await run(argv, withStats(uniform(), 'not json'));
+      expect(r.code).toBe(3);
+      expect(r.err).toContain('loom shim summary unreadable');
+    });
+
+    it('exits 0 on a varied leaderboard', async () => {
+      const io = withStats(
+        mockIOWithExec(async () => ({ code: 0, stdout: DARWIN_LEADERBOARD_VARIED, stderr: '' })),
+        '{"ok":3}',
+      );
+      const r = await run(argv, io);
+      expect(r.code).toBe(0);
+      expect(r.out).not.toContain('no improvement found');
+    });
+  });
+
   it('still exits 0 for a live darwin run that respects the bounds', async () => {
     // Five in g2 is within the ADR-0005 bound, and the scores discriminate.
     const io = mockIOWithExec(async () => ({

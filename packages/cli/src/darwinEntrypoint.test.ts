@@ -122,7 +122,7 @@ describe('scripts/darwin-entrypoint.sh with the ruvllm mutator', () => {
   });
 
   /** Fake Loom: records request bodies; answers like the real one after `delayMs`. */
-  async function fakeLoom(delayMs: number) {
+  async function fakeLoom(delayMs: number, opts: { alwaysScaffold?: boolean } = {}) {
     const seen: Record<string, unknown>[] = [];
     loom = createServer(async (req, res) => {
       let body = '';
@@ -130,7 +130,7 @@ describe('scripts/darwin-entrypoint.sh with the ruvllm mutator', () => {
       const parsed = JSON.parse(body) as { loom_options?: { scaffold?: boolean } };
       seen.push(parsed);
       const content =
-        parsed.loom_options?.scaffold === false
+        parsed.loom_options?.scaffold === false && !opts.alwaysScaffold
           ? 'export const maxAttempts = 5;\n'
           : '_Served verbatim from the Ontology Loom (generation: x); no model generation was performed._';
       setTimeout(() => {
@@ -164,6 +164,49 @@ describe('scripts/darwin-entrypoint.sh with the ruvllm mutator', () => {
     expect(fake.seen).toHaveLength(1);
     expect(fake.seen[0]).toMatchObject({ model: 'qwen3.8-27B', loom_options: { scaffold: false } });
     expect(r.stderr).toMatch(/loom-shim: .*ok=1/);
+    expect(r.code).toBe(0);
+  });
+
+  // ADR-0007 amendment: a uniform leaderboard fails only an inert run, judged
+  // by the shim's count of real model edits.
+  it('(a) exits 3 on a uniform leaderboard when the shim saw 0 real mutations', async () => {
+    const fake = await fakeLoom(0, { alwaysScaffold: true });
+    const r = await runScriptAsync(
+      stub('--mutator', 'ruvllm', '--ruvllm-url', fake.url, '--call-mutator', '--leaderboard', LB_UNIFORM),
+    );
+    expect(fake.seen).toHaveLength(1);
+    expect(r.stderr).toMatch(/loom-shim: summary ok=0 scaffold=1/);
+    expect(r.stderr).toContain('0 real mutations: the mutator made no edit');
+    expect(r.code).toBe(3);
+  });
+
+  it('(b) exits 0 with a note on a uniform leaderboard after real mutations', async () => {
+    const fake = await fakeLoom(0);
+    const r = await runScriptAsync(
+      stub('--mutator', 'ruvllm', '--ruvllm-url', fake.url, '--call-mutator', '--leaderboard', LB_UNIFORM),
+    );
+    expect(r.stderr).not.toContain('VIOLATED');
+    expect(r.stdout).toContain('darwin: no improvement found: 1 real mutation, all scored 0.765 (= baseline)');
+    expect(r.code).toBe(0);
+  });
+
+  it('(c) exits 3 on a uniform leaderboard when the shim left no summary', async () => {
+    const fake = await fakeLoom(0);
+    const r = await runScriptAsync(
+      stub('--mutator', 'ruvllm', '--ruvllm-url', fake.url, '--leaderboard', LB_UNIFORM),
+    );
+    expect(fake.seen).toHaveLength(0);
+    expect(r.stderr).toContain('loom shim summary missing');
+    expect(r.code).toBe(3);
+  });
+
+  it('(d) exits 0 on a varied leaderboard', async () => {
+    const fake = await fakeLoom(0);
+    const r = await runScriptAsync(
+      stub('--mutator', 'ruvllm', '--ruvllm-url', fake.url, '--call-mutator', '--leaderboard', LB_FIVE),
+    );
+    expect(r.stdout).toContain('darwin bounds ok');
+    expect(r.stdout).not.toContain('no improvement found');
     expect(r.code).toBe(0);
   });
 

@@ -2,10 +2,12 @@
 /**
  * Run the darwin→Loom shim (ADR-0007) until SIGTERM/SIGINT.
  *
- *   node loomShimBin.js --upstream <loom-url> --url-file <path>
+ *   node loomShimBin.js --upstream <loom-url> --url-file <path> [--stats-file <path>]
  *
  * Writes the shim's base URL to --url-file once it is listening, logs one line
- * per mutator call on stderr, and prints a per-verdict summary on exit.
+ * per mutator call on stderr, and prints a per-verdict summary on exit. With
+ * --stats-file, the counts are also rewritten as JSON after every call, for
+ * `verify-entrypoint --shim-stats` (ADR-0007).
  * Environment: RUVLLM_TIMEOUT_MS (upstream timeout, default 30000, capped at
  * 280000) and LOOM_SHIM_MIN_MAX_TOKENS (max_tokens floor, default 8192).
  */
@@ -33,6 +35,7 @@ async function main(): Promise<void> {
   if (typeof upstream !== 'string' || typeof urlFile !== 'string') {
     throw new Error('usage: loomShimBin --upstream <loom-url> --url-file <path>');
   }
+  const statsFile = typeof flags['stats-file'] === 'string' ? flags['stats-file'] : undefined;
   const log = (line: string) => process.stderr.write(`${line}\n`);
   const shim = await startLoomShim({
     upstream,
@@ -43,6 +46,7 @@ async function main(): Promise<void> {
       'LOOM_SHIM_MIN_MAX_TOKENS',
     ),
     log,
+    statsFile,
   });
   log(`loom-shim: ${shim.url} -> ${upstream} (scaffold off)`);
   await writeFile(urlFile, shim.url, 'utf8');

@@ -192,6 +192,55 @@ describe('score uniformity', () => {
     expect(report.ok).toBe(true);
   });
 
+  // ADR-0007 amendment: with a shim count, uniformity fails only an inert run.
+  describe('with a real-mutation count (ruvllm mutator, ADR-0007)', () => {
+    it('fails a uniform leaderboard when the run made 0 real mutations', () => {
+      const report = checkDarwinBoundsFromStdout(LB_2026_09_07, 0, { realMutations: 0 });
+      expect(report.ok).toBe(false);
+      expect(report.violations).toEqual([
+        'score uniformity: all 9 mutants score 0.765, equal to baseline — 0 real mutations: the mutator made no edit',
+      ]);
+      expect(report.note).toBe('');
+    });
+
+    it('passes a uniform leaderboard with a note when real mutations were made', () => {
+      const report = checkDarwinBoundsFromStdout(LB_2026_09_07, 0, { realMutations: 20 });
+      expect(report.ok).toBe(true);
+      expect(report.violations).toEqual([]);
+      expect(report.note).toBe('no improvement found: 20 real mutations, all scored 0.765 (= baseline)');
+    });
+
+    it('says "mutation" for one, and names a differing baseline', () => {
+      const lb = [
+        '  0.700  baseline  [planner]  safety=1.00  pass=0.50',
+        '  0.900  g1_v0  [planner]  safety=1.00  pass=0.80',
+        '  0.900  g1_v1  [reviewer]  safety=1.00  pass=0.80',
+      ].join('\n');
+      const report = checkDarwinBoundsFromStdout(lb, 0, { realMutations: 1 });
+      expect(report.ok).toBe(true);
+      expect(report.note).toBe('no improvement found: 1 real mutation, all scored 0.9 (baseline 0.7)');
+    });
+
+    it('leaves a varied leaderboard clean and note-free whatever the count', () => {
+      const lb = LB_2026_09_07.replace(
+        '  0.765  g2_v2  [contextBuilder]  safety=1.00  pass=0.60',
+        '  0.875  g2_v2  [contextBuilder]  safety=1.00  pass=0.80',
+      );
+      for (const realMutations of [0, 3]) {
+        const report = checkDarwinBoundsFromStdout(lb, 0, { realMutations });
+        expect(report.ok).toBe(true);
+        expect(report.note).toBe('');
+      }
+    });
+
+    it('still enforces the generation bounds alongside a real-mutation pass', () => {
+      const lb = `${LB_2026_09_07}\n  0.765  g2_v5  [planner]  safety=1.00  pass=0.60`;
+      const report = checkDarwinBoundsFromStdout(lb, 0, { realMutations: 4 });
+      expect(report.ok).toBe(false);
+      expect(report.violations.some((v) => v.startsWith('g2 candidates='))).toBe(true);
+    });
+  });
+
   it('ignores hand-built rows with no score', () => {
     const rows = [0, 1, 2].map((v) => ({ id: `g1_v${v}`, generation: 1 }));
     const r = checkDarwinScoreUniformity(rows);
