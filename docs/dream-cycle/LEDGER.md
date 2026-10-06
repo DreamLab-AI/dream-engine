@@ -41,3 +41,4 @@
 | 2026-10-04 | developer-experience | VETOED: Given `escapeCell` renders a literal pipe in a cell as `\` (`packages/le | NONE | https://github.com/DreamLab-AI/dream-engine/pull/22 | yes | ACCEPT |  | c35da17fd617 |  |  |  |
 | 2026-10-04 | developer-experience | validateConfig now rejects a malformed adrConvention (5816164) | NONE | PERSIST-LOCAL | yes | ACCEPT |  | bd972b37f37a |  |  |  |
 | 2026-10-05 | compiler-parity | VETOED: VETOED: Updated maxCandidatesPerGeneration bound to 5 to match darwin@0. | NONE | NONE | yes | BLOCKED-ENV |  | e3bbab427018 |  |  |  |
+| 2026-10-06 | ledger-signals | VETOED: Updated maxCandidatesPerGeneration bound to 5 to match darwin@0.10.2 out | NONE | https://github.com/DreamLab-AI/dream-engine/pull/23 | yes | ACCEPT |  | 3e348c630519 |  |  |  |
