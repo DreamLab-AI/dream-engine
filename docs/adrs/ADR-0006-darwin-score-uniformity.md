@@ -1,6 +1,6 @@
 # ADR-0006: A darwin leaderboard where every mutant scores the same fails the darwin evaluator
 
-- **Status**: Accepted — extends ADR-0005
+- **Status**: Accepted, amended by ADR-0007 §3b — extends ADR-0005. With the ruvllm mutator, uniformity fails only a run with zero real mutations; the diagnosis in §1 is corrected by ADR-0007
 - **Date**: 2026-10-06
 - **Related**: ADR-0005 (darwin entrypoint fails on a bound breach), ADR-0003 (darwin bound guard), ADR-0002 (entrypoint liveness)
 - **Deciders**: operator, 2026-10-06 ("wire it in properly")

@@ -12,8 +12,8 @@ Alternatives Considered → Test Contract → References.
 | [ADR-0003](./ADR-0003-darwin-bound-guard.md) | Darwin generation/candidate bounds are machine-checked as a fail-visible diagnostic, not a gate veto | Accepted (amended by ADR-0005) |
 | [ADR-0004](./ADR-0004-ledger-verdict-vocabulary.md) | Ledger rows that are not nights carry their own verdict tokens | Accepted |
 | [ADR-0005](./ADR-0005-darwin-bound-five.md) | Darwin's per-generation bound is five, and the darwin entrypoint fails on a bound breach | Accepted (amends ADR-0003) |
-| [ADR-0006](./ADR-0006-darwin-score-uniformity.md) | A darwin leaderboard where every mutant scores the same fails the darwin evaluator | Accepted (extends ADR-0005) |
-| [ADR-0007](./ADR-0007-darwin-mutator-loom-shim.md) | darwin's ruvllm mutator reaches the model through a loopback Loom shim | Accepted (corrects ADR-0006 §1 diagnosis) |
+| [ADR-0006](./ADR-0006-darwin-score-uniformity.md) | A darwin leaderboard where every mutant scores the same fails the darwin evaluator | Accepted (extends ADR-0005; amended by ADR-0007) |
+| [ADR-0007](./ADR-0007-darwin-mutator-loom-shim.md) | darwin's ruvllm mutator reaches the model through a loopback Loom shim | Accepted (corrects ADR-0006 §1; amends its rule: fail only on zero real mutations) |
 
 ## How to amend
 
