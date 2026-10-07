@@ -202,4 +202,14 @@ describe('self-hosted config (DreamLab-AI/dream-engine fork)', () => {
     expect(pins).toHaveLength(mentions.length);
     expect(new Set(pins).size).toBe(1);
   });
+
+  // ADR-0005 lever E wiring: the darwin evaluator must run through the
+  // checked-in entrypoint script, which wraps the run in verify-entrypoint
+  // (bounds, ADR-0006/0007 uniformity) and the loom shim. The pin test above
+  // catches an unpin; nothing else catches unwrapping the pinned command.
+  it('routes the darwin evaluator through scripts/darwin-entrypoint.sh', () => {
+    const prompt = compile(selfConfig);
+    expect(prompt).toContain('./scripts/darwin-entrypoint.sh npx @metaharness/darwin@');
+    expect(prompt).toContain('--sandbox mock');
+  });
 });
