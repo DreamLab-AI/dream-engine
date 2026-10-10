@@ -45,3 +45,4 @@
 | 2026-10-07 | evaluation-adapters | New bench test pins darwin evaluator to scripts/darwin-entrypoint.sh wrapper | NONE | https://github.com/DreamLab-AI/dream-engine/pull/27 | yes | ACCEPT |  | fd7a41d5a3c1 |  |  |  |
 | 2026-10-08 | security-adversarial | pre-pin npx flags bypassed the darwin pin; wrapper now refuses them | NONE | https://github.com/DreamLab-AI/dream-engine/pull/28 | yes | ACCEPT |  | 0fa10caa4075 |  |  |  |
 | 2026-10-09 | developer-experience | VETOED: TUI stats undercounted non-night verdict rows; now sums via gray other… | NONE | NONE | yes | BLOCKED-ENV |  | c9092e8520a7 |  |  |  |
+| 2026-10-10 | compiler-parity | VETOED: validateConfig errors on malformed slots/scans/bonusModuli names (was… | NONE | NONE | yes | BLOCKED-ENV |  | 2ff1e4effe60 |  |  |  |
