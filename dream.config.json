@@ -1,0 +1,33 @@
+{
+  "repo": "DreamLab-AI/dream-engine",
+  "cron": "0 9 * * *",
+  "slots": [
+    { "deep": "ledger-signals", "scan": ["crates/dream-core/src/ledger", "crates/dream-core/src/streak.rs"] },
+    { "deep": "evaluator-adapters", "scan": ["crates/dream-core/src/testfmt.rs", "crates/dream-core/src/runner.rs"] },
+    { "deep": "source-and-context", "scan": ["crates/dream-core/src/source.rs", "crates/dream-core/src/context.rs"] },
+    { "deep": "developer-experience", "scan": ["crates/dream-cli", "docs"] }
+  ],
+  "evaluatorEntrypoints": {
+    "tests": "cargo test --workspace --locked",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "fmt": "cargo fmt --all --check",
+    "doc": "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace",
+    "deny": "cargo deny check",
+    "parity": { "cmd": "cargo test -p dream-core --test ts_parity --locked", "required": true, "timeoutSecs": 900, "testFormat": "libtest" }
+  },
+  "adrConvention": { "pad": 3, "dir": "docs/adr" },
+  "ledgerPath": "docs/dream-cycle/LEDGER.md",
+  "branchPrefix": "dream/",
+  "labels": ["dream-cycle"],
+  "autoMerge": false,
+  "protected": [
+    "tests/heldout/**",
+    "crates/dream-core/tests/**",
+    "crates/dream-gate/**",
+    "crates/pairwise-gate/**",
+    "crates/failure-fingerprint/**",
+    "deny.toml",
+    ".github/**",
+    "Cargo.lock"
+  ]
+}
