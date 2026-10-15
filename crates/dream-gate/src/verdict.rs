@@ -344,7 +344,7 @@ fn after_colon(line: &str) -> &str {
 ///    a row dated `night_date`, bare or wrapped in backticks — when it
 ///    satisfies the row contract;
 /// 1. a contract-satisfying `Finding:` line;
-/// 2. the [`select_finding`] heuristics (frozen hypothesis, `Main lesson:`,
+/// 2. the `select_finding` heuristics (frozen hypothesis, `Main lesson:`,
 ///    `Finding:`, the INCONCLUSIVE fallback, the first prose line).
 ///
 /// The chosen text is whitespace-collapsed, stripped of `|`, and truncated to
@@ -510,7 +510,7 @@ fn report_ledger_row_finding(report: &str, night_date: &str) -> Option<String> {
 /// The same finding selection as [`sanitise_finding`], without the 80-char
 /// ledger-cell cap. Used for RuVector memory rows and PR bodies, where the
 /// audit trail should carry the whole hypothesis (bounded at
-/// [`FINDING_FULL_MAX`] chars).
+/// `FINDING_FULL_MAX` chars).
 pub fn sanitise_finding_full(report: &str, verdict: Verdict) -> String {
     select_finding(report, verdict)
         .chars()
