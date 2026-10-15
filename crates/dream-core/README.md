@@ -46,7 +46,8 @@ declare a format only where the full output reaches the parser.
 receipts, report, config, patch, per-test evidence and decision in a stable
 schema; `replay::verify(run_dir)` recomputes the verdict from those files and
 reports any difference, including a receipt whose typed outcome contradicts its
-own exit status. There is no historical corpus: only nights captured after the
+own exit status. It shows that the stored inputs and decision agree, not that
+they are untampered: only the report and the config are digest-bound. There is no historical corpus: only nights captured after the
 host adopts this module are replayable.
 
 ## Licence

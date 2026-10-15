@@ -5,7 +5,7 @@
 //! **Is the harness stuck?** Environment failures (the gate's *harness*-class
 //! vetoes: an evaluator that never ran, timed out, was blocked or silent) are
 //! fingerprinted with [`failure_fingerprint`] and carried from night to night in
-//! a per-repo [`Manifest`] ([`failures_path`]). A `BLOCKED-ENV` night whose
+//! a per-repo [`Manifest`] ([`failures_path`], one file per repo in the shared state directory). A `BLOCKED-ENV` night whose
 //! failures are exactly the failures of the night before (at least one, none
 //! new, none fixed) raises [`Notice::HarnessStuck`]: the candidate is not at
 //! fault and no amount of further nights will change that without a human.
@@ -83,26 +83,43 @@ pub fn advance_failures(prev: &Manifest, verdict: &str, vetoes: &[Veto]) -> Stre
     }
 }
 
-/// Where a repo's failure manifest lives: `failures.json` in the repo's state
-/// directory, the parent of the per-night run directories that hold each
-/// night's `run-state.json` ([`crate::runstate`]).
-pub fn failures_path(repo_state_dir: &Path) -> PathBuf {
-    repo_state_dir.join("failures.json")
+/// Where a repo's failure manifest lives: `failures-<repo>-<hash>.json` in
+/// `state_dir`, the directory that holds the per-night run directories (which
+/// hold each night's `run-state.json`, [`crate::runstate`]).
+///
+/// That directory is shared by every repo, and the roster alternates between
+/// repos, so the file is keyed by repo: a sanitised copy of the name for the
+/// eye, plus eight hex characters of its digest so that `o/a` and `o_a` stay
+/// distinct. The result never leaves `state_dir`.
+pub fn failures_path(state_dir: &Path, repo: &str) -> PathBuf {
+    let slug: String = repo
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(48)
+        .collect();
+    let tag = &dream_gate::manifest::digest(repo.as_bytes())[..8];
+    state_dir.join(format!("failures-{slug}-{tag}.json"))
 }
 
-/// Load the repo's manifest, advance it with tonight's vetoes and write it
-/// back atomically.
+/// Load `repo`'s manifest from `state_dir`, advance it with tonight's vetoes
+/// and write it back atomically.
 ///
 /// A missing file starts afresh; a corrupt one also starts afresh, with a
 /// warning, rather than wedging the night: the worst case is one missed
 /// stall notice.
 pub fn record_night(
-    repo_state_dir: &Path,
+    state_dir: &Path,
     repo: &str,
     verdict: &str,
     vetoes: &[Veto],
 ) -> std::io::Result<StreakUpdate> {
-    let path = failures_path(repo_state_dir);
+    let path = failures_path(state_dir, repo);
     let prev = match std::fs::read_to_string(&path) {
         Ok(text) => Manifest::from_json(&text).unwrap_or_else(|e| {
             warn!(repo, error = %e, "failure manifest unreadable — starting afresh");
@@ -246,7 +263,7 @@ mod tests {
         let v = [harness("tests", "boom")];
         let u1 = record_night(d.path(), "alpha", "BLOCKED-ENV", &v).unwrap();
         assert!(!u1.stuck);
-        assert!(failures_path(d.path()).exists());
+        assert!(failures_path(d.path(), "alpha").exists());
         let u2 = record_night(d.path(), "alpha", "BLOCKED-ENV", &v).unwrap();
         assert!(u2.stuck);
         assert_eq!(u2.manifest.step, 2, "step counts recorded nights");
@@ -258,10 +275,50 @@ mod tests {
                 .stuck
         );
         // Corrupt file: start afresh rather than wedge the night.
-        std::fs::write(failures_path(d.path()), "{ not json").unwrap();
+        std::fs::write(failures_path(d.path(), "alpha"), "{ not json").unwrap();
         let u3 = record_night(d.path(), "alpha", "BLOCKED-ENV", &v).unwrap();
         assert!(!u3.stuck);
         assert_eq!(u3.manifest.step, 1);
+    }
+
+    #[test]
+    fn repos_sharing_one_state_directory_do_not_disturb_each_other() {
+        // The artefact directory is shared by every repo, and the roster
+        // alternates between them: beta's nights in between must not mark
+        // alpha's faults fixed, nor advance alpha's step counter.
+        let d = tempfile::tempdir().unwrap();
+        let va = [harness("tests", "alpha is broken")];
+        let vb = [harness("tests", "beta is broken")];
+        assert!(
+            !record_night(d.path(), "alpha", "BLOCKED-ENV", &va)
+                .unwrap()
+                .stuck
+        );
+        assert!(
+            !record_night(d.path(), "beta", "BLOCKED-ENV", &vb)
+                .unwrap()
+                .stuck
+        );
+        let a2 = record_night(d.path(), "alpha", "BLOCKED-ENV", &va).unwrap();
+        assert!(a2.stuck, "{:?}", a2.classification);
+        assert_eq!(a2.manifest.step, 2);
+        let b2 = record_night(d.path(), "beta", "BLOCKED-ENV", &vb).unwrap();
+        assert!(b2.stuck);
+        assert_ne!(
+            failures_path(d.path(), "alpha"),
+            failures_path(d.path(), "beta")
+        );
+        // Names that differ only in characters the file name cannot carry
+        // still get distinct files.
+        assert_ne!(
+            failures_path(d.path(), "o/a"),
+            failures_path(d.path(), "o_a")
+        );
+        assert_eq!(
+            failures_path(d.path(), "o/a").parent(),
+            Some(d.path()),
+            "never escapes the directory"
+        );
     }
 
     #[test]

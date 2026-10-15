@@ -42,6 +42,7 @@ use std::collections::HashMap;
 use dream_gate::config::TestFormat;
 use dream_gate::outcome::ExecOutcome;
 use dream_gate::pertest::{TestCase, TestOutcomes, TestStatus};
+use dream_gate::receipts::{EvaluatorOutcome, EvaluatorReceipt};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use serde::Deserialize;
@@ -57,6 +58,9 @@ pub enum TestFmtError {
     #[error("malformed {0}")]
     Malformed(String),
 }
+
+/// The detail `classify` gives a run that produced no exit status.
+const NO_EXIT_STATUS: &str = "process produced no exit status";
 
 /// Longest cause kept per failed test.
 const CAUSE_CAP: usize = 2000;
@@ -540,6 +544,47 @@ pub fn outcomes(
     })
 }
 
+/// Rebuild the raw execution a receipt recorded, including the transport and
+/// timeout facts that live inside its typed outcome.
+///
+/// [`classify`](dream_gate::receipts::classify) of the result gives back
+/// `receipt.outcome` for every receipt built by
+/// [`EvaluatorReceipt::from_exec`](dream_gate::receipts::EvaluatorReceipt::from_exec).
+pub fn exec_from_receipt(r: &EvaluatorReceipt) -> ExecOutcome {
+    ExecOutcome {
+        exit_code: r.exit_code,
+        stdout: r.stdout.clone(),
+        stderr: r.stderr.clone(),
+        duration_ms: r.duration_ms,
+        transport_error: match &r.outcome {
+            EvaluatorOutcome::Blocked { detail } if detail != NO_EXIT_STATUS => {
+                Some(detail.clone())
+            }
+            _ => None,
+        },
+        timed_out: matches!(r.outcome, EvaluatorOutcome::TimedOut { .. }),
+        started_at: r.started_at.clone(),
+    }
+}
+
+/// [`outcomes`] for the receipts [`crate::candidate`] and the baseline run
+/// already produced, so a host need not rebuild executions itself.
+pub fn outcomes_from_receipts(
+    format: TestFormat,
+    baseline: &EvaluatorReceipt,
+    candidate: &EvaluatorReceipt,
+    baseline_root: Option<&str>,
+    candidate_root: Option<&str>,
+) -> Option<TestOutcomes> {
+    outcomes(
+        format,
+        &exec_from_receipt(baseline),
+        &exec_from_receipt(candidate),
+        baseline_root,
+        candidate_root,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -805,6 +850,32 @@ trace line 2</error></testcase>
             None
         )
         .is_none());
+    }
+
+    #[test]
+    fn receipts_carry_everything_outcomes_needs() {
+        use dream_gate::receipts::{EvaluatorReceipt, Phase};
+        let r = |phase, e: ExecOutcome| {
+            EvaluatorReceipt::from_exec("unit", "cargo test 2>&1", phase, true, 60, e)
+        };
+        let base = r(Phase::Baseline, exec(LIBTEST_PASS));
+        let mut cand_exec = exec(LIBTEST_FAIL);
+        cand_exec.exit_code = Some(101);
+        let cand = r(Phase::Candidate, cand_exec);
+        let o = outcomes_from_receipts(TestFormat::Libtest, &base, &cand, None, None).unwrap();
+        assert_eq!((o.baseline.len(), o.candidate.len()), (4, 5));
+        // A blocked or timed-out receipt declines, exactly as the raw
+        // execution would.
+        let blocked = r(Phase::Candidate, ExecOutcome::blocked("no route"));
+        assert!(outcomes_from_receipts(TestFormat::Libtest, &base, &blocked, None, None).is_none());
+        let mut t = exec(LIBTEST_FAIL);
+        t.timed_out = true;
+        let timed = r(Phase::Candidate, t);
+        assert!(outcomes_from_receipts(TestFormat::Libtest, &base, &timed, None, None).is_none());
+        // The reconstruction round-trips the typed outcome.
+        let e = exec_from_receipt(&blocked);
+        assert_eq!(e.transport_error.as_deref(), Some("no route"));
+        assert!(exec_from_receipt(&timed).timed_out);
     }
 
     #[test]

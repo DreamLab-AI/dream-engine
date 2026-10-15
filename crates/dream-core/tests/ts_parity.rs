@@ -365,7 +365,9 @@ fn the_ts_witness_test_vector() {
     assert!(!dream_gate::witness::verify(REPORT, &"a".repeat(40), witness).unwrap());
     // Bad commits are errors, not quiet falses.
     assert!(dream_gate::witness::witness(REPORT, "nothex!!").is_err());
-    // Second published vector from the TS tests' style: short commit, 'x' body.
+    // Two further vectors computed with `python3 -I` (not taken from the TS
+    // tests): a short commit with body "x", and the TS test's body
+    // "genuine report bytes" with the TS test's commit.
     assert_eq!(
         dream_gate::witness::witness("x", "68402755f017e0df").unwrap(),
         "1ff0eb78f684404aef72b98f87247edbe4b819e23aa1860a71e729ecf2a6fec1"

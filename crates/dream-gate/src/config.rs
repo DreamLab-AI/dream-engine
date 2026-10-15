@@ -273,9 +273,9 @@ fn default_evaluator_timeout() -> u64 {
 
 /// A repository's evolution configuration document (`dream.config.json`).
 ///
-/// String fields that other layers must default (`cron`, `adr_convention`,
-/// `ledger_path`, `branch_prefix`) are **empty when absent**: this crate has no
-/// opinion about them.
+/// Fields that other layers must default (`cron`, `ledger_path`,
+/// `branch_prefix`) are **empty when absent**, and `adr_convention` is
+/// [`AdrConvention::Unset`]: this crate has no opinion about them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DreamConfig {

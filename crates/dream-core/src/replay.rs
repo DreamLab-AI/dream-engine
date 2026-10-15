@@ -1,11 +1,21 @@
 //! Forward-looking replay: capture a night's gate inputs, re-run the pure gate.
 //!
 //! Every judgement [`dream_gate::gate::decide`] makes is a pure function of its
-//! inputs. This module persists those inputs for each night in a stable on-disk
-//! schema, and [`verify`] recomputes the verdict from them and diffs it against
-//! the verdict that was recorded. Nothing is trusted from the recorded
-//! `decision.json`: a tampered receipt, report, config or decision shows up as a
-//! mismatch or a refusal.
+//! inputs. This module persists those inputs for each night in a stable
+//! on-disk schema, and [`verify`] recomputes the verdict from them and diffs it
+//! against the verdict that was recorded. The recorded `decision.json` is never
+//! trusted: `verify` re-judges from the stored report, receipts, candidate
+//! state, config and per-test evidence.
+//!
+//! **What this is not: tamper evidence.** `verify` shows that the stored inputs
+//! and the stored decision agree with one another, that each receipt's typed
+//! outcome agrees with its own exit status and streams, that `report.md`
+//! matches its recorded digest, and that the config is the document the
+//! manifest froze. Someone who edits a receipt's exit status, outcome and
+//! streams together with `decision.json` defeats it, since only the report and
+//! the config are digest-bound. Use it to find accidents and drift, and to
+//! reproduce a verdict; for tamper evidence, bind the run directory with a
+//! witness ([`dream_gate::witness`]) or sign it elsewhere.
 //!
 //! **No historical corpus exists.** Replay covers nights captured from the day
 //! this module is wired in; earlier nights were never recorded in this shape and
@@ -53,7 +63,6 @@ use std::path::Path;
 use dream_gate::gate::{self, CandidateState, GateContext, GateDecision};
 use dream_gate::guard::{self, GuardViolation, PolicyError, ProtectedPolicy};
 use dream_gate::manifest::{self, digest, write_atomic, ExperimentManifest};
-use dream_gate::outcome::ExecOutcome;
 use dream_gate::pertest::{PairwiseOptions, TestOutcomes};
 use dream_gate::receipts::{self, classify, EvaluatorOutcome, EvaluatorReceipt, Phase};
 use dream_gate::verdict::parse_verdict_strict;
@@ -230,8 +239,20 @@ pub fn capture(run_dir: &Path, inputs: &NightInputs) -> Result<GateDecision, Rep
         manifest::ManifestError::Io(e) => ReplayError::Io(e),
         other => ReplayError::Io(std::io::Error::other(other.to_string())),
     })?;
-    receipts::persist(run_dir, Phase::Baseline, &inputs.baseline_receipts)?;
-    receipts::persist(run_dir, Phase::Candidate, &inputs.candidate_receipts)?;
+    // A restarted night may have fewer receipts than the attempt before it,
+    // and `receipts::load` reads every file in the phase directory: clear
+    // each phase first so no stale receipt is judged.
+    for (phase, set) in [
+        (Phase::Baseline, &inputs.baseline_receipts),
+        (Phase::Candidate, &inputs.candidate_receipts),
+    ] {
+        let dir = run_dir.join("receipts").join(phase.as_str());
+        match std::fs::remove_dir_all(&dir) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
+        }
+        receipts::persist(run_dir, phase, set)?;
+    }
     write_atomic(&run_dir.join("report.md"), inputs.report.as_bytes())?;
     write_atomic(&run_dir.join("config.json"), &inputs.config_bytes)?;
     let patch = match &inputs.candidate {
@@ -343,19 +364,7 @@ fn receipt_inconsistency(r: &EvaluatorReceipt) -> Option<String> {
     if r.outcome == EvaluatorOutcome::Missing {
         return None;
     }
-    let no_status = "process produced no exit status";
-    let exec = ExecOutcome {
-        exit_code: r.exit_code,
-        stdout: r.stdout.clone(),
-        stderr: r.stderr.clone(),
-        duration_ms: r.duration_ms,
-        transport_error: match &r.outcome {
-            EvaluatorOutcome::Blocked { detail } if detail != no_status => Some(detail.clone()),
-            _ => None,
-        },
-        timed_out: matches!(r.outcome, EvaluatorOutcome::TimedOut { .. }),
-        started_at: r.started_at.clone(),
-    };
+    let exec = crate::testfmt::exec_from_receipt(r);
     let again = classify(&exec, r.timeout_secs);
     (again != r.outcome).then(|| {
         format!(
@@ -748,6 +757,24 @@ mod tests {
         let b = capture(dir.path(), &n).unwrap();
         assert_eq!(a, b);
         assert!(verify(dir.path()).unwrap().matches);
+    }
+
+    #[test]
+    fn a_restarted_night_with_fewer_receipts_leaves_no_stale_ones_behind() {
+        let (_, first) = nights().remove(0); // ACCEPT with a candidate receipt
+        let dir = tempfile::tempdir().unwrap();
+        capture(dir.path(), &first).unwrap();
+        assert!(dir.path().join("receipts/candidate/check.json").exists());
+        // The night restarts and this time ends with no patch, so no
+        // candidate receipts exist.
+        let (_, mut second) = nights().remove(2);
+        second.candidate_receipts.clear();
+        let d = capture(dir.path(), &second).unwrap();
+        assert_eq!(d.verdict, "INCONCLUSIVE");
+        assert!(!dir.path().join("receipts/candidate/check.json").exists());
+        let v = verify(dir.path()).unwrap();
+        assert!(v.matches, "{:?}", v.diffs);
+        assert!(!dir.path().join("candidate.patch").exists());
     }
 
     #[test]
