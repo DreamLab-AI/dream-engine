@@ -6,7 +6,7 @@
 //! module applies that diff on an isolated `git worktree` at a chosen base
 //! (never touching the operator's working tree) on a namespaced
 //! `dream/<deep>-<date>` branch. Publishing is a separate, network-touching
-//! step behind the [`Forge`](crate::seams::Forge) seam, so the
+//! step behind the [`Forge`] seam, so the
 //! commit-building logic stays unit-testable offline. The merge stays human:
 //! evaluation is not promotion.
 

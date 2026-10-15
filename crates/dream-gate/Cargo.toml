@@ -7,6 +7,8 @@ description = "Deterministic, pure acceptance gate for model-written patches: fr
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
+# reads fixtures that live at the workspace root, outside the package
+exclude = ["tests/repo_config.rs"]
 keywords = ["gate", "patch", "verdict", "self-improvement", "evaluation"]
 categories = ["development-tools", "development-tools::testing"]
 authors.workspace = true

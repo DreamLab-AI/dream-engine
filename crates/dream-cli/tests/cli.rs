@@ -19,9 +19,8 @@ fn err(o: &Output) -> String {
 fn p(path: &Path) -> &str {
     path.to_str().unwrap()
 }
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+const HEADER: &str = "| Date | Deep | Finding | Issue | PR | Evaluated? | Verdict | Effect | Witness | Prior-night fates |\n|---|---|---|---|---|---|---|---|---|---|\n";
+const GOOD_ROW: &str = "| 2026-08-13 | d | f | - | - | yes | ACCEPT | e | abc1234 | - |\n";
 fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
     let f = dir.join(name);
     std::fs::write(&f, body).unwrap();
@@ -32,8 +31,9 @@ const GOOD_CFG: &str =
     r#"{"repo":"o/r","slots":[{"deep":"d","scan":["src"]}],"protected":["secret/**"]}"#;
 
 #[test]
-fn validate_accepts_this_repos_config() {
-    let cfg = repo_root().join("dream.config.json");
+fn validate_accepts_a_good_config() {
+    let d = tempfile::tempdir().unwrap();
+    let cfg = write(d.path(), "dream.config.json", GOOD_CFG);
     let o = dream(&["validate", "--config", p(&cfg)]);
     assert!(o.status.success(), "{}", err(&o));
     assert!(out(&o).contains("ok"));
@@ -59,8 +59,9 @@ fn validate_reports_a_missing_file() {
 }
 
 #[test]
-fn ledger_verify_passes_the_fork_ledger_and_fails_a_bad_row() {
-    let ledger = repo_root().join("tests/heldout/ts-parity/fork-LEDGER.md");
+fn ledger_verify_passes_a_good_ledger_and_fails_a_bad_row() {
+    let d0 = tempfile::tempdir().unwrap();
+    let ledger = write(d0.path(), "L.md", &format!("{HEADER}{GOOD_ROW}"));
     let o = dream(&["ledger", "verify", p(&ledger)]);
     assert!(o.status.success(), "{}{}", out(&o), err(&o));
 

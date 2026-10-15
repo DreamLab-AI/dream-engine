@@ -3,8 +3,8 @@ id: ADR-DE-006
 title: Automerge is an option, default off; the human-merged draft pull request is the default
 date: 2026-10-15
 decision_status: accepted
-implementation_status: planned
-activation_status: staged
+implementation_status: implemented
+activation_status: default-off
 supersedes: []
 owner: jjohare
 review_trigger: a repository that wants automerge and has no required status checks, or evidence that human review is not catching accepted-but-wrong patches
@@ -34,4 +34,4 @@ Human merge stays the default path. Automerge is a field in the protected
 
 A repository that wants unattended merges has to opt in and has to have branch
 protection first. Everyone else gets a draft pull request each morning. Both
-the field and its checks are planned.
+the field and its checks are implemented in `dream_core::automerge` and `dream_core::persist::publish`.

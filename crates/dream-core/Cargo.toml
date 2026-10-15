@@ -7,6 +7,8 @@ description = "The nightly evidence-gated evolution loop around dream-gate: eval
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
+# reads fixtures that live at the workspace root, outside the package
+exclude = ["tests/ts_parity.rs"]
 keywords = ["self-improvement", "ledger", "evaluation", "worktree", "gate"]
 categories = ["development-tools", "development-tools::testing"]
 authors.workspace = true
