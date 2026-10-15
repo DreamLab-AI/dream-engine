@@ -178,6 +178,59 @@ pub fn complete_receipts(
     out
 }
 
+/// Complete and **validate** the receipt set for `phase` against the frozen
+/// manifest, trusting nothing the receipts say about themselves.
+///
+/// The manifest alone decides which evaluators are required and what their
+/// command is. For each required, applicable evaluator exactly one receipt is
+/// accepted, and only if it names that evaluator, carries the frozen command
+/// digest (both in its `command_digest` field and recomputed from its
+/// `command` text) and says `required`. Anything else — no receipt, a receipt
+/// for a different command, one that downgrades itself to advisory, or
+/// duplicates — is replaced by an [`EvaluatorOutcome::Missing`] receipt, which
+/// the gate vetoes as a harness fault naming the evaluator. Receipts for other
+/// names are kept but forced advisory (`required = false`): a receipt cannot
+/// promote itself into the veto set either.
+///
+/// [`decide`] and [`environment_vetoes`] use this; [`complete_receipts`]
+/// remains for callers that hold only identities.
+pub fn validated_receipts(
+    manifest: &ExperimentManifest,
+    receipts: &[EvaluatorReceipt],
+    phase: Phase,
+) -> Vec<EvaluatorReceipt> {
+    let required = manifest.required();
+    let mut out: Vec<EvaluatorReceipt> = receipts
+        .iter()
+        .filter(|r| r.phase == phase && !required.iter().any(|id| id.name == r.name))
+        .map(|r| {
+            let mut r = r.clone();
+            r.required = false;
+            r
+        })
+        .collect();
+    for id in required {
+        let mut named = receipts
+            .iter()
+            .filter(|r| r.phase == phase && r.name == id.name);
+        let accepted = match (named.next(), named.next()) {
+            (Some(r), None)
+                if r.required
+                    && r.command_digest == id.command_digest
+                    && crate::manifest::digest(r.command.as_bytes()) == id.command_digest =>
+            {
+                Some(r.clone())
+            }
+            _ => None,
+        };
+        out.push(accepted.unwrap_or_else(|| {
+            EvaluatorReceipt::missing(&id.name, &id.command, phase, true)
+        }));
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
 /// The environment pre-check on the **baseline** receipts.
 ///
 /// A baseline evaluator is allowed to fail — that failure is often the very
@@ -188,8 +241,7 @@ pub fn environment_vetoes(
     manifest: &ExperimentManifest,
     baseline: &[EvaluatorReceipt],
 ) -> Vec<Veto> {
-    let required = manifest.required();
-    complete_receipts(&required, baseline, Phase::Baseline)
+    validated_receipts(manifest, baseline, Phase::Baseline)
         .iter()
         .filter(|r| r.required && r.outcome.is_harness_fault())
         .filter_map(|r| veto_for(&r.name, &r.outcome))
@@ -333,7 +385,7 @@ pub fn decide(
     ctx: &GateContext<'_>,
 ) -> GateDecision {
     let required = manifest.required();
-    let completed = complete_receipts(&required, candidate_receipts, Phase::Candidate);
+    let completed = validated_receipts(manifest, candidate_receipts, Phase::Candidate);
     let required_outcomes: Vec<(String, String)> = completed
         .iter()
         .filter(|r| r.required)
@@ -811,6 +863,80 @@ mod tests {
             &Ok(Verdict::Accept),
             &applied(),
             &[receipt("tests", Phase::Candidate, 0, "ok")],
+        );
+        assert!(d.accepted, "{}", d.summary);
+    }
+
+    // ------------------------------------------------------------------
+    // Receipt-controlled metadata must not decide what is required (audit F2).
+    // ------------------------------------------------------------------
+
+    fn assert_harness_veto_for(d: &GateDecision, name: &str) {
+        assert!(!d.accepted, "{}", d.summary);
+        assert_eq!(d.verdict, "BLOCKED-ENV", "{}", d.summary);
+        assert!(
+            d.vetoes
+                .iter()
+                .any(|v| v.class == VetoClass::Harness && v.subject == name),
+            "{:?}",
+            d.vetoes
+        );
+    }
+
+    #[test]
+    fn a_receipt_that_downgrades_a_required_evaluator_is_forged() {
+        let m = manifest(vec![ident("tests", true)]);
+        let mut forged = receipt("tests", Phase::Candidate, 1, "3 failed");
+        forged.required = false;
+        let d = decide(&m, &Ok(Verdict::Accept), &applied(), &[forged]);
+        assert_harness_veto_for(&d, "tests");
+    }
+
+    #[test]
+    fn a_receipt_with_the_wrong_command_digest_is_forged() {
+        let m = manifest(vec![ident("tests", true)]);
+        let mut forged = receipt("tests", Phase::Candidate, 0, "42 passed");
+        forged.command = "true".into();
+        forged.command_digest = digest(b"true");
+        let d = decide(&m, &Ok(Verdict::Accept), &applied(), &[forged]);
+        assert_harness_veto_for(&d, "tests");
+    }
+
+    #[test]
+    fn a_receipt_whose_digest_field_lies_about_its_command_is_forged() {
+        let m = manifest(vec![ident("tests", true)]);
+        let mut forged = receipt("tests", Phase::Candidate, 0, "42 passed");
+        forged.command = "true".into(); // digest field still the frozen one
+        let d = decide(&m, &Ok(Verdict::Accept), &applied(), &[forged]);
+        assert_harness_veto_for(&d, "tests");
+    }
+
+    #[test]
+    fn duplicate_receipts_for_one_evaluator_are_forged() {
+        let m = manifest(vec![ident("tests", true)]);
+        let good = receipt("tests", Phase::Candidate, 0, "42 passed");
+        let dup = receipt("tests", Phase::Candidate, 1, "boom");
+        let d = decide(&m, &Ok(Verdict::Accept), &applied(), &[good, dup]);
+        assert_harness_veto_for(&d, "tests");
+    }
+
+    #[test]
+    fn a_forged_baseline_receipt_blocks_the_environment_check() {
+        let m = manifest(vec![ident("tests", true)]);
+        let mut forged = receipt("tests", Phase::Baseline, 0, "ok");
+        forged.command_digest = digest(b"other");
+        assert_eq!(environment_vetoes(&m, &[forged]).len(), 1);
+    }
+
+    #[test]
+    fn an_advisory_evaluator_never_vetoes_even_if_its_receipt_claims_required() {
+        let m = manifest(vec![ident("tests", true), ident("lint", false)]);
+        let lint = receipt("lint", Phase::Candidate, 1, "warnings"); // required=true on the receipt
+        let d = decide(
+            &m,
+            &Ok(Verdict::Accept),
+            &applied(),
+            &[receipt("tests", Phase::Candidate, 0, "ok"), lint],
         );
         assert!(d.accepted, "{}", d.summary);
     }
