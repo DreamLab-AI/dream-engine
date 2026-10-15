@@ -75,7 +75,7 @@ typed outcome contradicts its own exit status.
 
 The protected set is rebuilt the way the live night built it: build the
 policy with `replay::night_policy(manifest, config_bytes, fallback_ledger,
-&PolicyExtras { self_referential, extra_globs })`, give that value to
+&PolicyExtras { self_referential, extra_globs, protected_paths })` (resolve the last with `PolicyExtras::resolving`), give that value to
 `candidate::run`, and put the same `PolicyExtras` in `NightInputs::policy`.
 `verify` then judges under the same protected set, including the
 self-referential flag. A schema 1 record does not say which policy the night

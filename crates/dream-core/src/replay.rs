@@ -117,6 +117,53 @@ pub struct PolicyExtras {
     /// example where a host embeds the engine.
     #[serde(default)]
     pub extra_globs: Vec<String>,
+    /// Literal repo-relative paths the host resolved from the frozen
+    /// evaluator commands against the repository (absolute paths made
+    /// relative, bare words that name baseline-tree files); see
+    /// [`PolicyExtras::resolving`]. Recorded so a replay protects exactly what
+    /// the live run did. Absent from older records.
+    #[serde(default)]
+    pub protected_paths: Vec<String>,
+}
+
+impl PolicyExtras {
+    /// Resolve what the frozen evaluator commands name **in the repository**:
+    /// `repo_root` turns absolute paths under it into repo-relative ones, and
+    /// `baseline_files` (the baseline tree's file list, for example from
+    /// `git ls-tree -r --name-only`) lets a bare word such as `Makefile` or
+    /// `check` protect the file it names. The result is stored in
+    /// [`PolicyExtras::protected_paths`] and applied by [`night_policy`], which
+    /// keeps the policy a pure function of recorded data.
+    ///
+    /// # Errors
+    ///
+    /// [`PolicyError::UnsupportedCommand`] when a frozen command has an
+    /// unterminated quote or a command substitution: the night must be
+    /// `BLOCKED-ENV`, not run on an approximation.
+    pub fn resolving(
+        mut self,
+        manifest: &ExperimentManifest,
+        repo_root: &str,
+        baseline_files: &[String],
+    ) -> Result<Self, PolicyError> {
+        for e in &manifest.evaluators {
+            let paths = guard::try_evaluator_command_paths(
+                &e.command,
+                Some(repo_root),
+                baseline_files,
+            )
+            .map_err(|reason| PolicyError::UnsupportedCommand {
+                name: e.name.clone(),
+                reason,
+            })?;
+            for p in paths {
+                if !self.protected_paths.contains(&p) {
+                    self.protected_paths.push(p);
+                }
+            }
+        }
+        Ok(self)
+    }
 }
 
 /// Build a night's protected-path policy. This is the one builder: a host
@@ -135,7 +182,8 @@ pub fn night_policy(
     Ok(
         ProtectedPolicy::for_manifest(manifest, config_bytes, fallback_ledger_path)?
             .with_self_referential(extras.self_referential)
-            .with_globs(extras.extra_globs.iter().cloned()),
+            .with_globs(extras.extra_globs.iter().cloned())
+            .with_paths(extras.protected_paths.iter()),
     )
 }
 
@@ -818,6 +866,7 @@ mod tests {
         PolicyExtras {
             self_referential: true,
             extra_globs: vec!["services/engine".into()],
+            protected_paths: vec![],
         }
     }
 
@@ -880,6 +929,7 @@ mod tests {
         n.policy = PolicyExtras {
             self_referential: true,
             extra_globs: vec![],
+            protected_paths: vec![],
         };
         let dir = tempfile::tempdir().unwrap();
         capture(dir.path(), &n).unwrap();
@@ -936,6 +986,41 @@ mod tests {
             msg.contains("schema 1") && msg.contains("reads schema 2"),
             "{msg}"
         );
+    }
+
+    #[test]
+    fn f1_resolving_protects_absolute_and_baseline_named_files_and_replays_identically() {
+        let (_, mut n) = nights().remove(0);
+        n.manifest.evaluators[0].command =
+            "bash \"/work/repo/scripts/run it.sh\" && make verify".into();
+        let files = vec!["verify".to_string(), "src/lib.rs".to_string()];
+        let ex = PolicyExtras::default()
+            .resolving(&n.manifest, "/work/repo", &files)
+            .unwrap();
+        assert!(ex.protected_paths.contains(&"scripts/run it.sh".to_string()));
+        assert!(ex.protected_paths.contains(&"verify".to_string()));
+        assert!(!ex.protected_paths.contains(&"src/lib.rs".to_string()));
+        // The recorded extras alone rebuild the same policy (no repo needed).
+        let json = serde_json::to_string(&ex).unwrap();
+        let back: PolicyExtras = serde_json::from_str(&json).unwrap();
+        n.manifest.config_digest = dream_gate::manifest::digest(&n.config_bytes);
+        let p = night_policy(&n.manifest, &n.config_bytes, "L.md", &back).unwrap();
+        assert!(p.is_protected("scripts/run it.sh"));
+        assert!(p.is_protected("verify"));
+        assert!(!p.is_protected("src/lib.rs"));
+        // Old records without the field still parse.
+        let old: PolicyExtras = serde_json::from_str(r#"{"selfReferential":true}"#).unwrap();
+        assert!(old.protected_paths.is_empty() && old.self_referential);
+    }
+
+    #[test]
+    fn f1_resolving_refuses_an_unanalysable_command() {
+        let (_, mut n) = nights().remove(0);
+        n.manifest.evaluators[0].command = "bash \"scripts/x.sh".into();
+        let e = PolicyExtras::default()
+            .resolving(&n.manifest, "/r", &[])
+            .unwrap_err();
+        assert!(matches!(e, PolicyError::UnsupportedCommand { .. }), "{e:?}");
     }
 
     #[test]
