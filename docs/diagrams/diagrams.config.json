@@ -1,0 +1,13 @@
+{
+  "repoRoot": "../..",
+  "defaultRepoKey": "dream-engine",
+  "areas": { "nightly": "NIT", "gate": "GAT", "crates": "CRT", "selection": "SEL" },
+  "coverageRoots": [
+    "crates/dream-core/src",
+    "crates/dream-gate/src",
+    "crates/dream-cli/src",
+    "crates/pairwise-gate/src",
+    "crates/failure-fingerprint/src"
+  ],
+  "genCommand": "node docs/diagrams/tools/diagram-index-gen.cjs docs/diagrams"
+}
