@@ -3,19 +3,50 @@
 
 Collected from every topic file's labelled paragraphs (`**Tension:**`, `**Debt:**`, `**Drift:**`, `**Open:**`, `**Invariant:**`) and from `TENSION:` / `DEBT:` / `DRIFT:` / `OPEN:` / `INVARIANT:` prefixes inside diagram notes. Each row links back to the topic and diagram it was found in. This is the catalogue of the state of play; it proposes nothing. Remediation and roadmap work starts from here.
 
-Tension: 1 · Debt: 0 · Drift: 0 · Open: 1 · Invariant: 2
+Tension: 5 · Debt: 6 · Drift: 3 · Open: 9 · Invariant: 9
 
 ## Tensions
 
 | # | Where | Note |
 |---|-------|------|
 | T-01 | [NIT-01.1](nightly/01-the-nightly-loop-and-run-state.md#nit-011-phases-of-a-night) | the at-most-once ordering is a documented caller contract on `persist` (`crates/dream-core/src/runstate.rs:276`); no code in this repository sequences it, so nothing here enforces it, and a crash between `Persisted` and the forge push loses that night's publish with no retry. |
+| T-02 | [NIT-02.2](nightly/02-replay-capture-and-verify.md#nit-022-what-verify-re-checks) | replay is not tamper evidence. Only the report and the config are digest-bound, so editing a receipt's exit status, outcome and streams together with `decision.json` defeats `verify` (`crates/dream-core/src/replay.rs:10`). A witness over the run directory is the stated remedy and lives elsewhere (`crates/dream-core/src/replay.rs:17`). |
+| T-03 | [NIT-03.2](nightly/03-automerge-policy-decision-tree.md#nit-032-gathering-the-facts-in-publish) | the forge step is untested against live GitHub. The only test touching `GhForge` is a dyn-safety check (`crates/dream-core/src/seams.rs:647`), so the protection parsing, the draft-to-ready transition and the squash request have only been exercised against fakes. |
+| T-04 | [SEL-01.3](selection/01-pairwise-policies-and-the-fault-mapping.md#sel-013-from-per-test-results-to-vetoes) | only `Reject` is acted on (`crates/dream-gate/src/pertest.rs:304`). A policy that comes back `Inconclusive` on per-test evidence, for example because too many pairings faulted at the crate level, adds no veto here. Faults are caught separately by the harness veto at step 1, but the two layers are not obviously equivalent. |
+| T-05 | [SEL-02.1](selection/02-failure-fingerprint-lifecycle.md#sel-021-from-text-to-identity) | the identity is 64 bits (`crates/failure-fingerprint/src/lib.rs:263`). For a single suite the chance of an accidental collision is negligible, but a collision between a new failure and a baseline failure would classify the new one as `Persisting` and let it past the gate's new-failure veto, with no signal. ADR-DE-004 lists a collision seen in practice as its review trigger. |
+
+## Debt
+
+| # | Where | Note |
+|---|-------|------|
+| DB-01 | [NIT-02.2](nightly/02-replay-capture-and-verify.md#nit-022-what-verify-re-checks) | no historical corpus exists; only nights captured after this module is wired in can be replayed (`crates/dream-core/src/replay.rs:20`). |
+| DB-02 | [GAT-01.3](gate/01-verdict-classes-and-the-decide-flow.md#gat-013-guard-before-apply-recheck-inside-the-gate) | the optional candidate build command and the evaluators execute the candidate's own scripts on the evaluation host through the runner (`crates/dream-core/src/candidate.rs:296`). The guard protects the evaluator files named in policy, but a candidate-added build script still runs with the runner's privileges; isolation is the host's job. |
+| DB-03 | [CRT-02.1](crates/02-seams-and-what-implements-them.md#crt-021-the-five-seams-and-the-implementations-that-ship) | `GhForge` has one test in this tree and it only proves the trait is dyn-safe (`crates/dream-core/src/seams.rs:647`). The push, PR creation and branch-protection paths have not been exercised against a live GitHub. |
+| DB-04 | [SEL-01.3](selection/01-pairwise-policies-and-the-fault-mapping.md#sel-013-from-per-test-results-to-vetoes) | evaluators with no per-test format get no statistics. Per-test evidence exists only when the manifest declares a `test_format` for the evaluator and a parse of both runs succeeds; otherwise the builder returns `None`, never fabricated evidence (`crates/dream-core/src/testfmt.rs:543`). |
+| DB-05 | [SEL-01.3](selection/01-pairwise-policies-and-the-fault-mapping.md#sel-013-from-per-test-results-to-vetoes) | `TrainDev` and held-out dev evaluators are not wired into the nightly. The gate's options have no held-out field and the policy builder never constructs `TrainDev` (`crates/dream-gate/src/pertest.rs:131`, `crates/dream-gate/src/pertest.rs:314`). ADR-DE-004 states that no consumer supplies held-out evaluators yet (`docs/adr/ADR-DE-004-pairwise-selection-and-fingerprints.md:55`). |
+| DB-06 | [SEL-02.2](selection/02-failure-fingerprint-lifecycle.md#sel-022-new-persisting-fixed) | `count` is the previous count plus one and not a strict consecutive count; callers who need strictness check `prev.step + 1 == step` (`crates/failure-fingerprint/src/lib.rs:539`). |
+
+## Drifts
+
+| # | Where | Note |
+|---|-------|------|
+| DR-01 | [GAT-01.2](gate/01-verdict-classes-and-the-decide-flow.md#gat-012-the-decide-flow) _(docs vs code)_ | the README table still lists `dream-gate` as Planned (`README.md:54`) though the crate, `decide` and the guard are built. |
+| DR-02 | [CRT-01.1](crates/01-crate-dependency-dag-and-the-licence-boundary.md#crt-011-crate-dependencies-inside-the-workspace) | the README status badge and table call `dream-gate` Planned (`README.md:54`) though it is built and depended on by `dream-core` (`crates/dream-core/Cargo.toml:17`). |
+| DR-03 | [CRT-01.2](crates/01-crate-dependency-dag-and-the-licence-boundary.md#crt-012-the-licence-boundary) | the ADR says the `cargo deny` check is planned (`docs/adr/ADR-DE-002-licence-and-provenance.md:42`), yet CI already has a `deny` job (`.github/workflows/ci.yml:71`). |
 
 ## Open questions
 
 | # | Where | Note |
 |---|-------|------|
 | O-01 | [NIT-01.3](nightly/01-the-nightly-loop-and-run-state.md#nit-013-the-night-level-terminal-rule) | the manifest archive on a moved baseline is named by run id (`crates/dream-gate/src/manifest.rs:249`), the reset archive by timestamp (`crates/dream-core/src/runstate.rs:194`); two naming schemes for superseded documents. |
+| O-02 | [NIT-02.2](nightly/02-replay-capture-and-verify.md#nit-022-what-verify-re-checks) | nothing in this repository calls `capture` during a night. The host driver has to, so whether any real night is replayable depends on the host. |
+| O-03 | [NIT-03.2](nightly/03-automerge-policy-decision-tree.md#nit-032-gathering-the-facts-in-publish) | a forge failure after `Allowed` is recorded in `automerge_error` and the pull request stays a draft (`crates/dream-core/src/persist.rs:284`); there is no retry. |
+| O-04 | [GAT-01.3](gate/01-verdict-classes-and-the-decide-flow.md#gat-013-guard-before-apply-recheck-inside-the-gate) | a patch the guard cannot parse with certainty is `Refused`, mapped to unproven (`INCONCLUSIVE`) in the candidate module (`crates/dream-core/src/candidate.rs:207`), while the gate's own re-check maps the same failure to an evidence veto, `patch-guard` (`crates/dream-gate/src/gate.rs:65`). The same parse failure can end as `INCONCLUSIVE` or `REJECT` by layer. |
+| O-05 | [CRT-01.1](crates/01-crate-dependency-dag-and-the-licence-boundary.md#crt-011-crate-dependencies-inside-the-workspace) | ADR-DE-002 speaks of four core crates (`docs/adr/ADR-DE-002-licence-and-provenance.md:23`), while the workspace has five members, `dream-cli` being the fifth (`Cargo.toml:3`). |
+| O-06 | [CRT-01.2](crates/01-crate-dependency-dag-and-the-licence-boundary.md#crt-012-the-licence-boundary) | nothing in this repository verifies that the product's adapter follows the rule in the other direction; the boundary is a convention plus a dependency ban in the permissive tree. |
+| O-07 | [CRT-02.2](crates/02-seams-and-what-implements-them.md#crt-022-where-each-seam-is-crossed-in-a-night) | the sequence above is the intended host order from the crate docs (`crates/dream-core/src/lib.rs:3`). No driver in this repository enforces it, so the order is not machine-checked here. |
+| O-08 | [SEL-01.2](selection/01-pairwise-policies-and-the-fault-mapping.md#sel-012-the-policies-and-what-each-selects-on) | ADR-DE-004 gives 20 cases as the floor for the sign test and the Wilson bound; the code default is the same figure (`crates/dream-gate/src/pertest.rs:155`), and it is a field on the options. |
+| O-09 | [SEL-02.4](selection/02-failure-fingerprint-lifecycle.md#sel-024-the-cross-night-use-harness-stall-detection) | the evidence-gate use in SEL-02.3 restarts from an empty manifest every night, so it needs only 64 bits to separate two trees; the cross-night use keeps records for as long as the failure persists, which is where a long-lived collision would matter. |
 
 ## Invariants
 
@@ -23,4 +54,11 @@ Tension: 1 · Debt: 0 · Drift: 0 · Open: 1 · Invariant: 2
 |---|-------|------|
 | I-01 | [NIT-01.1](nightly/01-the-nightly-loop-and-run-state.md#nit-011-phases-of-a-night) | `advance` never lowers the phase (`crates/dream-core/src/runstate.rs:269`). |
 | I-02 | [NIT-01.2](nightly/01-the-nightly-loop-and-run-state.md#nit-012-what-begin-decides-on-every-start) | a night already `Persisted` or `Complete` is `AlreadyComplete` whatever the run id says (`crates/dream-core/src/runstate.rs:206`). |
+| I-03 | [NIT-02.1](nightly/02-replay-capture-and-verify.md#nit-021-what-is-captured) | the policy for a night is built by one function, so the live guard, the gate and a later replay cannot disagree (`crates/dream-core/src/replay.rs:122`). |
+| I-04 | [NIT-03.1](nightly/03-automerge-policy-decision-tree.md#nit-031-the-decision-tree) | `Disabled` is returned before any other fact is consulted (`crates/dream-core/src/automerge.rs:111`). |
+| I-05 | [GAT-01.1](gate/01-verdict-classes-and-the-decide-flow.md#gat-011-from-evaluator-outcome-to-veto-class) | the gate calls no model and reads no clock; the same inputs always give the same decision (`crates/dream-gate/src/gate.rs:8`). |
+| I-06 | [GAT-01.2](gate/01-verdict-classes-and-the-decide-flow.md#gat-012-the-decide-flow) | acceptance needs a claimed ACCEPT and an empty veto list (`crates/dream-gate/src/gate.rs:436`). |
+| I-07 | [CRT-02.1](crates/02-seams-and-what-implements-them.md#crt-021-the-five-seams-and-the-implementations-that-ship) | `Notifier::notify` is infallible by signature, so a broken channel cannot change a verdict (`crates/dream-core/src/seams.rs:320`). |
+| I-08 | [SEL-01.1](selection/01-pairwise-policies-and-the-fault-mapping.md#sel-011-tally-and-the-inconclusive-guard) | a pairing with a fault on either side is never a win or a loss (`crates/pairwise-gate/src/model.rs:205`). |
+| I-09 | [SEL-02.2](selection/02-failure-fingerprint-lifecycle.md#sel-022-new-persisting-fixed) | the persisted cause is always the normalised text, never the raw text (`crates/failure-fingerprint/src/lib.rs:410`). |
 
