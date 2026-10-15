@@ -1,0 +1,44 @@
+   Compiling sample v0.1.0 (/work/lt)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (target/debug/deps/sample-98664123fb25a571)
+
+running 4 tests
+test inner::tests::slow_one ... ignored
+test inner::tests::doubles ... ok
+test inner::tests::panics_as_expected - should panic ... ok
+test inner::tests::doubles_wrongly ... FAILED
+
+failures:
+
+---- inner::tests::doubles_wrongly stdout ----
+
+thread 'inner::tests::doubles_wrongly' (249253) panicked at src/lib.rs:14:40:
+assertion `left == right` failed: two doubled should be five
+  left: 4
+ right: 5
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/std/src/panicking.rs:679:5
+   1: core::panicking::panic_fmt
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/panicking.rs:80:14
+   2: core::panicking::assert_failed_inner
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/panicking.rs:447:23
+   3: core::panicking::assert_failed::<i32, i32>
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/panicking.rs:407:5
+   4: sample::inner::tests::doubles_wrongly
+             at ./src/lib.rs:14:40
+   5: sample::inner::tests::doubles_wrongly::{closure#0}
+             at ./src/lib.rs:14:37
+   6: <sample::inner::tests::doubles_wrongly::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+             at /nix/store/HASH-rust-minimal-1.99.0/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
+   7: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    inner::tests::doubles_wrongly
+
+test result: FAILED. 2 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--lib`

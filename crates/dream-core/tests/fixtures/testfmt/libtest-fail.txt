@@ -1,0 +1,42 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src/lib.rs (target/debug/deps/sample-98664123fb25a571)
+
+running 4 tests
+test inner::tests::doubles ... ok
+test inner::tests::slow_one ... ignored
+test inner::tests::doubles_wrongly ... FAILED
+test inner::tests::panics_as_expected - should panic ... ok
+
+failures:
+
+---- inner::tests::doubles_wrongly stdout ----
+
+thread 'inner::tests::doubles_wrongly' (249369) panicked at src/lib.rs:14:40:
+assertion `left == right` failed: two doubled should be five
+  left: 4
+ right: 5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    inner::tests::doubles_wrongly
+
+test result: FAILED. 2 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+     Running tests/integration.rs (target/debug/deps/integration-7c2c970a12c3137a)
+
+running 1 test
+test integration_adds ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sample
+
+running 1 test
+test src/lib.rs - add (line 3) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+error: 1 target failed:
+    `--lib`
