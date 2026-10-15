@@ -12,3 +12,5 @@ See also [CONTRIBUTING.md](../CONTRIBUTING.md) and [SECURITY.md](../SECURITY.md)
 Items marked "planned" are designed but not yet in the repository. They are:
 `TrainDev` with held-out dev evaluators wired into the nightly, and post-publish
 recheck with ledger-driven rollback.
+
+Diagram corpus (citation-verified, with a register of tensions and debt): [diagrams/](diagrams/README.md).
