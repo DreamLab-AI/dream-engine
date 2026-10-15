@@ -30,7 +30,7 @@ request) must be replaceable without forking the engine.
 | `Notifier` | Tell a person what happened |
 | `Forge` | Open the draft pull request, and merge only if ADR-DE-006 allows |
 
-The traits return boxed futures so they are dyn-compatible: a consumer can hold
+`EvaluatorRunner` is synchronous and dyn-safe. The other traits return boxed futures so they are dyn-compatible: a consumer can hold
 `Box<dyn Llm>` and choose implementations at run time without the engine
 depending on an async trait macro.
 
@@ -42,8 +42,9 @@ its own errors.
 
 Product code stays in the consumer. The cost is that each seam is a public
 contract that is versioned. The other four seams are fallible and their errors
-are reported in the run state, not swallowed. The traits are implemented in `dream-core::seams` and consumed by a real host
-adapter (one implementation per seam).
+are reported in the run state, not swallowed. The traits live in `dream-core::seams` (`EvaluatorRunner` in `dream_core::runner`),
+with built-in implementations `NullSink`, `JsonlSink`, `StderrNotifier`,
+`GhForge`, `LocalRunner` and `ScriptedRunner`.
 
 Two boundaries are deliberate, and a consumer should not fight them:
 

@@ -3,7 +3,7 @@ id: ADR-DE-002
 title: Licence and provenance
 date: 2026-10-15
 decision_status: accepted
-implementation_status: in-progress
+implementation_status: implemented
 activation_status: staged
 supersedes: []
 owner: jjohare
@@ -20,7 +20,7 @@ encryption envelope that must not become a public format.
 
 ## Decision
 
-The four core crates are `MIT OR Apache-2.0`. They are an independent Rust
+The five crates are `MIT OR Apache-2.0`. They are an independent Rust
 implementation of the design lineage and copy no source text from
 `dream-machine`. Its MIT notice is reproduced in `NOTICE` as credit and as a
 precaution.
@@ -39,5 +39,5 @@ from elsewhere has to say where it came from.
 
 Any repository can use the core under either licence. The AGPL boundary is
 physical: the adapter is not in this tree, so it cannot be pulled in by
-accident. `cargo deny` in CI (planned) should enforce the no-AGPL-dependency
-rule on the workspace.
+accident. `cargo deny check` runs in CI (`.github/workflows/ci.yml`) against `deny.toml`,
+which allows only permissive licences, so an AGPL dependency fails the build.

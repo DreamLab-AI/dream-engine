@@ -1,8 +1,5 @@
 # Configuring a Rust repository
 
-> The driver that reads this file is planned. The field names below describe the
-> intended shape and may change before `dream-core` is released.
-
 A repository opts in with a `dream.config.json` at its root. The file is
 protected: a candidate patch may not alter it
 ([ADR-DE-003](../adr/ADR-DE-003-protected-path-guard.md)), and its digest is
@@ -26,28 +23,49 @@ Rust repositories.
 
 ```json
 {
-  "evaluators": [
-    { "name": "tests",  "command": "cargo test --workspace --locked" },
-    { "name": "clippy", "command": "cargo clippy --workspace --all-targets -- -D warnings" },
-    { "name": "fmt",    "command": "cargo fmt --check" },
-    { "name": "docs",   "command": "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps" },
-    { "name": "deny",   "command": "cargo deny check" }
+  "repo": "owner/name",
+  "slots": [
+    { "deep": "core", "scan": ["src"] }
   ],
+  "evaluatorEntrypoints": {
+    "tests":  { "cmd": "cargo test --workspace --locked", "required": true, "timeoutSecs": 900, "testFormat": "libtest" },
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "fmt":    "cargo fmt --all --check",
+    "doc":    "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace",
+    "deny":   "cargo deny check"
+  },
+  "ledgerPath": "docs/dream-cycle/LEDGER.md",
+  "autoMerge": false,
   "protected": [
-    "dream.config.json",
     "deny.toml",
     "rust-toolchain.toml",
-    ".github/workflows/**"
-  ],
-  "automerge": false
+    ".github/**",
+    "Cargo.lock"
+  ]
 }
 ```
 
-The shape of `evaluators` and `protected` is illustrative. Two points are
-settled by the ADRs. `automerge` defaults to false
-([ADR-DE-006](../adr/ADR-DE-006-automerge-is-an-option.md)). Protected paths
-should include every file that changes what an evaluator measures: lint
-configuration, toolchain pins, CI definitions and any held-out test set.
+`dream validate` accepts this file. Notes on the fields:
+
+- `evaluatorEntrypoints` maps a name to a bare command string (required, every
+  deep, 1800 s timeout) or to an object with `cmd`, `required`, `deeps`,
+  `timeoutSecs` and `testFormat` (`libtest`, `junit` or `vitest-json`). An
+  evaluator with no `testFormat` counts as one case in the gate, so it gets pass
+  or fail but no sign test or Wilson bound. Do not pipe a declared-format
+  evaluator through `| tail`; the parser needs the full output.
+- `protected` is additive. It extends the built-in protected set (the config
+  file itself, the evaluator paths and the ledger) and can never remove from
+  it; a `!` negation is a validation error.
+- `autoMerge` (alias `automerge`) defaults to false
+  ([ADR-DE-006](../adr/ADR-DE-006-automerge-is-an-option.md)). It is refused for
+  self-referential targets and unless the pull request's real base branch has
+  required status checks.
+- `adrConvention` takes `"3-digit"`, `"4-digit"`, `{ "pad": 3, "dir": "docs/adr" }`
+  or a legacy free-form template such as `"ADR-XX-NNN"`.
+
+Protected paths should include every file that changes what an evaluator
+measures: lint configuration, toolchain pins, CI definitions and any held-out
+test set.
 
 ## Points to watch
 

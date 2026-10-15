@@ -2,8 +2,10 @@
 
 The nightly loop around [`dream-gate`](../dream-gate): everything that touches
 a filesystem, a subprocess or a model, so that `dream-gate` can stay pure.
-A host (a scheduler, an agent platform) plugs in four small seams and gets an
-evidence-gated, restart-safe, replayable evolution loop.
+A host (a scheduler, an agent platform) plugs in five small seams and gets an
+evidence-gated, restart-safe, replayable evolution loop. Install with
+`cargo add dream-core`; the offline `dream` command is the separate
+[`dream-cli`](../dream-cli) crate.
 
 | Module | Role |
 |---|---|
@@ -15,12 +17,35 @@ evidence-gated, restart-safe, replayable evolution loop.
 | `replay` | Capture a night's gate inputs; `verify` re-runs the pure gate and diffs it against the recorded verdict. |
 | `source`, `context` | Tree-read: the source a hypothesis touches, and context governance for the evidence pack — both behind the `Llm` trait. |
 | `compile` | Deterministic prompt compilation with a neutral built-in template. |
-| `readiness`, `runstate`, `roster`, `sweep` | Admission, restart-safe run identity, fair rotation, branch ageing. |
+| `readiness`, `runstate`, `roster`, `sweep` | Admission, restart-safe run identity and night idempotency, fair rotation, branch ageing. |
+| `automerge` | The pure automerge decision (default off). |
 | `seams` | `Llm`, `MemorySink` (`NullSink`, `JsonlSink`), `Notifier` (infallible; `StderrNotifier`), `Forge` (`GhForge`). |
 
 No async runtime is a dependency: the async traits return a plain-`std`
 `BoxFut`. Nothing in the crate reads the process environment; every knob is a
 parameter. `#![forbid(unsafe_code)]`.
+
+## Nights and automerge
+
+A night directory whose journal reached `Persisted` or `Complete` is terminal
+whatever the run id (`runstate::finished_night`). `runstate::persist` records the
+verdict before the ledger commit and the forge request, so publishing is
+at-most-once: a crash can lose a publish, never repeat one.
+`runstate::reset_night` archives a finished night; it never deletes
+([ADR-DE-007](../../docs/adr/ADR-DE-007-a-night-is-identified-by-its-directory.md)).
+
+Automerge is the config key `autoMerge` (alias `automerge`), default off. It is
+refused for self-referential targets and unless the pull request's real base
+branch has required status checks; then `gh pr ready` and
+`gh pr merge --auto --squash` run. That forge step has not yet been exercised
+against real GitHub.
+
+The dry streak (`streak::next_dry_streak`) advances on `REJECT` and
+`INCONCLUSIVE`, resets on `ACCEPT`, and ignores `BLOCKED-ENV`, `HANDOFF` and
+`OPERATOR`. A repeated identical `BLOCKED-ENV` raises `Notice::HarnessStuck`.
+
+An evaluator with no declared `testFormat` counts as one case, so it gets no sign
+or Wilson statistics.
 
 ## Order of operations for a candidate
 

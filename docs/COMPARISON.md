@@ -20,15 +20,15 @@ both decide from the evidence whether to keep the change.
 |---|---|
 | Experiment identity | The manifest is frozen before any model call and the run id is a pure function of it, so a restart resumes the same experiment and results are not compared across a silent change |
 | Environment faults | `BLOCKED-ENV` is a separate verdict from `REJECT`, and faults are excluded from the tally rather than counted as losses |
-| Statistics | Exact one-sided binomial and Wilson lower bounds, used only with at least 20 per-test cases, plus `NoRegression` for any pass-to-fail pairing |
+| Statistics | Exact one-sided binomial and Wilson lower bounds, used only with at least 20 per-test cases (an evaluator with no declared per-test format counts as one case), plus `NoRegression` for any pass-to-fail pairing |
 | Who merges | The default outcome is a draft pull request that a human merges; automerge is opt-in and bounded ([ADR-DE-006](adr/ADR-DE-006-automerge-is-an-option.md)) |
 | Scope | One patch a night against one repository, not a population of harnesses |
 
 ## What REEF does that we plan
 
 Post-publish recheck and rollback: re-evaluating a change after it has landed
-and reverting it if it no longer holds. Periodic re-screening of past accepted
-changes. Neither is in dream-engine yet.
+and reverting it, driven by the ledger, if it no longer holds. Periodic
+re-screening of past accepted changes. Neither is in dream-engine yet.
 
 ## Choosing
 

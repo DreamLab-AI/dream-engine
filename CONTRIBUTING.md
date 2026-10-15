@@ -11,7 +11,8 @@ crate ([ADR-DE-002](docs/adr/ADR-DE-002-licence-and-provenance.md)).
 cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --locked
-RUSTDOCFLAGS='-D warnings' cargo doc --no-deps
+cargo deny check
+RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace
 ```
 
 Every public item carries rustdoc, and examples must compile. The minimum Rust
@@ -34,4 +35,5 @@ forum, relay or key envelope belongs in the consuming product behind the
 [seams](docs/adr/ADR-DE-005-seams.md).
 
 Documentation says "planned" for anything not yet in the repository. Please keep
-to that.
+to that, and check a claim against the code (or a test) before you move it out of
+"planned".

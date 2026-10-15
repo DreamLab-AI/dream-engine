@@ -26,8 +26,8 @@ Move the engine into its own repository, `DreamLab-AI/dream-engine`, as a Rust
 workspace with permissive licensing. The TypeScript fork is retired once the
 Rust driver reaches parity on the points listed in the
 [migration note](../guide/migrating-from-the-ts-fork.md). The workspace holds
-four crates: `pairwise-gate`, `failure-fingerprint`, `dream-gate` and
-`dream-core`. Everything that touches a product (a forum, a relay, a key
+five crates: `pairwise-gate`, `failure-fingerprint`, `dream-gate`, `dream-core`
+and `dream-cli`. Everything that touches a product (a forum, a relay, a key
 envelope) stays in the consuming product behind the seams in
 [ADR-DE-005](ADR-DE-005-seams.md).
 
@@ -36,5 +36,6 @@ envelope) stays in the consuming product behind the seams in
 One engine to maintain and one place to fix gate bugs. The loop can be adopted
 by repositories that have nothing to do with the original product. The cost is
 an adapter layer in each consumer and a stable seam contract that has to be
-versioned. As of this record `pairwise-gate` and `failure-fingerprint` are in
-the repository; `dream-gate` and `dream-core` are planned.
+versioned. All five crates are in the repository and tested. Status stays
+**in-progress** because the host's nightly driver, which retires the fork, is
+not part of this repository and the TrainDev path of ADR-DE-004 is not wired.

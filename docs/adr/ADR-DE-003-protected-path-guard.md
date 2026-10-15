@@ -43,5 +43,6 @@ changed the config during the run. That is a harness veto and the verdict is
 A model cannot move the goalposts through the patch. It can still try, and the
 attempt is recorded as a rejection with a named reason. The guard does not make
 build scripts safe: they run on the evaluation host, which must be sandboxed
-([SECURITY.md](../../SECURITY.md)). The guard and digest binding are planned in
-`dream-gate`.
+([SECURITY.md](../../SECURITY.md)). The guard and digest binding are implemented in `dream-gate`
+(`guard::check`, `gate::decide` with its `GateContext`, the manifest digest) and
+called by `dream_core::candidate::run`.

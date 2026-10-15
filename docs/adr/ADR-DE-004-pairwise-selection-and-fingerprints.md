@@ -28,7 +28,8 @@ of tasks. Its policies are `Margin`, `Floor`, `SignTest`, `WilsonLower`,
 - A fault (service down, timeout, patch would not apply) is never a loss and
   never a win. Faulted pairings are excluded from the tally and reported.
 - The sign test and the Wilson bound are used only with at least 20 per-test
-  cases. Below that, the per-test evidence is too thin for either bound to
+  cases. An evaluator with no declared per-test format counts as one case, so it
+  never reaches them. Below that, the per-test evidence is too thin for either bound to
   mean much.
 - `NoRegression` rejects any pairing that passed on the baseline and fails on
   the candidate, whatever happens elsewhere.
@@ -50,8 +51,7 @@ and Wilson for 8 of 10 at z = 1.96 gives a lower bound of 0.4902.
 
 `pairwise-gate` and `failure-fingerprint` are implemented and tested, the gate
 applies `NoRegression`, `Floor`, `Margin`, `SignTest` and `WilsonLower` to
-per-test evidence, and `dream-core::streak` uses fingerprints to detect a stuck
-harness. Status stays **in-progress**: `TrainDev` and held-out dev evaluators
+per-test evidence, and `dream-core::streak` uses fingerprints to raise `HarnessStuck`. Status stays **in-progress**: `TrainDev` and held-out dev evaluators
 are not wired into the gate's per-test path, and no consumer supplies them yet.
 
 ## Consequences

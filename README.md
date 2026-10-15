@@ -6,7 +6,9 @@
 
 [![Licence](https://img.shields.io/badge/Licence-MIT%20OR%20Apache--2.0-blue?style=flat-square)](#licence)
 [![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange?style=flat-square)](Cargo.toml)
-[![Status](https://img.shields.io/badge/status-pre--release%3B%20two%20crates%20built%2C%20two%20planned-yellow?style=flat-square)](docs/adr/README.md)
+[![crates.io](https://img.shields.io/crates/v/pairwise-gate?style=flat-square&label=pairwise-gate)](https://crates.io/crates/pairwise-gate)
+[![crates.io](https://img.shields.io/crates/v/failure-fingerprint?style=flat-square&label=failure-fingerprint)](https://crates.io/crates/failure-fingerprint)
+[![Status](https://img.shields.io/badge/status-pre--1.0-yellow?style=flat-square)](docs/adr/README.md)
 
 *The model proposes. A pure function of measured evidence disposes. A human merges.*
 
@@ -32,7 +34,7 @@ verdict from a bad patch, so infrastructure trouble is never read as a verdict
 on the model. A candidate may not touch the files that decide whether it
 passes ([ADR-DE-003](docs/adr/ADR-DE-003-protected-path-guard.md)).
 
-## The loop
+## How a night runs
 
 The engine freezes an experiment manifest (baseline revision, tree hash, the
 sha256 of each evaluator command, model identity and a digest of the config)
@@ -41,43 +43,61 @@ manifest, so a restart resumes the same experiment, and a baseline that has
 diverged is archived rather than overwritten. It then evaluates the baseline,
 calls the model once, applies the patch, evaluates the candidate on the same
 testbed, and gates the pair. A run moves through `ManifestFrozen`,
-`BaselineEvaluated`, `ModelCalled`, `CandidateEvaluated` and `Gated`. The gate
+`BaselineEvaluated`, `ModelCalled`, `CandidateEvaluated`, `Gated`, `Persisted` and `Complete`. A finished night is terminal: a restart or a changed HEAD never repeats it
+([ADR-DE-007](docs/adr/ADR-DE-007-a-night-is-identified-by-its-directory.md)). The gate
 returns `ACCEPT`, `REJECT`, `INCONCLUSIVE` or `BLOCKED-ENV`. The full account
 is in [docs/concepts.md](docs/concepts.md).
 
 ## Crates
 
-| Crate | What it does | Status |
-|---|---|---|
-| [`pairwise-gate`](crates/pairwise-gate) | Selection policies over paired candidate and baseline results: `Margin`, `Floor`, `SignTest`, `WilsonLower`, `NoRegression`, `TrainDev`. Faults never count as losses. | In the repository, `0.1.0`; not yet published |
-| [`failure-fingerprint`](crates/failure-fingerprint) | A 16-hex-character SHA-256 identity for a failure mode, and a `New` / `Persisting` / `Fixed` classification across steps. | In the repository, `0.1.0`; not yet published |
-| `dream-gate` | The protected-path guard, config-digest binding and the veto classes that turn evaluator evidence into a verdict. | Planned |
-| [`dream-core`](crates/dream-core) | Evaluator runners, the candidate worktree with guard-before-apply ordering, the ledger and its signals, harness-stall detection, replay, source reading, and the seams (`Llm`, `MemorySink`, `Notifier`, `Forge`). The nightly driver that sequences them is the host's. | In the repository, `0.1.0`; not yet published |
+| Crate | What it does |
+|---|---|
+| [`pairwise-gate`](crates/pairwise-gate) | Selection policies over paired candidate and baseline results: `Margin`, `Floor`, `SignTest`, `WilsonLower`, `NoRegression`, `TrainDev`. Faults never count as losses. |
+| [`failure-fingerprint`](crates/failure-fingerprint) | A 16-hex-character SHA-256 identity for a failure mode, and a `New` / `Persisting` / `Fixed` classification across steps. |
+| [`dream-gate`](crates/dream-gate) | The pure gate: manifest freezing, typed evaluator receipts, the protected-path guard, config-digest binding and the veto classes that turn evidence into a verdict. |
+| [`dream-core`](crates/dream-core) | Evaluator runners, the candidate worktree (guard before apply), the ledger and its signals, per-test output parsers, harness-stall and dry-streak tracking, replay, source reading, night idempotency, automerge policy and the five seams (`Llm`, `MemorySink`, `EvaluatorRunner`, `Notifier`, `Forge`). The nightly driver that sequences them belongs to the host. |
+| [`dream-cli`](crates/dream-cli) | The `dream` command: offline checks (`validate`, `ledger verify`, `witness`, `replay verify`, `guard check`). No network, no model. |
 
-The two built crates are small and independent of the rest, and each has its
-own README. The statistics are checked against reference values computed
-independently in exact arithmetic: nine wins out of ten gives an exact
-one-sided binomial p of 11/1024, and a Wilson lower bound for eight of ten at
-z = 1.96 is 0.4902.
+The statistics are checked against reference values computed independently in
+exact arithmetic: nine wins out of ten gives an exact one-sided binomial p of
+11/1024, and a Wilson lower bound for eight of ten at z = 1.96 is 0.4902.
+
+What is not here yet: the nightly driver itself (a host supplies it by
+implementing the seams), `TrainDev` with held-out dev evaluators wired into the
+nightly path, and post-publish recheck with ledger-driven rollback. The forge
+step of automerge is unit-tested against a stub but has not been exercised
+against real GitHub.
 
 ## Quickstart
 
-The two built crates can be used from a checkout today:
+Add a library:
 
 ```sh
-git clone https://github.com/DreamLab-AI/dream-engine
-cd dream-engine
-cargo test --workspace --locked
+cargo add pairwise-gate
+cargo add failure-fingerprint
 ```
 
-The driver and its command line (planned, not yet in the repository):
+Install the command line and run its checks in a clone:
 
 ```sh
-# planned
-cargo install dream-core
-dream init          # write dream.config.json for the current repository
-dream run --dry-run # freeze the manifest and evaluate the baseline, no model call
-dream run           # one nightly cycle
+cargo install dream-cli          # installs the `dream` binary
+git clone https://github.com/DreamLab-AI/dream-engine
+cd dream-engine
+dream validate                   # checks ./dream.config.json
+dream guard check --patch my.diff --config dream.config.json
+dream witness stamp --report README.md --commit "$(git rev-parse HEAD)"
+```
+
+`dream guard check` exits `0` when the patch is clear, `1` when it touches a
+protected path and `2` when it could not run. `dream replay verify RUN_DIR`
+re-judges a recorded night and `dream ledger verify PATH` checks a ledger.
+There is no `dream run`: the nightly driver is the host's, built from
+`dream-core`.
+
+To build and test from source:
+
+```sh
+cargo test --workspace --locked
 ```
 
 Configuration for a Rust repository is in

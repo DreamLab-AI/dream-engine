@@ -16,7 +16,7 @@ and the manifest/receipt file helpers (`freeze`, `load`, `persist`).
 | `pertest` | Neutral per-test input for `pairwise-gate` and `failure-fingerprint` evidence. |
 | `verdict`, `witness`, `patch`, `outcome`, `config` | Supporting vocabulary: strict verdict parsing, evidence-chain witnesses, pure diff repair, execution outcome, config schema. |
 
-## The guard
+## Guard
 
 `guard::check(patch, &policy)` parses a unified git diff and refuses it unless
 every touched path is clear. It collects `diff --git` (both sides), `---`/`+++`,
@@ -33,7 +33,7 @@ assert!(check(patch, &policy).is_ok());
 ```
 
 Call it **before applying** a patch. `gate::decide` re-derives the touched paths
-from the patch again as defence in depth, and a refused patch is a `REJECT`
+from the patch again through its `GateContext` as defence in depth, and a refused patch is a `REJECT`
 (evidence), never diluted into `BLOCKED-ENV`.
 
 Known limit: an evaluator that reads files it never names on its command line
@@ -53,11 +53,15 @@ command-path extraction; list such files in the config's `protected` globs.
 `DreamConfig` validates what the reference TypeScript `validateConfig`
 validates: `repo` is `owner/name` (`[\w.-]` parts), a present `cron` has five
 fields and a single fixed minute (so the minimum interval is one hour), every
-`bonusModuli` key is an integer, `adrConvention` is `"3-digit"`, `"4-digit"` or
-`{ "pad": n >= 1, "dir": "..." }` (`AdrConvention`). An absent `cron` is
+`bonusModuli` key is an integer, `adrConvention` is `"3-digit"`, `"4-digit"`,
+`{ "pad": n >= 1, "dir": "..." }` or a legacy free-form template such as
+`"ADR-XX-NNN"` (`AdrConvention`). `autoMerge` (alias `automerge`) defaults to off.
+A config-digest mismatch where the patch did not touch the config is
+`BLOCKED-ENV`. An absent `cron` is
 accepted: this crate has no opinion about scheduling. An evaluator may declare
 `"testFormat": "libtest" | "junit" | "vitest-json"` (`TestFormat`), frozen into
-the manifest, so per-test output is read the same way on both trees.
+the manifest, so per-test output is read the same way on both trees. An evaluator without
+one counts as a single case.
 
 ## Licence
 
