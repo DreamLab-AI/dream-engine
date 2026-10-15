@@ -98,6 +98,10 @@ pub enum AdrConvention {
     ThreeDigit,
     /// `ADR-0001`.
     FourDigit,
+    /// A free-form numbering template such as `ADR-XX-NNN`, where the longest
+    /// run of `N` sets the zero-padding width. Accepted so that configs written
+    /// for earlier engines, which took any string, keep loading.
+    Template(String),
     /// A custom zero-padding width and directory.
     Custom {
         /// Zero-padding width, at least 1.
@@ -105,6 +109,21 @@ pub enum AdrConvention {
         /// Directory holding the ADRs, non-empty.
         dir: String,
     },
+}
+
+/// Width of the longest run of `N` in a numbering template, or `None` when the
+/// text has no `N` at all and so is not a template.
+fn template_pad(t: &str) -> Option<usize> {
+    let (mut best, mut run) = (0usize, 0usize);
+    for c in t.chars() {
+        if c == 'N' {
+            run += 1;
+            best = best.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    (best > 0).then_some(best)
 }
 
 impl AdrConvention {
@@ -118,6 +137,7 @@ impl AdrConvention {
     pub fn pad(&self) -> usize {
         match self {
             AdrConvention::ThreeDigit => 3,
+            AdrConvention::Template(t) => template_pad(t).unwrap_or(4),
             AdrConvention::Custom { pad, .. } => *pad as usize,
             AdrConvention::Unset | AdrConvention::FourDigit => 4,
         }
@@ -140,6 +160,7 @@ impl Serialize for AdrConvention {
             AdrConvention::Unset => s.serialize_none(),
             AdrConvention::ThreeDigit => s.serialize_str("3-digit"),
             AdrConvention::FourDigit => s.serialize_str("4-digit"),
+            AdrConvention::Template(t) => s.serialize_str(t),
             AdrConvention::Custom { pad, dir } => {
                 let mut st = s.serialize_struct("AdrConvention", 2)?;
                 st.serialize_field("pad", pad)?;
@@ -163,8 +184,11 @@ impl<'de> Deserialize<'de> for AdrConvention {
             Raw::Name(n) => match n.as_str() {
                 "3-digit" => Ok(AdrConvention::ThreeDigit),
                 "4-digit" => Ok(AdrConvention::FourDigit),
+                other if template_pad(other).is_some() => {
+                    Ok(AdrConvention::Template(other.to_string()))
+                }
                 other => Err(D::Error::custom(format!(
-                    "adrConvention must be \"3-digit\", \"4-digit\", or {{ pad, dir }} (got {other:?})"
+                    "adrConvention must be \"3-digit\", \"4-digit\", a template such as \"ADR-XX-NNN\", or {{ pad, dir }} (got {other:?})"
                 ))),
             },
             Raw::Custom { pad, dir } => Ok(AdrConvention::Custom { pad, dir }),
