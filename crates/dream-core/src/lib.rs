@@ -40,6 +40,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod automerge;
 pub mod candidate;
 pub mod compile;
 pub mod context;

@@ -349,6 +349,42 @@ pub struct PrOutcome {
 pub trait Forge: Send + Sync {
     /// Push `pr.branch` and open a **draft** PR for it.
     fn publish_draft(&self, pr: &DraftPr) -> PrOutcome;
+
+    /// Names of the status checks the protection rules of `branch` in
+    /// `repo` require before a merge.
+    ///
+    /// The default is [`ForgeError::Unsupported`], which the automerge policy
+    /// treats as a refusal: a forge that cannot say what protects a branch
+    /// never gets automerge.
+    fn required_status_checks(&self, repo: &str, branch: &str) -> Result<Vec<String>, ForgeError> {
+        let _ = (repo, branch);
+        Err(ForgeError::Unsupported)
+    }
+
+    /// Ask the forge to squash-merge the PR at `pr_url` once its required
+    /// checks pass. Only called after the automerge policy said
+    /// [`Allowed`](crate::automerge::AutomergeDecision::Allowed).
+    ///
+    /// The default is [`ForgeError::Unsupported`].
+    fn enable_automerge(&self, repo: &str, pr_url: &str) -> Result<(), ForgeError> {
+        let _ = (repo, pr_url);
+        Err(ForgeError::Unsupported)
+    }
+}
+
+/// Why a forge query or action did not succeed.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ForgeError {
+    /// The forge has no such resource (for example a branch with no
+    /// protection rules answers 404).
+    #[error("not found")]
+    NotFound,
+    /// The call failed; the text says how.
+    #[error("forge call failed: {0}")]
+    Failed(String),
+    /// This forge does not implement the operation.
+    #[error("operation not supported by this forge")]
+    Unsupported,
 }
 
 /// [`Forge`] backed by `git push` and the `gh` command-line tool. Shells out
@@ -368,6 +404,43 @@ impl Forge for GhForge {
             branch: pr.branch.clone(),
             pr_url,
             pushed,
+        }
+    }
+
+    fn required_status_checks(&self, repo: &str, branch: &str) -> Result<Vec<String>, ForgeError> {
+        let body = Self::gh_api(&format!("repos/{repo}/branches/{branch}/protection"))?;
+        crate::automerge::parse_protection(&body)
+    }
+
+    fn enable_automerge(&self, repo: &str, pr_url: &str) -> Result<(), ForgeError> {
+        let out = Command::new("gh")
+            .args(["pr", "merge", pr_url, "--repo", repo, "--auto", "--squash"])
+            .output()
+            .map_err(|e| ForgeError::Failed(format!("cannot run gh: {e}")))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(ForgeError::Failed(
+                String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            ))
+        }
+    }
+}
+
+impl GhForge {
+    fn gh_api(path: &str) -> Result<String, ForgeError> {
+        let out = Command::new("gh")
+            .args(["api", path])
+            .output()
+            .map_err(|e| ForgeError::Failed(format!("cannot run gh: {e}")))?;
+        if out.status.success() {
+            return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
+        }
+        let err = String::from_utf8_lossy(&out.stderr);
+        if err.contains("404") || err.contains("Not Found") {
+            Err(ForgeError::NotFound)
+        } else {
+            Err(ForgeError::Failed(err.trim().to_string()))
         }
     }
 }

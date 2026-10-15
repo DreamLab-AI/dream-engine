@@ -335,8 +335,14 @@ pub struct DreamConfig {
     /// Pull-request labels.
     #[serde(default)]
     pub labels: Vec<String>,
-    /// Whether accepted candidates may auto-merge.
-    #[serde(default)]
+    /// Whether an accepted candidate's pull request may be set to auto-merge.
+    ///
+    /// **Default off.** Accepted as `autoMerge` or `automerge`. The config is a
+    /// protected path, so a candidate patch cannot switch it on. Even when
+    /// `true` the host still applies `dream_core::automerge::decide`, which
+    /// refuses self-referential targets and branches without required status
+    /// checks.
+    #[serde(default, alias = "automerge")]
     pub auto_merge: bool,
     /// Extra protected path globs. **Additive only**: these extend the
     /// built-in protected set and can never remove from it (negation with a

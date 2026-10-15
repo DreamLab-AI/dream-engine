@@ -12,11 +12,15 @@
 
 use std::path::{Path, PathBuf};
 
+use dream_gate::config::DreamConfig;
 use dream_gate::guard::{self, GuardViolation, ProtectedPolicy};
 use dream_gate::patch::normalise_patch;
+use dream_gate::verdict::Verdict;
 use thiserror::Error;
 
+use crate::automerge::{self, AutomergeDecision, TargetFacts};
 use crate::git;
+use crate::seams::{DraftPr, Forge, ForgeError};
 
 /// Why building or publishing a candidate branch failed.
 #[derive(Debug, Error)]
@@ -268,10 +272,70 @@ pub fn remove_worktree(repo: &Path, wt: &Path) {
     );
 }
 
+/// What [`publish`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Published {
+    /// The push/PR result.
+    pub outcome: PrOutcome,
+    /// What the automerge policy decided.
+    pub automerge: AutomergeDecision,
+    /// Whether `gh pr merge --auto --squash` was requested and accepted.
+    pub automerge_enabled: bool,
+    /// Why enabling failed, when [`AutomergeDecision::Allowed`] but the forge
+    /// refused. The PR stays an ordinary draft.
+    pub automerge_error: Option<String>,
+}
+
+/// Publish a draft pull request and, **only** when it opened and the
+/// [automerge policy](crate::automerge::decide) says
+/// [`Allowed`](AutomergeDecision::Allowed), ask the forge to automerge it.
+///
+/// The default path (flag off, which is the default) never queries branch
+/// protection and never merges: the result is a draft a human merges.
+/// `base_branch` is the branch the PR targets. The pull request is draft-clean
+/// when the branch was pushed and a URL came back.
+pub fn publish(
+    forge: &dyn Forge,
+    cfg: &DreamConfig,
+    pr: &DraftPr,
+    base_branch: &str,
+    verdict: Verdict,
+) -> Published {
+    let outcome = forge.publish_draft(pr);
+    let draft_clean = outcome.pushed && outcome.pr_url.is_some();
+    let facts = TargetFacts {
+        repo_slug: pr.repo_slug.clone(),
+        protects_gate_crates: automerge::protects_gate_crates(cfg),
+        contains_gate_crates: automerge::contains_gate_crates(&pr.repo_dir),
+        required_checks: if cfg.auto_merge && draft_clean {
+            forge.required_status_checks(&pr.repo_slug, base_branch)
+        } else {
+            Err(ForgeError::Unsupported)
+        },
+        verdict,
+        draft_clean,
+    };
+    let automerge = automerge::decide(cfg, &facts);
+    let (mut automerge_enabled, mut automerge_error) = (false, None);
+    if let (AutomergeDecision::Allowed, Some(url)) = (&automerge, &outcome.pr_url) {
+        match forge.enable_automerge(&pr.repo_slug, url) {
+            Ok(()) => automerge_enabled = true,
+            Err(e) => automerge_error = Some(e.to_string()),
+        }
+    }
+    Published {
+        outcome,
+        automerge,
+        automerge_enabled,
+        automerge_error,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::process::Command;
+    use std::sync::Mutex;
 
     #[test]
     fn branch_name_slugifies_and_dates() {
@@ -548,5 +612,153 @@ mod tests {
             .output()
             .unwrap();
         assert!(br.stdout.is_empty());
+    }
+
+    struct Fake {
+        pr_url: Option<String>,
+        checks: Result<Vec<String>, ForgeError>,
+        enable: Result<(), ForgeError>,
+        calls: Mutex<Vec<&'static str>>,
+    }
+    impl Fake {
+        fn new(checks: Result<Vec<String>, ForgeError>) -> Self {
+            Fake {
+                pr_url: Some("https://x/pr/1".into()),
+                checks,
+                enable: Ok(()),
+                calls: Mutex::new(vec![]),
+            }
+        }
+        fn calls(&self) -> Vec<&'static str> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+    impl Forge for Fake {
+        fn publish_draft(&self, pr: &DraftPr) -> PrOutcome {
+            self.calls.lock().unwrap().push("publish");
+            PrOutcome {
+                branch: pr.branch.clone(),
+                pr_url: self.pr_url.clone(),
+                pushed: self.pr_url.is_some(),
+            }
+        }
+        fn required_status_checks(&self, _: &str, _: &str) -> Result<Vec<String>, ForgeError> {
+            self.calls.lock().unwrap().push("checks");
+            self.checks.clone()
+        }
+        fn enable_automerge(&self, _: &str, _: &str) -> Result<(), ForgeError> {
+            self.calls.lock().unwrap().push("enable");
+            self.enable.clone()
+        }
+    }
+
+    fn pcfg(on: bool, repo: &str) -> DreamConfig {
+        serde_json::from_value(serde_json::json!({
+            "repo": repo, "slots": [{"deep":"d","scan":["src"]}], "autoMerge": on
+        }))
+        .unwrap()
+    }
+    fn dpr(slug: &str) -> DraftPr {
+        DraftPr {
+            repo_dir: PathBuf::from("/nonexistent-dream-test"),
+            repo_slug: slug.into(),
+            branch: "dream/x-2026-01-01".into(),
+            title: "t".into(),
+            body: "b".into(),
+        }
+    }
+
+    #[test]
+    fn default_path_is_a_draft_with_no_protection_query_and_no_merge() {
+        let f = Fake::new(Ok(vec!["ci".into()]));
+        let r = publish(
+            &f,
+            &pcfg(false, "o/r"),
+            &dpr("o/r"),
+            "main",
+            Verdict::Accept,
+        );
+        assert_eq!(r.automerge, AutomergeDecision::Disabled);
+        assert!(!r.automerge_enabled);
+        assert_eq!(f.calls(), vec!["publish"]);
+    }
+
+    #[test]
+    fn allowed_enables_automerge_after_the_pr_opened() {
+        let f = Fake::new(Ok(vec!["ci".into()]));
+        let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
+        assert_eq!(r.automerge, AutomergeDecision::Allowed);
+        assert!(r.automerge_enabled);
+        assert_eq!(f.calls(), vec!["publish", "checks", "enable"]);
+    }
+
+    #[test]
+    fn flag_on_but_no_checks_never_merges() {
+        let f = Fake::new(Ok(vec![]));
+        let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+        assert!(!f.calls().contains(&"enable"));
+    }
+
+    #[test]
+    fn flag_on_but_protection_api_error_never_merges() {
+        let f = Fake::new(Err(ForgeError::Failed("HTTP 502".into())));
+        let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+        assert!(!f.calls().contains(&"enable"));
+    }
+
+    #[test]
+    fn flag_on_but_self_referential_never_merges() {
+        let f = Fake::new(Ok(vec!["ci".into()]));
+        let r = publish(
+            &f,
+            &pcfg(true, "o/r"),
+            &dpr("DreamLab-AI/dream-engine"),
+            "main",
+            Verdict::Accept,
+        );
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+        assert!(!f.calls().contains(&"enable"));
+    }
+
+    #[test]
+    fn a_pr_that_did_not_open_is_never_merged() {
+        let mut f = Fake::new(Ok(vec!["ci".into()]));
+        f.pr_url = None;
+        let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+        assert!(!f.calls().contains(&"enable"));
+    }
+
+    #[test]
+    fn a_forge_that_refuses_to_enable_leaves_an_ordinary_draft() {
+        let mut f = Fake::new(Ok(vec!["ci".into()]));
+        f.enable = Err(ForgeError::Failed("no".into()));
+        let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
+        assert!(!r.automerge_enabled);
+        assert!(r.automerge_error.is_some());
+    }
+
+    #[test]
+    fn a_forge_without_protection_support_is_refused_by_default() {
+        struct Bare;
+        impl Forge for Bare {
+            fn publish_draft(&self, pr: &DraftPr) -> PrOutcome {
+                PrOutcome {
+                    branch: pr.branch.clone(),
+                    pr_url: Some("u".into()),
+                    pushed: true,
+                }
+            }
+        }
+        let r = publish(
+            &Bare,
+            &pcfg(true, "o/r"),
+            &dpr("o/r"),
+            "main",
+            Verdict::Accept,
+        );
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
     }
 }
