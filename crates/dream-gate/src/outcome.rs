@@ -1,6 +1,6 @@
 //! The raw result of executing one evaluator command.
 //!
-//! [`ExecOutcome`] is the seam between whatever *runs* an evaluator (SSH, a
+//! [`ExecOutcome`] is the seam between whatever *runs* an evaluator (a remote shell, a
 //! container, a local shell, a scripted replay) and everything that *judges*
 //! it. This crate never executes anything; it only consumes this value.
 

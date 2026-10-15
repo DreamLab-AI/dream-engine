@@ -20,14 +20,14 @@ pub enum Verdict {
     Reject,
     /// Nothing decisive either way.
     Inconclusive,
-    /// The environment (annexe checkout, evaluators) was broken before the
+    /// The environment (runner checkout, evaluators) was broken before the
     /// hypothesis could be tested. Distinct from Inconclusive: it never
     /// counts toward a repo's dry streak — a broken harness must not park a
     /// healthy repo — and it is raised by the engine's pre-flight probe, not
     /// parsed from an LLM report.
     BlockedEnv,
     /// The nomination was refused before scheduling because no usable
-    /// evaluator covers tonight's deep (ADR-2024 closeout, evaluator-readiness
+    /// evaluator covers tonight's deep (evaluator-readiness
     /// admission). Like [`Verdict::BlockedEnv`] this is operational state, not
     /// a claim about the repository: no evaluator ran and no model was called.
     Handoff,
@@ -233,7 +233,7 @@ const STRICT_TOKENS: [(&str, Verdict); 5] = [
 /// [`parse_verdict`] is deliberately forgiving: it will hunt through prose for
 /// the last standalone keyword so that a rambling report still yields a ledger
 /// row. That forgiveness is exactly what let a report carrying failure text
-/// arrive at ACCEPT (ADR-2024 closeout), so acceptance uses this parse instead.
+/// arrive at ACCEPT (per the original design review), so acceptance uses this parse instead.
 ///
 /// The contract is narrow and mechanical:
 ///
@@ -378,7 +378,7 @@ pub fn sanitise_finding(report: &str, verdict: Verdict, night_date: &str) -> Str
 /// code units (JavaScript `String.length`), not Rust chars.
 pub const FINDING_MAX_UTF16: usize = 80;
 
-/// The rules a ledger finding cell breaks, named as dream-machine's
+/// The rules a ledger finding cell breaks, named by the downstream
 /// `packages/ledger/src/rowContract.ts` names them (`finding-empty`,
 /// `finding-too-long`, `finding-pointer`, `finding-hypothesis-leak`).
 ///
@@ -681,7 +681,7 @@ More prose here.
         let report = "\
 > Given the `sovereign-mesh-bridge` entrypoint pipes cargo through `tail`, when cargo aborts, then the harness still records PASSED.
 
-### Step 19 — Ledger row (appended in annexe clone)
+### Step 19 — Ledger row (appended in runner clone)
 
 ```
 | 2026-09-07 | sovereign-mesh | sovereign-mesh-bridge PASS is pipe-masked (cargo dep err, exit=0): FALLBACK rule | NONE | NONE | yes | ACCEPT | docs-only marker | BLOCKED | |
@@ -700,10 +700,10 @@ VERDICT: ACCEPT
     /// overruns the cell is ignored, and the older heuristics apply.
     #[test]
     fn sanitise_ignores_a_ledger_row_cell_that_breaks_the_contract() {
-        let leak = "| 2026-09-07 | x | Given the annexe clone lacks the siblings, when… | NONE | NONE | yes | ACCEPT |  | abc |  |\n**Finding:** siblings absent on the annexe\n";
+        let leak = "| 2026-09-07 | x | Given the runner clone lacks the siblings, when… | NONE | NONE | yes | ACCEPT |  | abc |  |\n**Finding:** siblings absent on the runner\n";
         assert_eq!(
             sanitise_finding(leak, Verdict::Accept, NIGHT),
-            "siblings absent on the annexe"
+            "siblings absent on the runner"
         );
         let pointer = "| 2026-09-07 | x | INCONCLUSIVE — see report | NONE | NONE | yes | INCONCLUSIVE |  | abc |  |\n";
         assert_eq!(
@@ -800,10 +800,10 @@ VERDICT: ACCEPT
 
     #[test]
     fn sanitise_matches_bold_hypothesis() {
-        // Real GLM output (loom night, witness 047e2fbc): inline bold around
+        // Real GLM output (a real night): inline bold around
         // the keywords defeated the prefix strip and fell through to the
         // "INCONCLUSIVE — see report" fallback.
-        let report = "> **Given** the `tests/` suite of DreamLab-AI/loom, **when** pytest runs, **then** zero tests exercise triple-loading.\n\nVERDICT: INCONCLUSIVE";
+        let report = "> **Given** the `tests/` suite of owner/example, **when** pytest runs, **then** zero tests exercise triple-loading.\n\nVERDICT: INCONCLUSIVE";
         let finding = sanitise_finding(report, Verdict::Inconclusive, NIGHT);
         assert!(finding.starts_with("Given the"), "got: {finding}");
     }
@@ -904,7 +904,7 @@ VERDICT: ACCEPT
         assert_eq!(from_label(" accept "), Verdict::Accept);
     }
 
-    /// 2026-10-06 (dream-machine f56ede7, factrail 9669e7b): the night's own
+    /// 2026-10-06 (a downstream repository): the night's own
     /// proposed row was wrapped in backticks, so it was skipped and a row
     /// quoted from an EARLIER night (patch context) supplied tonight's finding.
     #[test]
@@ -912,7 +912,7 @@ VERDICT: ACCEPT
         let report = "\
 ```diff
 @@ -12,3 +12,4 @@
- | 2026-10-05 | evaluator | candidatesPerGeneration capped at 4 on the annexe | NONE | NONE | yes | REJECT |  | 0123456789ab |  |
+ | 2026-10-05 | evaluator | candidatesPerGeneration capped at 4 on the runner | NONE | NONE | yes | REJECT |  | 0123456789ab |  |
 ```
 
 Proposed ledger row:
@@ -932,7 +932,7 @@ VERDICT: ACCEPT
     #[test]
     fn sanitise_ignores_rows_dated_for_another_night() {
         let report = "\
- | 2026-10-05 | evaluator | candidatesPerGeneration capped at 4 on the annexe | NONE | NONE | yes | REJECT |  | 0123456789ab |  |
+ | 2026-10-05 | evaluator | candidatesPerGeneration capped at 4 on the runner | NONE | NONE | yes | REJECT |  | 0123456789ab |  |
 **Finding:** tonight's evaluator run timed out after 600s
 ";
         assert_eq!(
@@ -965,7 +965,7 @@ VERDICT: ACCEPT
             vec!["finding-pointer"]
         );
         assert_eq!(
-            finding_violations("see the annexe log"),
+            finding_violations("see the runner log"),
             vec!["finding-pointer"]
         );
         assert_eq!(

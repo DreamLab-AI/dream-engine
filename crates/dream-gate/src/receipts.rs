@@ -3,7 +3,7 @@
 //! Before this module the engine kept only an evaluator's stdout, merged into
 //! the prompt as prose. An evaluator that exited non-zero, printed nothing, or
 //! never ran at all was indistinguishable from one that passed, so "failure
-//! text can coexist with ACCEPT" (ADR-2024 closeout). A receipt fixes that: it
+//! text can coexist with ACCEPT" (per the original design review). A receipt fixes that: it
 //! records the exit code, both streams verbatim, the wall-clock duration and a
 //! *typed* [`EvaluatorOutcome`] derived from them by a pure function.
 //!
@@ -21,7 +21,7 @@ use crate::outcome::ExecOutcome;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Phase {
-    /// The unmodified baseline tree shipped to the annexe.
+    /// The unmodified baseline tree shipped to the runner.
     Baseline,
     /// The tree with the report's candidate patch applied.
     Candidate,
@@ -69,7 +69,7 @@ pub enum EvaluatorOutcome {
         after_secs: u64,
     },
     /// Exit 0 with no output on either stream. Surface-independent, therefore
-    /// unfalsifiable — the ADR-065 no-op in its most literal form.
+    /// unfalsifiable — the vacuous-evaluator no-op in its most literal form.
     Silent,
     /// Declared in the manifest but absent from the receipt set.
     Missing,
@@ -444,8 +444,7 @@ mod tests {
     #[test]
     fn transport_error_is_blocked_not_failed() {
         let mut e = exec(None, "", "");
-        e.transport_error =
-            Some("ssh: connect to host the connected node port 22: No route".into());
+        e.transport_error = Some("runner: connect failed: no route".into());
         let o = classify(&e, 60);
         assert!(matches!(o, EvaluatorOutcome::Blocked { .. }), "got {o:?}");
         assert!(o.is_harness_fault());

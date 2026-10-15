@@ -23,7 +23,7 @@ pub fn deletes_binary(patch: &str) -> bool {
 /// line carries a one-character prefix, so a Rust doc-test fence (`/// ````)
 /// or a Markdown code fence edited by the patch appears as ` /// ```` or
 /// `+```` and never as a fence line. Ending at the first "```" substring cut
-/// such patches mid-hunk ("corrupt patch at :14", factrail 2026-10-08/10).
+/// such patches mid-hunk ("corrupt patch at :14", 2026-10-08).
 pub fn extract_patch(report: &str) -> Option<String> {
     const TAG: &str = "```dream-patch";
     let start = report.find(TAG)? + TAG.len();
@@ -54,13 +54,13 @@ pub fn extract_patch(report: &str) -> Option<String> {
 ///
 /// * **Missing `diff --git` headers.** Without them `git apply --recount`
 ///   reads the next file's `--- a/…` header as a deleted line of the previous
-///   hunk (project2 2026-10-09). A header is synthesised for every
+///   hunk (2026-10-09). A header is synthesised for every
 ///   `---`/`+++` pair that lacks one.
 /// * **Trailing blank separator lines** at the end of a hunk are dropped:
 ///   in `--recount` mode git counts them as context the file may not have.
 /// * **Asymmetric context.** A hunk with leading context but none trailing
 ///   is anchored by git to end-of-file, so it fails anywhere mid-file
-///   (dream-machine 2026-10-09). When the hunk's old lines occur exactly once
+///   (2026-10-09). When the hunk's old lines occur exactly once
 ///   in the base file and not at its end, up to three following lines of the
 ///   real file are appended as trailing context.
 ///
@@ -233,7 +233,6 @@ fn trailing_context(body: &[String], file: &[String]) -> Option<Vec<String>> {
     Some(file[end..(end + want).min(file.len())].to_vec())
 }
 
-
 /// Accept git blob bytes as text: `None` when they contain a NUL byte or are
 /// not valid UTF-8 (binary content).
 ///
@@ -284,10 +283,9 @@ mod tests {
         assert!(extract_patch("```dream-patch\n   \n```").is_none());
     }
 
-
     #[test]
     fn a_fence_inside_the_diff_does_not_end_the_block() {
-        // factrail 2026-10-08/10: the hunk edits a Rust doc test, so the diff
+        // 2026-10-08: the hunk edits a Rust doc test, so the diff
         // carries ` /// ```` lines. Ending at the first "```" substring cut it
         // at line 14 ("corrupt patch").
         let diff = "--- a/lib.rs\n+++ b/lib.rs\n@@ -1,3 +1,4 @@\n /// ```\n /// x();\n+/// y();\n /// ```\n";
@@ -299,7 +297,6 @@ mod tests {
         // No closing fence at all: no patch rather than a guess.
         assert!(extract_patch("```dream-patch\n--- a/x\n+++ b/x\n").is_none());
     }
-
 
     #[test]
     fn normalising_never_changes_an_added_or_removed_line() {
@@ -333,7 +330,6 @@ mod tests {
         assert!(notes.is_empty());
         assert_eq!(out, twice);
     }
-
 
     #[test]
     fn blob_text_refuses_binary_and_invalid_utf8() {

@@ -36,8 +36,7 @@ use std::collections::BTreeMap;
 
 use failure_fingerprint::{advance, Manifest, Observation, Stage};
 use pairwise_gate::{
-    Evidence, Floor, Margin, NoRegression, Outcome, Pairing, Policy, SignTest, Verdict,
-    WilsonLower,
+    Evidence, Floor, Margin, NoRegression, Outcome, Pairing, Policy, SignTest, Verdict, WilsonLower,
 };
 use serde::{Deserialize, Serialize};
 
@@ -167,14 +166,13 @@ fn score(s: &TestStatus) -> Outcome {
 }
 
 fn all_pass(cases: &[&TestCase]) -> Option<bool> {
-    if cases.iter().any(|c| matches!(c.status, TestStatus::Fault { .. })) {
+    if cases
+        .iter()
+        .any(|c| matches!(c.status, TestStatus::Fault { .. }))
+    {
         return None;
     }
-    Some(
-        cases
-            .iter()
-            .all(|c| matches!(c.status, TestStatus::Passed)),
-    )
+    Some(cases.iter().all(|c| matches!(c.status, TestStatus::Passed)))
 }
 
 /// Vetoes for every required evaluator that has per-test evidence.
@@ -199,7 +197,8 @@ pub(crate) fn vetoes(
 fn evaluator_vetoes(name: &str, t: &TestOutcomes, opts: &PairwiseOptions) -> Vec<Veto> {
     let mut out = Vec::new();
     let base: BTreeMap<&str, &TestCase> = t.baseline.iter().map(|c| (c.name.as_str(), c)).collect();
-    let cand: BTreeMap<&str, &TestCase> = t.candidate.iter().map(|c| (c.name.as_str(), c)).collect();
+    let cand: BTreeMap<&str, &TestCase> =
+        t.candidate.iter().map(|c| (c.name.as_str(), c)).collect();
 
     // 1. Faults, either side, and baseline tests the candidate run dropped.
     let mut faults: Vec<String> = Vec::new();
@@ -233,7 +232,9 @@ fn evaluator_vetoes(name: &str, t: &TestOutcomes, opts: &PairwiseOptions) -> Vec
     let observe = |m: &BTreeMap<&str, &TestCase>| -> Vec<Observation> {
         m.iter()
             .filter_map(|(tn, c)| match &c.status {
-                TestStatus::Failed { cause } => Some(Observation::new(*tn, Stage::new(name), cause.as_str())),
+                TestStatus::Failed { cause } => {
+                    Some(Observation::new(*tn, Stage::new(name), cause.as_str()))
+                }
                 _ => None,
             })
             .collect()
@@ -313,7 +314,12 @@ fn evaluator_vetoes(name: &str, t: &TestOutcomes, opts: &PairwiseOptions) -> Vec
 
 fn summarise(items: &[String]) -> String {
     const SHOWN: usize = 5;
-    let mut s = items.iter().take(SHOWN).cloned().collect::<Vec<_>>().join("; ");
+    let mut s = items
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("; ");
     if items.len() > SHOWN {
         s.push_str(&format!("; … and {} more", items.len() - SHOWN));
     }

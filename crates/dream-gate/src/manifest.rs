@@ -1,8 +1,8 @@
-//! The frozen experiment manifest (ADR-2024 closeout, CP-01/07/08).
+//! The frozen experiment manifest.
 //!
 //! Before a single token is spent on the model, the engine writes down exactly
 //! what the night is an experiment *about*: which baseline revision and tree
-//! were shipped to the annexe, which evaluators were selected and what their
+//! were shipped to the runner, which evaluators were selected and what their
 //! command strings hash to, which model was going to be asked, and the run
 //! identity that ties every later artefact back to this record.
 //!
@@ -116,7 +116,7 @@ pub struct ExperimentManifest {
     pub deep: String,
     /// Paths the slot scans.
     pub scan: Vec<String>,
-    /// Full 40-hex commit the annexe tree was archived from.
+    /// Full 40-hex commit the runner tree was archived from.
     pub baseline_revision: String,
     /// `git rev-parse HEAD^{tree}` — the tree actually shipped and evaluated.
     /// This is the *candidate tree* of the baseline evaluation; the patched
@@ -383,8 +383,8 @@ mod tests {
 
     fn model() -> ModelIdentity {
         ModelIdentity {
-            provider: "loom".into(),
-            model: "qwen3.8-27B".into(),
+            provider: "provider-x".into(),
+            model: "model-y".into(),
             max_tokens: 16384,
             fallback: None,
         }
@@ -395,8 +395,8 @@ mod tests {
         build(
             &cfg,
             b"{\"repo\":\"o/r\"}",
-            "agentbox",
-            "2026-09-05-agentbox",
+            "example",
+            "2026-09-05-example",
             "2026-09-05",
             20260905,
             "engine",
@@ -410,8 +410,8 @@ mod tests {
 
     #[test]
     fn run_id_is_deterministic_and_input_sensitive() {
-        let a = run_id("agentbox", "2026-09-05", "engine", "abc123", "cfg1");
-        let b = run_id("agentbox", "2026-09-05", "engine", "abc123", "cfg1");
+        let a = run_id("example", "2026-09-05", "engine", "abc123", "cfg1");
+        let b = run_id("example", "2026-09-05", "engine", "abc123", "cfg1");
         assert_eq!(
             a, b,
             "same inputs must recompute the same id (restart-safe)"
@@ -419,15 +419,15 @@ mod tests {
         assert_eq!(a.len(), 16);
         assert_ne!(
             a,
-            run_id("agentbox", "2026-09-05", "engine", "abc124", "cfg1")
+            run_id("example", "2026-09-05", "engine", "abc124", "cfg1")
         );
         assert_ne!(
             a,
-            run_id("agentbox", "2026-09-05", "engine", "abc123", "cfg2")
+            run_id("example", "2026-09-05", "engine", "abc123", "cfg2")
         );
         assert_ne!(
             a,
-            run_id("agentbox", "2026-09-06", "engine", "abc123", "cfg1")
+            run_id("example", "2026-09-06", "engine", "abc123", "cfg1")
         );
         assert_ne!(a, run_id("other", "2026-09-05", "engine", "abc123", "cfg1"));
     }

@@ -1,6 +1,6 @@
 //! The deterministic required-check gate.
 //!
-//! ADR-2024's closeout named the defect precisely: evaluation ran *before*
+//! The design review named the defect precisely: evaluation ran *before*
 //! patch emission, the emitted candidate was never re-evaluated, and evaluator
 //! failure did not veto — so failure text and an ACCEPT label could coexist in
 //! one report. This module is the veto that closes it.
@@ -22,7 +22,7 @@
 //! | harness | candidate config digest drifted / per-test fault | `BLOCKED-ENV` |
 //! | unproven | no candidate patch / unreadable verdict line | `INCONCLUSIVE` |
 //!
-//! `BLOCKED-ENV` is deliberate for harness faults: a broken annexe is not
+//! `BLOCKED-ENV` is deliberate for harness faults: a broken runner is not
 //! evidence against the repository and must not park a healthy repo on the dry
 //! streak.
 
@@ -128,7 +128,7 @@ fn veto_for(name: &str, outcome: &EvaluatorOutcome) -> Option<Veto> {
         EvaluatorOutcome::Silent => Some(Veto::harness(
             name,
             "required evaluator exited 0 with no output on either stream — \
-             surface-independent, so it proves nothing (ADR-065)",
+             surface-independent, so it proves nothing",
         )),
         EvaluatorOutcome::Blocked { detail } => Some(Veto::harness(
             name,
@@ -292,7 +292,10 @@ fn guard_veto(v: &GuardViolation) -> Veto {
     match v {
         GuardViolation::Protected { paths } => Veto::evidence(
             "protected-path",
-            format!("candidate patch touches protected path(s): {}", paths.join(", ")),
+            format!(
+                "candidate patch touches protected path(s): {}",
+                paths.join(", ")
+            ),
         ),
         other => Veto::evidence(
             "patch-guard",
@@ -364,7 +367,10 @@ pub fn decide(
             }
             CandidateState::Protected { paths } => vetoes.push(Veto::evidence(
                 "protected-path",
-                format!("candidate patch touches protected path(s): {}", paths.join(", ")),
+                format!(
+                    "candidate patch touches protected path(s): {}",
+                    paths.join(", ")
+                ),
             )),
             CandidateState::NoPatch => vetoes.push(Veto::unproven(
                 "candidate",
@@ -476,13 +482,12 @@ pub fn decide(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::manifest::{digest, ModelIdentity};
-    use crate::pertest::{FaultKind, TestCase, TestStatus};
     use crate::outcome::ExecOutcome;
+    use crate::pertest::{FaultKind, TestCase, TestStatus};
 
     fn ident(name: &str, required: bool) -> EvaluatorIdentity {
         let cmd = format!("run-{name}");
@@ -702,7 +707,7 @@ mod tests {
         assert!(d.accepted, "{}", d.summary);
     }
 
-    /// 2026-09-07 dreamlab-ai-website: bench/lint/pin-parity all PASSED on
+    /// 2026-09-07: bench/lint/pin-parity all PASSED on
     /// baseline, the model claimed ACCEPT without a patch, and the gate
     /// reported "required evaluator produced no receipt — it never ran" three
     /// times → BLOCKED-ENV. No patch means nothing to re-run; that is the
@@ -809,7 +814,7 @@ mod tests {
     // Regression oracle: the old decision procedure, byte for byte.
     // ------------------------------------------------------------------
 
-    /// VERBATIM copy of the pre-guard `decide` (agentbox dream-engine gate.rs),
+    /// VERBATIM copy of the pre-guard `decide` (original dream-engine gate.rs),
     /// kept as the behavioural oracle for the additive-change regression test.
     fn legacy_decide(
         manifest: &ExperimentManifest,
@@ -871,7 +876,7 @@ mod tests {
         // 3. Required evaluators on the candidate tree. This is the veto proper,
         //    and it applies whatever the report's prose says — but only when a
         //    candidate tree exists to have been evaluated. An ACCEPT that shipped
-        //    no patch (2026-09-07 dreamlab-ai-website) has nothing to run: grading
+        //    no patch (2026-09-07) has nothing to run: grading
         //    its absent receipts as "never ran" turned a model failing into three
         //    false harness vetoes, a BLOCKED-ENV verdict and an operator alert
         //    about a harness that had in fact passed every baseline evaluator.
@@ -907,7 +912,8 @@ mod tests {
                 "ACCEPT upheld: {} required evaluator(s) passed on candidate tree {}",
                 required_outcomes.len(),
                 match candidate {
-                    CandidateState::Applied { tree_hash, .. } => &tree_hash[..tree_hash.len().min(12)],
+                    CandidateState::Applied { tree_hash, .. } =>
+                        &tree_hash[..tree_hash.len().min(12)],
                     _ => "-",
                 }
             )
@@ -935,14 +941,14 @@ mod tests {
         }
     }
 
-
-
     fn outcome_variants() -> Vec<Option<EvaluatorOutcome>> {
         vec![
             None,
             Some(EvaluatorOutcome::Passed),
             Some(EvaluatorOutcome::Failed { exit_code: 1 }),
-            Some(EvaluatorOutcome::ExplicitFail { marker: "FAIL".into() }),
+            Some(EvaluatorOutcome::ExplicitFail {
+                marker: "FAIL".into(),
+            }),
             Some(EvaluatorOutcome::Blocked { detail: "d".into() }),
             Some(EvaluatorOutcome::TimedOut { after_secs: 9 }),
             Some(EvaluatorOutcome::Silent),
@@ -961,7 +967,11 @@ mod tests {
     /// decision from the new `decide` (benign patch, no digest, no per-test data).
     #[test]
     fn old_verdicts_are_unchanged_across_the_whole_scenario_space() {
-        let m = manifest(vec![ident("tests", true), ident("hooks", true), ident("lint", false)]);
+        let m = manifest(vec![
+            ident("tests", true),
+            ident("hooks", true),
+            ident("lint", false),
+        ]);
         let stricts: Vec<Result<Verdict, VerdictParseError>> = vec![
             Ok(Verdict::Accept),
             Ok(Verdict::Reject),
@@ -974,8 +984,12 @@ mod tests {
         let cands = [
             applied(),
             CandidateState::NoPatch,
-            CandidateState::DidNotApply { detail: "hunk".into() },
-            CandidateState::Refused { detail: "bin".into() },
+            CandidateState::DidNotApply {
+                detail: "hunk".into(),
+            },
+            CandidateState::Refused {
+                detail: "bin".into(),
+            },
             CandidateState::NotAttempted,
         ];
         let mut n = 0;
@@ -1019,7 +1033,9 @@ mod tests {
         let d = decide(
             &m,
             &Ok(Verdict::Accept),
-            &CandidateState::Protected { paths: vec!["gate.rs".into()] },
+            &CandidateState::Protected {
+                paths: vec!["gate.rs".into()],
+            },
             &[],
         );
         assert!(!d.accepted);
@@ -1056,7 +1072,11 @@ mod tests {
             &[receipt("tests", Phase::Candidate, 0, "ok")],
         );
         assert_eq!(d.verdict, "REJECT", "{}", d.summary);
-        assert!(d.vetoes.iter().all(|v| v.class == VetoClass::Evidence), "{:?}", d.vetoes);
+        assert!(
+            d.vetoes.iter().all(|v| v.class == VetoClass::Evidence),
+            "{:?}",
+            d.vetoes
+        );
     }
 
     #[test]
@@ -1101,10 +1121,22 @@ mod tests {
         assert_eq!(d.verdict, "BLOCKED-ENV");
         assert_eq!(d.vetoes[0].subject, "config-digest");
         // Not claimed ACCEPT: nothing to veto.
-        let d = super::decide(&m, &Ok(Verdict::Reject), &CandidateState::NotAttempted, &[], &drift);
+        let d = super::decide(
+            &m,
+            &Ok(Verdict::Reject),
+            &CandidateState::NotAttempted,
+            &[],
+            &drift,
+        );
         assert!(d.vetoes.is_empty());
         // Editing the config is a protected-path REJECT, not a digest matter.
-        let edit = super::decide(&m, &Ok(Verdict::Accept), &applied_with(&patch_for("dream.config.json")), &rs, &drift);
+        let edit = super::decide(
+            &m,
+            &Ok(Verdict::Accept),
+            &applied_with(&patch_for("dream.config.json")),
+            &rs,
+            &drift,
+        );
         assert_eq!(edit.verdict, "REJECT");
         assert_eq!(edit.vetoes.len(), 1);
     }
@@ -1123,7 +1155,9 @@ mod tests {
     fn run_with(tests: TestOutcomes, options: PairwiseOptions, code: i32) -> GateDecision {
         let m = manifest(vec![ident("tests", true)]);
         let policy = ProtectedPolicy::default();
-        let ctx = GateContext::new(&policy).with_tests("tests", tests).with_options(options);
+        let ctx = GateContext::new(&policy)
+            .with_tests("tests", tests)
+            .with_options(options);
         super::decide(
             &m,
             &Ok(Verdict::Accept),
@@ -1151,7 +1185,11 @@ mod tests {
         };
         let d = run_with(t, PairwiseOptions::default(), 0);
         assert_eq!(d.verdict, "REJECT", "{}", d.summary);
-        assert!(d.vetoes.iter().any(|v| v.reason.contains("new failure")), "{:?}", d.vetoes);
+        assert!(
+            d.vetoes.iter().any(|v| v.reason.contains("new failure")),
+            "{:?}",
+            d.vetoes
+        );
     }
 
     #[test]
@@ -1161,7 +1199,11 @@ mod tests {
             candidate: vec![pass("a"), fail("b", "boom at line 14")],
         };
         let d = run_with(t, PairwiseOptions::default(), 0);
-        assert!(d.accepted, "line numbers are normalised away: {}", d.summary);
+        assert!(
+            d.accepted,
+            "line numbers are normalised away: {}",
+            d.summary
+        );
     }
 
     #[test]
@@ -1176,14 +1218,23 @@ mod tests {
 
     #[test]
     fn per_test_faults_are_a_harness_veto_never_a_loss() {
-        for fk in [FaultKind::Missing, FaultKind::Silent, FaultKind::Blocked, FaultKind::TimedOut] {
+        for fk in [
+            FaultKind::Missing,
+            FaultKind::Silent,
+            FaultKind::Blocked,
+            FaultKind::TimedOut,
+        ] {
             let t = TestOutcomes {
                 baseline: vec![pass("a")],
                 candidate: vec![TestCase::new("a", TestStatus::fault(fk))],
             };
             let d = run_with(t, PairwiseOptions::default(), 0);
             assert_eq!(d.verdict, "BLOCKED-ENV", "{fk:?}: {}", d.summary);
-            assert!(d.vetoes.iter().all(|v| v.class == VetoClass::Harness), "{:?}", d.vetoes);
+            assert!(
+                d.vetoes.iter().all(|v| v.class == VetoClass::Harness),
+                "{:?}",
+                d.vetoes
+            );
         }
     }
 
@@ -1208,12 +1259,17 @@ mod tests {
     }
 
     fn many(n: usize, status: impl Fn(usize) -> TestStatus) -> Vec<TestCase> {
-        (0..n).map(|i| TestCase::new(format!("t{i}"), status(i))).collect()
+        (0..n)
+            .map(|i| TestCase::new(format!("t{i}"), status(i)))
+            .collect()
     }
 
     #[test]
     fn statistical_policies_only_apply_with_enough_cases() {
-        let opts = PairwiseOptions { min_win_margin: Some(1), ..PairwiseOptions::default() };
+        let opts = PairwiseOptions {
+            min_win_margin: Some(1),
+            ..PairwiseOptions::default()
+        };
         // 25 ties: Margin(1) demands an improvement and rejects.
         let big = TestOutcomes {
             baseline: many(25, |_| TestStatus::Passed),
@@ -1232,7 +1288,10 @@ mod tests {
 
     #[test]
     fn floor_applies_to_the_aggregate_case_when_small() {
-        let opts = PairwiseOptions { floor: Some(1.0), ..PairwiseOptions::default() };
+        let opts = PairwiseOptions {
+            floor: Some(1.0),
+            ..PairwiseOptions::default()
+        };
         let t = TestOutcomes {
             baseline: vec![fail("a", "old")],
             candidate: vec![fail("a", "old")],
@@ -1248,7 +1307,10 @@ mod tests {
         let policy = ProtectedPolicy::default();
         let ctx = GateContext::new(&policy).with_tests(
             "lint",
-            TestOutcomes { baseline: vec![pass("a")], candidate: vec![fail("a", "x")] },
+            TestOutcomes {
+                baseline: vec![pass("a")],
+                candidate: vec![fail("a", "x")],
+            },
         );
         let d = super::decide(
             &m,

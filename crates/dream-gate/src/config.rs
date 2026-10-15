@@ -177,8 +177,8 @@ pub struct DreamConfig {
     /// Sibling workspace repos (names relative to the workspace root) whose
     /// sources the build or evaluators need alongside this repo. Empty means
     /// none.
-    #[serde(default)]
-    pub annexe_include: Vec<String>,
+    #[serde(default, alias = "annexeInclude")]
+    pub sibling_repos: Vec<String>,
     /// Evaluator entrypoints, keyed by evaluator name.
     ///
     /// Two value forms are accepted; the plain string is the canonical short
@@ -331,14 +331,16 @@ mod tests {
         assert!(c.ledger_path.is_empty());
         assert!(c.branch_prefix.is_empty());
         assert!(c.protected.is_empty());
-        assert!(c.annexe_include.is_empty());
+        assert!(c.sibling_repos.is_empty());
         assert!(!c.auto_merge);
     }
 
     #[test]
-    fn annexe_include_parses() {
-        let c = cfg(serde_json::json!({"annexeInclude": ["sibling-a", "sibling-b"]})).unwrap();
-        assert_eq!(c.annexe_include, vec!["sibling-a", "sibling-b"]);
+    fn sibling_repos_parses() {
+        let c = cfg(serde_json::json!({"siblingRepos": ["sibling-a", "sibling-b"]})).unwrap();
+        assert_eq!(c.sibling_repos, vec!["sibling-a", "sibling-b"]);
+        let legacy = cfg(serde_json::json!({"annexeInclude": ["old"]})).unwrap();
+        assert_eq!(legacy.sibling_repos, vec!["old"]);
     }
 
     #[test]
@@ -367,7 +369,15 @@ mod tests {
     #[test]
     fn protected_globs_are_additive_and_repo_relative() {
         assert!(cfg(serde_json::json!({"protected": ["docs/frozen/**", "a/*.md"]})).is_ok());
-        for bad in ["", "!src/**", "/etc/passwd", "a/../b", "~/x", "C:/x", "a\\b"] {
+        for bad in [
+            "",
+            "!src/**",
+            "/etc/passwd",
+            "a/../b",
+            "~/x",
+            "C:/x",
+            "a\\b",
+        ] {
             assert!(
                 cfg(serde_json::json!({"protected": [bad]})).is_err(),
                 "{bad:?} must be rejected"

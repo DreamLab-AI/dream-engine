@@ -287,9 +287,11 @@ impl ProtectedPolicy {
         if builtin_protected(&comps) {
             return true;
         }
-        if self.prefixes.iter().any(|p| {
-            comps.len() >= p.len() && p.iter().zip(&comps).all(|(a, b)| a.as_str() == *b)
-        }) {
+        if self
+            .prefixes
+            .iter()
+            .any(|p| comps.len() >= p.len() && p.iter().zip(&comps).all(|(a, b)| a.as_str() == *b))
+        {
             return true;
         }
         // A glob that matches the path or any ancestor directory protects it.
@@ -399,11 +401,19 @@ fn glob_segment(pat: &str, s: &str) -> bool {
 /// ```
 pub fn evaluator_command_paths(cmd: &str) -> Vec<String> {
     let is_delim = |c: char| {
-        c.is_whitespace() || matches!(c, ';' | '|' | '&' | '<' | '>' | '(' | ')' | '"' | '\'' | '`' | '=' | '{' | '}' | ',')
+        c.is_whitespace()
+            || matches!(
+                c,
+                ';' | '|' | '&' | '<' | '>' | '(' | ')' | '"' | '\'' | '`' | '=' | '{' | '}' | ','
+            )
     };
     let mut out: Vec<String> = Vec::new();
     for tok in cmd.split(is_delim).filter(|t| !t.is_empty()) {
-        if tok.starts_with('-') || tok.starts_with('/') || tok.starts_with('~') || tok.starts_with('$') {
+        if tok.starts_with('-')
+            || tok.starts_with('/')
+            || tok.starts_with('~')
+            || tok.starts_with('$')
+        {
             continue;
         }
         if tok.contains("://") || tok.chars().all(|c| c.is_ascii_digit() || c == '.') {
@@ -414,7 +424,9 @@ pub fn evaluator_command_paths(cmd: &str) -> Vec<String> {
                 && !ext.is_empty()
                 && ext.len() <= 6
                 && ext.chars().all(|c| c.is_ascii_alphanumeric())
-                && stem.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/'))
+                && stem
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/'))
         });
         if !tok.contains('/') && !looks_like_file {
             continue;
@@ -555,7 +567,11 @@ fn header_path(rest: &str, line: usize) -> Result<Option<String>, GuardViolation
         }
         text
     } else {
-        rest.split('\t').next().unwrap_or("").trim_end_matches(' ').to_string()
+        rest.split('\t')
+            .next()
+            .unwrap_or("")
+            .trim_end_matches(' ')
+            .to_string()
     };
     if value == "/dev/null" {
         return Ok(None);
@@ -928,7 +944,10 @@ mod tests {
         let p = "diff --git a/src/link b/src/link\nnew file mode 120000\nindex 0000000..e69de29\n--- /dev/null\n+++ b/src/link\n@@ -0,0 +1 @@\n+../../etc/passwd\n\\ No newline at end of file\n";
         assert!(matches!(assert_refused(p), GuardViolation::Symlink { .. }));
         let edit = "diff --git a/src/link b/src/link\nindex 1234567..89abcde 120000\n--- a/src/link\n+++ b/src/link\n@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n\\ No newline at end of file\n";
-        assert!(matches!(assert_refused(edit), GuardViolation::Symlink { .. }));
+        assert!(matches!(
+            assert_refused(edit),
+            GuardViolation::Symlink { .. }
+        ));
     }
 
     #[test]
@@ -1053,7 +1072,8 @@ mod tests {
         assert_refused(tab);
         let unk = "diff --git \"a/x\\qy.rs\" \"b/x\\qy.rs\"\n--- \"a/x\\qy.rs\"\n+++ \"b/x\\qy.rs\"\n@@ -1 +1 @@\n-a\n+b\n";
         assert_refused(unk);
-        let unterminated = "diff --git \"a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n@@ -1 +1 @@\n-a\n+b\n";
+        let unterminated =
+            "diff --git \"a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n@@ -1 +1 @@\n-a\n+b\n";
         assert_refused(unterminated);
     }
 
@@ -1108,7 +1128,12 @@ mod tests {
         ] {
             assert!(p.is_protected(path), "{path} should be protected");
         }
-        for path in ["src/main.rs", "src/lib.rs", "docs/readme.md", "tests/unit.rs"] {
+        for path in [
+            "src/main.rs",
+            "src/lib.rs",
+            "docs/readme.md",
+            "tests/unit.rs",
+        ] {
             assert!(!p.is_protected(path), "{path} should be free");
         }
     }
@@ -1141,7 +1166,10 @@ mod tests {
         assert!(evaluator_command_paths("curl https://example.com/a.sh").is_empty());
         let p = pol().with_evaluator_commands(["python3 -m pytest checks/ scripts/eval.py"]);
         assert!(p.is_protected("scripts/eval.py"));
-        assert!(p.is_protected("checks/test_one.py"), "directory protects its tree");
+        assert!(
+            p.is_protected("checks/test_one.py"),
+            "directory protects its tree"
+        );
         assert!(!p.is_protected("src/x.py"));
     }
 
@@ -1167,5 +1195,71 @@ mod tests {
         assert_eq!(a, b);
         let t = a.expect("ordinary");
         assert_eq!(t.iter().collect::<Vec<_>>(), vec!["src/a.rs", "src/b.rs"]);
+    }
+    #[test]
+    fn a_file_header_pair_hidden_inside_a_hunk_is_still_collected() {
+        let p = "diff --git a/src/ok.rs b/src/ok.rs\n--- a/src/ok.rs\n+++ b/src/ok.rs\n@@ -1 +1 @@\n-a\n+b\n--- a/gate.rs\n+++ b/gate.rs\n@@ -1 +1 @@\n-a\n+b\n";
+        assert_protected(p, "gate.rs");
+    }
+
+    #[test]
+    fn deleted_and_added_lines_that_merely_look_like_headers_are_not_a_bypass() {
+        // `-- x` removed and `++ x` added render as `--- x` / `+++ x`; the
+        // guard over-collects and refuses (false refusal beats a missed path).
+        let p = "diff --git a/src/ok.rs b/src/ok.rs\n--- a/src/ok.rs\n+++ b/src/ok.rs\n@@ -1 +1 @@\n--- x\n+++ x\n";
+        assert_refused(p);
+    }
+
+    fn cfg_and_bytes() -> (DreamConfig, Vec<u8>) {
+        let bytes = br#"{"repo":"o/r","slots":[{"deep":"a","scan":[]}],
+            "ledger_path_ignored":1,
+            "ledgerPath":"docs/ledger.md",
+            "protected":["docs/frozen/**"],
+            "evaluatorEntrypoints":{"t":"bash checks/run.sh"}}"#
+            .to_vec();
+        (DreamConfig::from_json(&bytes).expect("valid"), bytes)
+    }
+
+    #[test]
+    fn from_config_protects_ledger_globs_and_evaluator_paths() {
+        let (cfg, _) = cfg_and_bytes();
+        let p = ProtectedPolicy::from_config(&cfg);
+        assert!(p.is_protected("docs/ledger.md"));
+        assert!(p.is_protected("docs/frozen/x.md"));
+        assert!(p.is_protected("checks/run.sh"));
+        assert!(!p.is_protected("src/lib.rs"));
+    }
+
+    #[test]
+    fn for_manifest_refuses_a_config_that_is_not_the_frozen_one() {
+        let (cfg, bytes) = cfg_and_bytes();
+        let mut m = crate::manifest::build(
+            &cfg,
+            &bytes,
+            "r",
+            "n",
+            "2026-01-01",
+            20260101,
+            "a",
+            &[],
+            "rev",
+            "tree",
+            crate::manifest::ModelIdentity {
+                provider: "p".into(),
+                model: "m".into(),
+                max_tokens: 1,
+                fallback: None,
+            },
+            "0",
+        );
+        assert!(ProtectedPolicy::for_manifest(&m, &cfg, &bytes).is_ok());
+        let mut edited = bytes.clone();
+        edited.push(b' ');
+        assert!(matches!(
+            ProtectedPolicy::for_manifest(&m, &cfg, &edited),
+            Err(PolicyError::ConfigDigestMismatch { .. })
+        ));
+        m.config_digest = "0".repeat(64);
+        assert!(ProtectedPolicy::for_manifest(&m, &cfg, &bytes).is_err());
     }
 }

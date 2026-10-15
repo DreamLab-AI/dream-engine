@@ -167,7 +167,12 @@ mod tests {
     fn verify_accepts_only_the_exact_binding() {
         let w = witness("report body", "deadbeef").unwrap();
         assert!(verify("report body", "deadbeef", &w).unwrap());
-        assert!(verify("report body", "DEADBEEF", &format!("  {}\n", w.to_uppercase())).unwrap());
+        assert!(verify(
+            "report body",
+            "DEADBEEF",
+            &format!("  {}\n", w.to_uppercase())
+        )
+        .unwrap());
         assert!(!verify("report bodz", "deadbeef", &w).unwrap());
         assert!(!verify("report body", "deadbee0", &w).unwrap());
         assert!(!verify("report body", "deadbeef", short(&w)).unwrap());
