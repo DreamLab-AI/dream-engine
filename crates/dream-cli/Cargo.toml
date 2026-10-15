@@ -1,0 +1,31 @@
+[package]
+name = "dream-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Offline command-line front end for the dream-engine gate: validate a config, verify a ledger, stamp and verify witnesses, replay a recorded night, and check a patch against the protected set."
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["cli", "gate", "ledger", "witness", "self-improvement"]
+categories = ["command-line-utilities", "development-tools"]
+authors.workspace = true
+publish = true
+
+[[bin]]
+name = "dream"
+path = "src/main.rs"
+
+[lib]
+name = "dream_cli"
+path = "src/lib.rs"
+
+[dependencies]
+dream-gate = { path = "../dream-gate", version = "0.1.0" }
+dream-core = { path = "../dream-core", version = "0.1.0" }
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"

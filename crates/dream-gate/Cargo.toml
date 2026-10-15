@@ -1,6 +1,6 @@
 [package]
 name = "dream-gate"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Deterministic, pure acceptance gate for model-written patches: frozen manifests, typed evaluator receipts, protected-path guard and evidence-gated verdicts."

@@ -26,9 +26,15 @@ fn the_evaluators_are_the_workspace_gates_and_there_is_no_darwin() {
     let c = load();
     let cmd = |k: &str| c.evaluator_entrypoints[k].cmd.clone();
     assert_eq!(cmd("tests"), "cargo test --workspace --locked");
-    assert_eq!(cmd("clippy"), "cargo clippy --workspace --all-targets -- -D warnings");
+    assert_eq!(
+        cmd("clippy"),
+        "cargo clippy --workspace --all-targets -- -D warnings"
+    );
     assert_eq!(cmd("fmt"), "cargo fmt --all --check");
-    assert_eq!(cmd("doc"), "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace");
+    assert_eq!(
+        cmd("doc"),
+        "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace"
+    );
     assert_eq!(cmd("deny"), "cargo deny check");
     assert!(cmd("parity").contains("--test ts_parity"));
     assert!(c
