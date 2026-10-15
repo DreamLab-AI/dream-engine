@@ -128,6 +128,17 @@ pub enum GuardViolation {
     /// The patch carries binary content.
     #[error("binary patch refused")]
     Binary,
+    /// The patch exceeds a resource bound (total size, file count or header
+    /// line length) and was refused before it was fully parsed. Fail closed.
+    #[error("patch too large: {what} is {actual}, limit {limit}")]
+    TooLarge {
+        /// Which bound was exceeded (`"patch bytes"`, `"files"`, `"header line bytes"`).
+        what: String,
+        /// The configured limit.
+        limit: usize,
+        /// The observed size.
+        actual: usize,
+    },
     /// One or more touched paths are protected; the whole patch is refused.
     #[error("protected paths touched: {paths:?}")]
     Protected {
@@ -151,6 +162,41 @@ pub enum PolicyError {
     /// The digest matched but the bytes are not a valid config document.
     #[error("frozen config is invalid: {0}")]
     InvalidConfig(String),
+    /// A frozen evaluator command cannot be read with certainty (an
+    /// unterminated quote, or a command substitution that hides which files it
+    /// runs), so the files it names cannot be protected. The night must not run.
+    #[error("evaluator {name:?} command cannot be analysed: {reason}")]
+    UnsupportedCommand {
+        /// The evaluator's name.
+        name: String,
+        /// What made the command unanalysable.
+        reason: String,
+    },
+}
+
+/// Resource bounds the guard enforces before and while parsing a patch.
+///
+/// Exceeding any of them is [`GuardViolation::TooLarge`] (fail closed).
+/// [`PatchLimits::default`] is 4 MiB, 2000 files and 8192-byte header lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PatchLimits {
+    /// Maximum patch size in bytes.
+    pub max_patch_bytes: usize,
+    /// Maximum number of file sections.
+    pub max_files: usize,
+    /// Maximum length in bytes of a `diff --git`, `---`, `+++`, `rename` or
+    /// `copy` header line.
+    pub max_header_line_bytes: usize,
+}
+
+impl Default for PatchLimits {
+    fn default() -> Self {
+        Self {
+            max_patch_bytes: 4 * 1024 * 1024,
+            max_files: 2000,
+            max_header_line_bytes: 8192,
+        }
+    }
 }
 
 /// The set of protected paths.
@@ -164,9 +210,31 @@ pub struct ProtectedPolicy {
     /// Exact-or-ancestor entries (ledger, command paths, gate crates),
     /// lowercased component vectors.
     prefixes: Vec<Vec<String>>,
+    /// Resource bounds for [`check`].
+    limits: PatchLimits,
 }
 
 impl ProtectedPolicy {
+    /// Replace the resource bounds [`check`] enforces (see [`PatchLimits`]).
+    #[must_use]
+    pub fn with_limits(mut self, limits: PatchLimits) -> Self {
+        self.limits = limits;
+        self
+    }
+
+    /// Protect explicit repo-relative paths (a directory protects its tree).
+    /// Unlike [`ProtectedPolicy::with_globs`] these are literal, so file names
+    /// containing `*` or `?` are matched as written. Unusable paths are
+    /// ignored.
+    #[must_use]
+    pub fn with_paths<I, S>(self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.with_prefix_paths(paths.into_iter().map(|p| p.as_ref().to_string()))
+    }
+
     /// Add glob patterns (`*`, `?` within a segment; `**` for any number of
     /// segments). A pattern without `/` matches at any depth; a pattern that
     /// matches a directory protects everything beneath it. Matching is
@@ -288,10 +356,21 @@ impl ProtectedPolicy {
         } else {
             cfg.ledger_path.as_str()
         };
+        let mut paths: Vec<String> = Vec::new();
+        for e in &manifest.evaluators {
+            paths.extend(
+                try_evaluator_command_paths(&e.command, None, &[]).map_err(|reason| {
+                    PolicyError::UnsupportedCommand {
+                        name: e.name.clone(),
+                        reason,
+                    }
+                })?,
+            );
+        }
         Ok(Self::default()
             .with_globs(cfg.protected.iter().cloned())
             .with_ledger_path(ledger)
-            .with_evaluator_commands(manifest.evaluators.iter().map(|e| e.command.as_str())))
+            .with_paths(paths))
     }
 
     /// Whether a **normalised** repo-relative path is protected. Prefer
@@ -397,14 +476,218 @@ fn glob_segment(pat: &str, s: &str) -> bool {
     pi == p.len()
 }
 
-/// Repo-relative paths named inside a shell command, for freezing into the
-/// protected set.
+/// Split a frozen evaluator command into words using POSIX-shell quoting
+/// rules, returning every word that is a candidate command-line argument.
 ///
-/// The command is split on whitespace and shell metacharacters; a token counts
-/// as a path when it contains `/` or looks like `name.ext`. Options, URLs,
-/// absolute paths, `~` paths, plain numbers and anything escaping the repo are
-/// ignored; `--flag=value` contributes `value`. Paths are normalised and
-/// returned in first-seen order without duplicates.
+/// Unquoted `; | & < > ( ) { } ,` end a word (so `a&&b` and `2>&1` split as a
+/// shell would read them); single quotes are literal; double quotes honour
+/// `\"`, `\\`, `\$` and `` \` ``; an unquoted backslash escapes the next
+/// character. With `strict`, an unterminated quote or a command substitution
+/// (`$(…)` or a backtick outside single quotes) is an error, because the files
+/// such a command runs cannot be known; otherwise the scan is lenient and
+/// over-approximates.
+fn shell_words(cmd: &str, strict: bool) -> Result<Vec<String>, String> {
+    let chars: Vec<char> = cmd.chars().collect();
+    let mut words: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut in_word = false;
+    let mut i = 0;
+    let flush = |words: &mut Vec<String>, cur: &mut String, in_word: &mut bool| {
+        if *in_word {
+            words.push(std::mem::take(cur));
+            *in_word = false;
+        }
+    };
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '\'' => {
+                in_word = true;
+                i += 1;
+                let mut closed = false;
+                while i < chars.len() {
+                    if chars[i] == '\'' {
+                        closed = true;
+                        break;
+                    }
+                    cur.push(chars[i]);
+                    i += 1;
+                }
+                if !closed && strict {
+                    return Err("unterminated single quote".into());
+                }
+            }
+            '"' => {
+                in_word = true;
+                i += 1;
+                let mut closed = false;
+                while i < chars.len() {
+                    match chars[i] {
+                        '"' => {
+                            closed = true;
+                            break;
+                        }
+                        '\\' if i + 1 < chars.len()
+                            && matches!(chars[i + 1], '"' | '\\' | '$' | '`') =>
+                        {
+                            cur.push(chars[i + 1]);
+                            i += 1;
+                        }
+                        '`' if strict => return Err("command substitution".into()),
+                        '$' if strict && chars.get(i + 1) == Some(&'(') => {
+                            return Err("command substitution".into())
+                        }
+                        ch => cur.push(ch),
+                    }
+                    i += 1;
+                }
+                if !closed && strict {
+                    return Err("unterminated double quote".into());
+                }
+            }
+            '\\' => {
+                if let Some(&next) = chars.get(i + 1) {
+                    if next != '\n' {
+                        in_word = true;
+                        cur.push(next);
+                    }
+                    i += 1;
+                }
+            }
+            '`' if strict => return Err("command substitution".into()),
+            '$' if strict && chars.get(i + 1) == Some(&'(') => {
+                return Err("command substitution".into())
+            }
+            c if c.is_whitespace()
+                || matches!(c, ';' | '|' | '&' | '<' | '>' | '(' | ')' | '{' | '}' | ',') =>
+            {
+                flush(&mut words, &mut cur, &mut in_word);
+            }
+            c => {
+                in_word = true;
+                cur.push(c);
+            }
+        }
+        i += 1;
+    }
+    flush(&mut words, &mut cur, &mut in_word);
+    Ok(words)
+}
+
+/// Whether `s` is a flag or environment-variable name (the left side of
+/// `--flag=value` / `NAME=value`).
+fn is_assignment_name(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+/// The repo-relative path a word names, if it names one.
+fn word_path(
+    word: &str,
+    repo_root: Option<&str>,
+    known: &std::collections::BTreeSet<String>,
+) -> Option<String> {
+    let mut w = word;
+    if let Some((lhs, rhs)) = w.split_once('=') {
+        if is_assignment_name(lhs) {
+            w = rhs;
+        }
+    }
+    if w.is_empty()
+        || w.starts_with('-')
+        || w.starts_with('~')
+        || w.starts_with('$')
+        || w.contains("://")
+        || w.chars().all(|c| c.is_ascii_digit() || c == '.')
+    {
+        return None;
+    }
+    let rel: String = if w.starts_with('/') {
+        let root = repo_root?.trim_end_matches('/');
+        if root.is_empty() {
+            return None;
+        }
+        w.strip_prefix(root)
+            .and_then(|r| r.strip_prefix('/'))?
+            .to_string()
+    } else {
+        w.to_string()
+    };
+    // A glob protects the directory it starts in.
+    let rel = match rel.find(['*', '?', '[']) {
+        Some(at) => match rel[..at].rfind('/') {
+            Some(slash) => rel[..slash].to_string(),
+            None => return None,
+        },
+        None => rel,
+    };
+    let has_ext = rel
+        .rsplit_once('.')
+        .is_some_and(|(stem, ext)| !stem.is_empty() && !ext.is_empty());
+    let norm = normalise_rel(&rel).ok()?;
+    if rel.contains('/') || has_ext || known.contains(&norm) {
+        Some(norm)
+    } else {
+        None
+    }
+}
+
+/// Repo-relative paths named inside a frozen evaluator command, read with
+/// shell-word rules, or an explanation of why the command cannot be read.
+///
+/// * Quoting is honoured, so `bash "scripts/check suite.sh"` names the one
+///   path `scripts/check suite.sh`.
+/// * Every word that contains `/` or has any `name.ext` extension is a path;
+///   so is any word equal to an entry of `known_files` (the baseline tree's
+///   file list, supplied by the caller so this crate stays pure).
+/// * `--flag=value` and `NAME=value` contribute `value`; options, URLs, `~`
+///   and `$` words and plain numbers are ignored. An absolute path inside
+///   `repo_root` is returned repo-relative; other absolute paths are ignored.
+/// * A glob word protects the directory it starts in.
+///
+/// # Errors
+///
+/// An unterminated quote, or a command substitution (`$(…)` or a backtick), is
+/// an error: the command's real script cannot be known, so nothing is
+/// silently approximated. The error string says which.
+///
+/// ```
+/// use dream_gate::guard::try_evaluator_command_paths;
+/// let p = try_evaluator_command_paths(r#"bash "scripts/check suite.sh""#, None, &[]).unwrap();
+/// assert_eq!(p, vec!["scripts/check suite.sh".to_string()]);
+/// assert!(try_evaluator_command_paths("bash 'scripts/x.sh", None, &[]).is_err());
+/// ```
+pub fn try_evaluator_command_paths(
+    cmd: &str,
+    repo_root: Option<&str>,
+    known_files: &[String],
+) -> Result<Vec<String>, String> {
+    let known: std::collections::BTreeSet<String> = known_files
+        .iter()
+        .filter_map(|f| normalise_rel(f).ok())
+        .collect();
+    let mut out: Vec<String> = Vec::new();
+    for w in shell_words(cmd, true)? {
+        if let Some(p) = word_path(&w, repo_root, &known) {
+            if !out.contains(&p) {
+                out.push(p);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Repo-relative paths named inside a shell command, for freezing into the
+/// protected set — the lenient form of [`try_evaluator_command_paths`].
+///
+/// It reads the command with the same shell-word rules but never fails: an
+/// unterminated quote or a command substitution is scanned as if it were
+/// plain text, which over-approximates. Use the fallible form wherever the
+/// command is frozen for a night ([`ProtectedPolicy::for_manifest`] does).
+/// Options, URLs, absolute paths, `~` paths, plain numbers and anything
+/// escaping the repo are ignored; `--flag=value` contributes `value`. Paths
+/// are normalised and returned in first-seen order without duplicates.
 ///
 /// This cannot see files an evaluator reads *indirectly* (a `Makefile` behind
 /// `make test`, a `conftest.py` behind `pytest`); protect those explicitly
@@ -418,40 +701,12 @@ fn glob_segment(pat: &str, s: &str) -> bool {
 /// );
 /// ```
 pub fn evaluator_command_paths(cmd: &str) -> Vec<String> {
-    let is_delim = |c: char| {
-        c.is_whitespace()
-            || matches!(
-                c,
-                ';' | '|' | '&' | '<' | '>' | '(' | ')' | '"' | '\'' | '`' | '=' | '{' | '}' | ','
-            )
-    };
+    let known = std::collections::BTreeSet::new();
     let mut out: Vec<String> = Vec::new();
-    for tok in cmd.split(is_delim).filter(|t| !t.is_empty()) {
-        if tok.starts_with('-')
-            || tok.starts_with('/')
-            || tok.starts_with('~')
-            || tok.starts_with('$')
-        {
-            continue;
-        }
-        if tok.contains("://") || tok.chars().all(|c| c.is_ascii_digit() || c == '.') {
-            continue;
-        }
-        let looks_like_file = tok.rsplit_once('.').is_some_and(|(stem, ext)| {
-            !stem.is_empty()
-                && !ext.is_empty()
-                && ext.len() <= 6
-                && ext.chars().all(|c| c.is_ascii_alphanumeric())
-                && stem
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/'))
-        });
-        if !tok.contains('/') && !looks_like_file {
-            continue;
-        }
-        if let Ok(norm) = normalise_rel(tok) {
-            if !out.contains(&norm) {
-                out.push(norm);
+    for w in shell_words(cmd, false).unwrap_or_default() {
+        if let Some(p) = word_path(&w, None, &known) {
+            if !out.contains(&p) {
+                out.push(p);
             }
         }
     }
@@ -629,20 +884,33 @@ fn git_line_paths(rest: &str, line: usize) -> Result<Vec<String>, GuardViolation
         };
         return Ok(vec![strip_ab(&left, line)?, strip_ab(&right, line)?]);
     }
-    // Unquoted: try every space as the separator.
-    let mut candidates: Vec<(String, String)> = Vec::new();
-    for (i, _) in rest.match_indices(' ') {
-        let (l, r) = (&rest[..i], &rest[i + 1..]);
-        if let (Some(l), Some(r)) = (l.strip_prefix("a/"), r.strip_prefix("b/")) {
-            candidates.push((l.to_string(), r.to_string()));
+    // Unquoted: the separator is a space followed by `b/`, with `a/` leading.
+    // Linear and allocation-free: an identical pair (`a/X b/X`) can only split
+    // at one place (fixed by the length), and otherwise we only need to know
+    // whether there is exactly one candidate, so we stop counting at two.
+    if !rest.starts_with("a/") {
+        return Ok(Vec::new());
+    }
+    let n = rest.len();
+    if n >= 5 && (n - 5) % 2 == 0 {
+        let i = 2 + (n - 5) / 2;
+        let b = rest.as_bytes();
+        if b[i] == b' ' && &b[i + 1..i + 3] == b"b/" && b[2..i] == b[i + 3..] {
+            return Ok(vec![rest[2..i].to_string(), rest[i + 3..].to_string()]);
         }
     }
-    if let Some((l, r)) = candidates.iter().find(|(l, r)| l == r) {
-        return Ok(vec![l.clone(), r.clone()]);
+    let mut first: Option<usize> = None;
+    for (i, _) in rest.match_indices(" b/") {
+        if i < 2 {
+            continue;
+        }
+        if first.is_some() {
+            return Ok(Vec::new());
+        }
+        first = Some(i);
     }
-    if candidates.len() == 1 {
-        let (l, r) = candidates.remove(0);
-        return Ok(vec![l, r]);
+    if let Some(i) = first {
+        return Ok(vec![rest[2..i].to_string(), rest[i + 3..].to_string()]);
     }
     Ok(Vec::new())
 }
@@ -689,8 +957,32 @@ fn finish(sec: Section, touched: &mut BTreeSet<String>) -> Result<(), GuardViola
 /// protection policy. Fails closed exactly as [`check`] does for everything but
 /// protection.
 pub fn touched_paths(patch: &str) -> Result<TouchedPaths, GuardViolation> {
+    touched_paths_with(patch, &PatchLimits::default())
+}
+
+fn too_large(what: &str, limit: usize, actual: usize) -> GuardViolation {
+    GuardViolation::TooLarge {
+        what: what.to_string(),
+        limit,
+        actual,
+    }
+}
+
+/// [`touched_paths`] with explicit resource bounds ([`PatchLimits`]); the
+/// patch size and every header line are checked before any splitting work.
+pub fn touched_paths_with(
+    patch: &str,
+    limits: &PatchLimits,
+) -> Result<TouchedPaths, GuardViolation> {
     if patch.trim().is_empty() {
         return Err(GuardViolation::Empty);
+    }
+    if patch.len() > limits.max_patch_bytes {
+        return Err(too_large(
+            "patch bytes",
+            limits.max_patch_bytes,
+            patch.len(),
+        ));
     }
     let lines: Vec<&str> = patch
         .split('\n')
@@ -699,14 +991,36 @@ pub fn touched_paths(patch: &str) -> Result<TouchedPaths, GuardViolation> {
     let mut touched: BTreeSet<String> = BTreeSet::new();
     let mut cur: Option<Section> = None;
     let mut in_body = false;
+    let mut sections = 0usize;
+    macro_rules! close {
+        ($s:expr) => {{
+            finish($s, &mut touched)?;
+            sections += 1;
+            if sections > limits.max_files {
+                return Err(too_large("files", limits.max_files, sections));
+            }
+        }};
+    }
+    macro_rules! bound {
+        ($text:expr) => {
+            if $text.len() > limits.max_header_line_bytes {
+                return Err(too_large(
+                    "header line bytes",
+                    limits.max_header_line_bytes,
+                    $text.len(),
+                ));
+            }
+        };
+    }
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i];
         let ln = i + 1;
         i += 1;
         if let Some(rest) = line.strip_prefix("diff --git ") {
+            bound!(rest);
             if let Some(s) = cur.take() {
-                finish(s, &mut touched)?;
+                close!(s);
             }
             let mut sec = Section {
                 start_line: ln,
@@ -722,13 +1036,15 @@ pub fn touched_paths(patch: &str) -> Result<TouchedPaths, GuardViolation> {
         // false refusal at worst, under-collecting would hide a path.
         if let Some(old) = line.strip_prefix("--- ") {
             if let Some(new) = lines.get(i).and_then(|l| l.strip_prefix("+++ ")) {
+                bound!(old);
+                bound!(new);
                 let start_new = match &cur {
                     None => true,
                     Some(s) => in_body || s.old_header,
                 };
                 if start_new {
                     if let Some(s) = cur.take() {
-                        finish(s, &mut touched)?;
+                        close!(s);
                     }
                     cur = Some(Section {
                         start_line: ln,
@@ -796,18 +1112,22 @@ pub fn touched_paths(patch: &str) -> Result<TouchedPaths, GuardViolation> {
         {
             // metadata only
         } else if let Some(r) = line.strip_prefix("rename from ") {
+            bound!(r);
             sec.paths.push(bare_path(r, ln)?);
             sec.rename_from = true;
             sec.has_effect = true;
         } else if let Some(r) = line.strip_prefix("rename to ") {
+            bound!(r);
             sec.paths.push(bare_path(r, ln)?);
             sec.rename_to = true;
             sec.has_effect = true;
         } else if let Some(r) = line.strip_prefix("copy from ") {
+            bound!(r);
             sec.paths.push(bare_path(r, ln)?);
             sec.copy_from = true;
             sec.has_effect = true;
         } else if let Some(r) = line.strip_prefix("copy to ") {
+            bound!(r);
             sec.paths.push(bare_path(r, ln)?);
             sec.copy_to = true;
             sec.has_effect = true;
@@ -820,7 +1140,7 @@ pub fn touched_paths(patch: &str) -> Result<TouchedPaths, GuardViolation> {
         }
     }
     match cur.take() {
-        Some(s) => finish(s, &mut touched)?,
+        Some(s) => close!(s),
         None => return Err(malformed(0, "no file sections found")),
     }
     Ok(TouchedPaths(touched))
@@ -846,7 +1166,7 @@ pub fn touched_paths(patch: &str) -> Result<TouchedPaths, GuardViolation> {
 /// `INCONCLUSIVE` instead; use `Protected` for `Protected` and treat the other
 /// violations as `REJECT`-class refusals for consistent verdicts.
 pub fn check(patch: &str, policy: &ProtectedPolicy) -> Result<TouchedPaths, GuardViolation> {
-    let touched = touched_paths(patch)?;
+    let touched = touched_paths_with(patch, &policy.limits)?;
     let protected: Vec<String> = touched
         .iter()
         .filter(|p| policy.is_protected(p))
@@ -1203,6 +1523,168 @@ mod tests {
         assert!(!p.is_protected("src/x.py"));
     }
 
+    // ---- audit F1: evaluator-command path extraction ----
+
+    fn file_patch(path: &str) -> String {
+        format!("diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -1 +1 @@\n-a\n+b\n")
+    }
+
+    #[test]
+    fn f1_a_quoted_script_path_with_a_space_is_protected_whole() {
+        let p = pol().with_evaluator_commands([r#"bash "scripts/check suite.sh""#]);
+        assert!(p.is_protected("scripts/check suite.sh"));
+        assert!(matches!(
+            check(&file_patch("scripts/check suite.sh"), &p),
+            Err(GuardViolation::Protected { .. })
+        ));
+    }
+
+    #[test]
+    fn f1_single_quoted_and_escaped_spaces_are_protected_whole() {
+        let p = pol().with_evaluator_commands([
+            "bash 'tools/my check.sh'",
+            r"bash tools/other\ check.sh",
+        ]);
+        assert!(p.is_protected("tools/my check.sh"));
+        assert!(p.is_protected("tools/other check.sh"));
+    }
+
+    #[test]
+    fn f1_a_long_extension_does_not_hide_a_script() {
+        let p = pol().with_evaluator_commands(["python check.longextension"]);
+        assert!(p.is_protected("check.longextension"));
+    }
+
+    // ---- audit F7: resource bounds ----
+
+    #[test]
+    fn f7_twenty_thousand_separator_fragments_are_parsed_in_linear_time() {
+        let header = format!("diff --git a/x{}", " b/x".repeat(20_000));
+        let patch = format!("{header}\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n");
+        let t = std::time::Instant::now();
+        let _ = check(&patch, &pol());
+        let took = t.elapsed();
+        eprintln!("F7 20k fragments took {took:?}");
+        assert!(took < std::time::Duration::from_secs(1), "took {took:?}");
+    }
+
+    #[test]
+    fn f7_the_split_stays_linear_when_the_header_bound_is_raised() {
+        let header = format!("diff --git a/x{}", " b/x".repeat(20_000));
+        let patch = format!("{header}\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n");
+        let big = PatchLimits {
+            max_header_line_bytes: usize::MAX,
+            ..PatchLimits::default()
+        };
+        let t = std::time::Instant::now();
+        let _ = check(&patch, &pol().with_limits(big));
+        let took = t.elapsed();
+        assert!(took < std::time::Duration::from_millis(250), "took {took:?}");
+    }
+
+    #[test]
+    fn f7_limits_default_to_documented_values_and_fail_closed() {
+        let d = PatchLimits::default();
+        assert_eq!(
+            (d.max_patch_bytes, d.max_files, d.max_header_line_bytes),
+            (4 * 1024 * 1024, 2000, 8192)
+        );
+        let too_big = format!("{}\n{}", file_patch("a.txt"), "+".repeat(d.max_patch_bytes));
+        assert!(matches!(
+            check(&too_big, &pol()),
+            Err(GuardViolation::TooLarge { .. })
+        ));
+        let many: String = (0..2001).map(|i| file_patch(&format!("f{i}.txt"))).collect();
+        assert!(matches!(
+            check(&many, &pol()),
+            Err(GuardViolation::TooLarge { ref what, .. }) if what == "files"
+        ));
+        let long = format!("diff --git a/{0} b/{0}\n", "p".repeat(5000));
+        assert!(matches!(
+            check(&long, &pol().with_limits(PatchLimits {
+                max_header_line_bytes: 100,
+                ..d
+            })),
+            Err(GuardViolation::TooLarge { ref what, .. }) if what == "header line bytes"
+        ));
+        let ok: String = (0..2000).map(|i| file_patch(&format!("f{i}.txt"))).collect();
+        assert_eq!(check(&ok, &pol()).unwrap().len(), 2000);
+    }
+
+    #[test]
+    fn f7_a_pathological_but_valid_equal_pair_still_resolves() {
+        let patch = file_patch("dir b/x/file.rs");
+        assert!(check(&patch, &pol()).unwrap().contains("dir b/x/file.rs"));
+        // multi-byte names must not trip the byte-arithmetic split
+        let patch = file_patch("répertoire/日本語.rs");
+        assert!(check(&patch, &pol()).unwrap().contains("répertoire/日本語.rs"));
+        let _ = check("diff --git a/é b/ééé\n", &pol());
+    }
+
+    #[test]
+    fn f1_unterminated_quotes_and_substitution_are_errors_not_approximations() {
+        for bad in [
+            "bash 'scripts/x.sh",
+            r#"bash "scripts/x.sh"#,
+            "bash $(echo scripts/x.sh)",
+            "bash `echo scripts/x.sh`",
+            r#"bash "$(pick) scripts/x.sh""#,
+        ] {
+            assert!(
+                try_evaluator_command_paths(bad, None, &[]).is_err(),
+                "{bad}"
+            );
+        }
+        // single-quoted $( is literal
+        assert!(try_evaluator_command_paths("echo '$(x)' scripts/a.sh", None, &[]).is_ok());
+    }
+
+    #[test]
+    fn f1_absolute_paths_inside_the_repo_are_made_relative() {
+        let got = try_evaluator_command_paths(
+            "bash /work/repo/scripts/check.sh /usr/bin/env /work/repository/x.sh",
+            Some("/work/repo"),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(got, vec!["scripts/check.sh".to_string()]);
+    }
+
+    #[test]
+    fn f1_a_bare_word_naming_a_baseline_file_is_protected() {
+        let files = vec!["run-tests".to_string(), "Makefile".to_string()];
+        let got = try_evaluator_command_paths("make test && ./run-tests", None, &files).unwrap();
+        assert_eq!(got, vec!["run-tests".to_string()]);
+        let none = try_evaluator_command_paths("make test && ./run-tests", None, &[]).unwrap();
+        assert!(none.contains(&"run-tests".to_string()), "./ makes it a path");
+        let bare = try_evaluator_command_paths("make Makefile", None, &files).unwrap();
+        assert_eq!(bare, vec!["Makefile".to_string()]);
+    }
+
+    #[test]
+    fn f1_a_glob_protects_the_directory_it_starts_in_and_dot_protects_nothing() {
+        let got = try_evaluator_command_paths("pytest tests/unit/*.py .", None, &[]).unwrap();
+        assert_eq!(got, vec!["tests/unit".to_string()]);
+    }
+
+    #[test]
+    fn f1_existing_config_shapes_still_work() {
+        assert!(try_evaluator_command_paths(
+            "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace",
+            None,
+            &[]
+        )
+        .unwrap()
+        .is_empty());
+        assert!(try_evaluator_command_paths(
+            "cd services/dream-engine && cargo test",
+            None,
+            &[]
+        )
+        .unwrap()
+        .contains(&"services/dream-engine".to_string()));
+    }
+
     #[test]
     fn self_referential_flag_protects_the_gate_crates() {
         let off = pol();
@@ -1306,6 +1788,23 @@ mod tests {
         let m = frozen(&cfg, &bytes);
         let p = ProtectedPolicy::for_manifest(&m, &bytes, "ledger/LEDGER.md").expect("ok");
         assert!(p.is_protected("ledger/LEDGER.md"));
+    }
+
+    #[test]
+    fn f1_for_manifest_refuses_an_unanalysable_frozen_command() {
+        let (cfg, bytes) = cfg_and_bytes();
+        let mut m = frozen(&cfg, &bytes);
+        m.evaluators[0].command = "bash 'scripts/unterminated.sh".into();
+        let err = ProtectedPolicy::for_manifest(&m, &bytes, "").unwrap_err();
+        assert!(
+            matches!(&err, PolicyError::UnsupportedCommand { name, .. } if *name == m.evaluators[0].name),
+            "{err:?}"
+        );
+        m.evaluators[0].command = "bash $(pick-script)".into();
+        assert!(matches!(
+            ProtectedPolicy::for_manifest(&m, &bytes, ""),
+            Err(PolicyError::UnsupportedCommand { .. })
+        ));
     }
 
     #[test]
