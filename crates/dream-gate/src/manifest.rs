@@ -15,8 +15,12 @@
 //!   silently overwritten.
 //! * **Restart-safe identity.** [`run_id`] is a pure function of the
 //!   experiment's inputs, so an interrupted run recomputes the *same* id on
-//!   restart. A run cannot be silently repeated under a fresh name, and a
-//!   genuinely different experiment cannot inherit an old one's receipts.
+//!   restart while the baseline HEAD is unmoved, and a genuinely different
+//!   experiment cannot inherit an old one's receipts. It does **not** survive
+//!   the caller's own commit: committing a ledger row moves HEAD and so
+//!   changes the id. "Has this night already finished?" is therefore a
+//!   night-level question (repo, date, deep slot) answered by the run-state
+//!   journal, never by comparing run ids.
 
 use std::path::{Path, PathBuf};
 
@@ -188,7 +192,10 @@ pub fn digest(bytes: &[u8]) -> String {
 ///
 /// Deliberately excludes wall-clock time, process id and attempt counter, so
 /// an interrupted night recomputes the same id and resumes against its own
-/// receipts instead of starting a nameless second run. It *includes* the
+/// receipts instead of starting a nameless second run — **provided the
+/// baseline HEAD has not moved**. It guarantees nothing across the caller's own
+/// commits (a ledger commit changes the HEAD it hashes), so it must not be used
+/// to decide whether a night already finished. It *includes* the
 /// baseline revision and the config digest, so a genuinely different
 /// experiment — new HEAD, edited evaluators — gets a different id and cannot
 /// inherit the previous attempt's evidence.
