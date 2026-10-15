@@ -29,7 +29,3 @@ pub(crate) fn run(dir: &Path, args: &[&str]) -> Result<String, GitError> {
     }
 }
 
-/// [`run`] with stdout trimmed.
-pub(crate) fn run_trimmed(dir: &Path, args: &[&str]) -> Result<String, GitError> {
-    run(dir, args).map(|s| s.trim().to_string())
-}
