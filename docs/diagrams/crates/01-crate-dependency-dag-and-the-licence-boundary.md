@@ -17,7 +17,7 @@ sources:
   - crates/dream-gate/src/gate.rs
   - docs/adr/ADR-DE-002-licence-and-provenance.md
   - docs/adr/ADR-DE-001-standalone-rust-engine.md
-verified_commit: 4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb
+verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
 ---
 ## For developers
 
@@ -58,13 +58,13 @@ the two leaves have no internal dependencies of their own
 stay a pure function that a replay can re-run
 (`crates/dream-gate/src/gate.rs:8`). The selection policies and the failure
 identity are separate crates because each is useful to a loop that has no
-other part of this engine (`README.md:52`).
+other part of this engine (`README.md:55`, `README.md:56`).
 **Open:** ADR-DE-002 speaks of four core crates
 (`docs/adr/ADR-DE-002-licence-and-provenance.md:23`), while the workspace has
 five members, `dream-cli` being the fifth (`Cargo.toml:3`).
-**Drift:** the README status badge and table call `dream-gate` Planned
-(`README.md:54`) though it is built and depended on by `dream-core`
-(`crates/dream-core/Cargo.toml:17`).
+Resolved since the earlier stamp: the README crate table no longer calls
+`dream-gate` Planned; it describes the built gate (`README.md:57`), which
+`dream-core` depends on (`crates/dream-core/Cargo.toml:17`).
 
 ## CRT-01.2 The licence boundary
 
@@ -98,9 +98,13 @@ not allowed is denied, which keeps copyleft licences out of the graph
 (`deny.toml:7`). The ban list also names crates that would tie the engine to one
 host, such as database or client crates for a particular forum stack
 (`deny.toml:26`).
-**Drift:** the ADR says the `cargo deny` check is planned
-(`docs/adr/ADR-DE-002-licence-and-provenance.md:42`), yet CI already has a
-`deny` job (`.github/workflows/ci.yml:71`).
+Resolved since the earlier stamp: the ADR now says `cargo deny check` runs in
+CI (`docs/adr/ADR-DE-002-licence-and-provenance.md:42`), and CI has the `deny`
+job (`.github/workflows/ci.yml:71`).
+**Debt:** the workspace declares a minimum Rust version of 1.89 (`Cargo.toml:7`)
+because `NightLock` uses `File::try_lock`, but every CI job installs `stable`
+(`.github/workflows/ci.yml:26`); nothing builds on 1.89, so the declared floor is
+untested.
 **Open:** nothing in this repository verifies that the product's adapter
 follows the rule in the other direction; the boundary is a convention plus a
 dependency ban in the permissive tree.

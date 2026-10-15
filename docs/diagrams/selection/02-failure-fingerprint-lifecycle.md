@@ -9,7 +9,7 @@ sources:
   - crates/dream-gate/src/pertest.rs
   - crates/dream-core/src/streak.rs
   - docs/adr/ADR-DE-004-pairwise-selection-and-fingerprints.md
-verified_commit: 4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb
+verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
 ---
 ## For developers
 

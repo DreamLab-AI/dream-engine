@@ -7,9 +7,10 @@ adrs: [ADR-DE-006]
 sources:
   - crates/dream-core/src/automerge.rs
   - crates/dream-core/src/persist.rs
+  - crates/dream-core/src/runstate.rs
   - crates/dream-core/src/seams.rs
   - docs/adr/ADR-DE-006-automerge-is-an-option.md
-verified_commit: 4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb
+verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
 ---
 ## For developers
 
@@ -19,7 +20,7 @@ change is wanted, so the default is a draft pull request a human merges
 function that turns facts the caller gathered into `Disabled`, `Refused` or
 `Allowed` (`crates/dream-core/src/automerge.rs:110`). `persist::publish`
 gathers the facts, calls it, and only then asks the forge to enable
-automerge (`crates/dream-core/src/persist.rs:298`).
+automerge (`crates/dream-core/src/persist.rs:291`).
 
 ## For the business
 
@@ -85,9 +86,9 @@ sequenceDiagram
 ```
 
 **What it shows.** With the flag off no protection query is made at all
-(`crates/dream-core/src/persist.rs:293`). With it on, protection is read for
+(`crates/dream-core/src/persist.rs:304`). With it on, protection is read for
 the branch the PR really targets, and a mismatch with the expected base is a
-refusal (`crates/dream-core/src/persist.rs:318`).
+refusal (`crates/dream-core/src/persist.rs:311`).
 **Why it is this way.** A forge that cannot say what protects a branch never
 gets automerge: the trait defaults return `Unsupported`, which the policy
 treats as a refusal (`crates/dream-core/src/seams.rs:377`).
@@ -95,6 +96,16 @@ treats as a refusal (`crates/dream-core/src/seams.rs:377`).
 touching `GhForge` is a dyn-safety check (`crates/dream-core/src/seams.rs:647`),
 so the protection parsing, the draft-to-ready transition and the squash
 request have only been exercised against fakes.
+**Debt:** the publish outcome is not reconciled. `Persisted` is journalled
+before the forge request and nothing records the push, the pull request URL or
+the ledger commit afterwards, so the delivery guarantee is at-most-once: a
+crash after `Persisted` can lose a publish, whether before the pull request
+exists or after it exists but before its URL or ledger row is recorded, and the
+restart finalises the night to `Complete` without asking the forge
+(`crates/dream-core/src/runstate.rs:615`, `crates/dream-core/src/persist.rs:298`).
+Recovery is the operator's `reset_night`, which archives the journal so the
+night runs again; the night key `(repo, date, night_id)` is the idempotency key
+for any future reconciliation (`crates/dream-core/src/runstate.rs:441`).
 **Open:** a forge failure after `Allowed` is recorded in `automerge_error` and
-the pull request stays a draft (`crates/dream-core/src/persist.rs:284`); there
+the pull request stays a draft (`crates/dream-core/src/persist.rs:327`); there
 is no retry.

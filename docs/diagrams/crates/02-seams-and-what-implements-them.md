@@ -11,7 +11,7 @@ sources:
   - crates/dream-core/src/persist.rs
   - crates/dream-core/src/lib.rs
   - docs/adr/ADR-DE-005-seams.md
-verified_commit: 4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb
+verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
 ---
 ## For developers
 
@@ -97,7 +97,7 @@ sequenceDiagram
     H->>L: complete request with the prompt
     L-->>H: report with a patch block
     H->>R: build the candidate and re-run (candidate.rs line 296 and 300)
-    H->>F: publish_draft and optional automerge (persist.rs line 305)
+    H->>F: publish_draft and optional automerge (persist.rs line 298)
     H->>M: record the night, best effort
     H->>N: notify, infallible
 ```

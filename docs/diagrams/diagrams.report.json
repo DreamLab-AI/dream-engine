@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-10-15T20:13:58.664Z",
-  "root": "docs/diagrams",
-  "head": "f2cd4a4425d0c0e145f7934fc02f1e6d6c46e324",
+  "generatedAt": "2026-10-15T20:45:03.492Z",
+  "root": "/home/devuser/workspace/.tmp/dream-engine-build/docs/diagrams",
+  "head": "0f6a66913c072603b6e29a80bdc67350737b9b21",
   "topics": [
     {
       "id": "CRT-01",
       "file": "crates/01-crate-dependency-dag-and-the-licence-boundary.md",
       "area": "crates",
       "title": "The crate dependency DAG and the licence boundary",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "Cargo.toml",
@@ -47,13 +47,13 @@
         }
       ],
       "citations": {
-        "checked": 24,
+        "checked": 27,
         "warnings": []
       },
       "register": {
         "tension": 0,
-        "debt": 0,
-        "drift": 2,
+        "debt": 1,
+        "drift": 0,
         "open": 2,
         "invariant": 0
       }
@@ -63,7 +63,7 @@
       "file": "crates/02-seams-and-what-implements-them.md",
       "area": "crates",
       "title": "Seams and what implements them",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "crates/dream-core/src/seams.rs",
@@ -110,13 +110,16 @@
       "file": "gate/01-verdict-classes-and-the-decide-flow.md",
       "area": "gate",
       "title": "Verdict classes and the decide flow",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "crates/dream-gate/src/gate.rs",
         "crates/dream-gate/src/pertest.rs",
         "crates/dream-core/src/candidate.rs",
         "crates/dream-core/src/persist.rs",
+        "crates/dream-core/src/git.rs",
+        "crates/dream-core/src/replay.rs",
+        "crates/dream-gate/src/guard.rs",
         "docs/concepts.md",
         "README.md",
         "docs/adr/ADR-DE-003-protected-path-guard.md"
@@ -146,18 +149,30 @@
           "title": "Guard before apply, recheck inside the gate",
           "kind": "sequenceDiagram",
           "svg": "rendered/gate/01-verdict-classes-and-the-decide-flow/GAT-01.3.svg"
+        },
+        {
+          "id": "GAT-01.4",
+          "title": "Receipts are checked against the frozen manifest",
+          "kind": "flowchart",
+          "svg": "rendered/gate/01-verdict-classes-and-the-decide-flow/GAT-01.4.svg"
+        },
+        {
+          "id": "GAT-01.5",
+          "title": "Guard resource bounds and evaluator-command paths",
+          "kind": "flowchart",
+          "svg": "rendered/gate/01-verdict-classes-and-the-decide-flow/GAT-01.5.svg"
         }
       ],
       "citations": {
-        "checked": 52,
+        "checked": 103,
         "warnings": []
       },
       "register": {
-        "tension": 0,
-        "debt": 1,
-        "drift": 1,
+        "tension": 1,
+        "debt": 4,
+        "drift": 0,
         "open": 1,
-        "invariant": 2
+        "invariant": 4
       }
     },
     {
@@ -165,7 +180,7 @@
       "file": "nightly/01-the-nightly-loop-and-run-state.md",
       "area": "nightly",
       "title": "The nightly loop and the run-state machine",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "crates/dream-core/src/runstate.rs",
@@ -198,18 +213,24 @@
           "title": "The night-level terminal rule",
           "kind": "sequenceDiagram",
           "svg": "rendered/nightly/01-the-nightly-loop-and-run-state/NIT-01.3.svg"
+        },
+        {
+          "id": "NIT-01.4",
+          "title": "The night lock and what a crash costs",
+          "kind": "sequenceDiagram",
+          "svg": "rendered/nightly/01-the-nightly-loop-and-run-state/NIT-01.4.svg"
         }
       ],
       "citations": {
-        "checked": 28,
+        "checked": 49,
         "warnings": []
       },
       "register": {
         "tension": 1,
         "debt": 0,
         "drift": 0,
-        "open": 1,
-        "invariant": 2
+        "open": 2,
+        "invariant": 3
       }
     },
     {
@@ -217,7 +238,7 @@
       "file": "nightly/02-replay-capture-and-verify.md",
       "area": "nightly",
       "title": "Replay capture and verify",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "crates/dream-core/src/replay.rs",
@@ -246,7 +267,7 @@
         }
       ],
       "citations": {
-        "checked": 21,
+        "checked": 22,
         "warnings": []
       },
       "register": {
@@ -262,11 +283,12 @@
       "file": "nightly/03-automerge-policy-decision-tree.md",
       "area": "nightly",
       "title": "The automerge policy decision tree",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "crates/dream-core/src/automerge.rs",
         "crates/dream-core/src/persist.rs",
+        "crates/dream-core/src/runstate.rs",
         "crates/dream-core/src/seams.rs",
         "docs/adr/ADR-DE-006-automerge-is-an-option.md"
       ],
@@ -291,12 +313,12 @@
         }
       ],
       "citations": {
-        "checked": 19,
+        "checked": 22,
         "warnings": []
       },
       "register": {
         "tension": 1,
-        "debt": 0,
+        "debt": 1,
         "drift": 0,
         "open": 1,
         "invariant": 1
@@ -307,7 +329,7 @@
       "file": "selection/01-pairwise-policies-and-the-fault-mapping.md",
       "area": "selection",
       "title": "Pairwise selection policies and the fault mapping",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "crates/pairwise-gate/src/lib.rs",
@@ -360,7 +382,7 @@
       "file": "selection/02-failure-fingerprint-lifecycle.md",
       "area": "selection",
       "title": "The failure-fingerprint lifecycle",
-      "verified_commit": "4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb",
+      "verified_commit": "0f6a66913c072603b6e29a80bdc67350737b9b21",
       "worktree": null,
       "sources": [
         "crates/failure-fingerprint/src/lib.rs",
@@ -415,15 +437,15 @@
   ],
   "totals": {
     "topics": 8,
-    "diagrams": 21,
-    "citationsChecked": 233,
+    "diagrams": 24,
+    "citationsChecked": 312,
     "citationWarnings": 0,
     "register": {
-      "tension": 5,
-      "debt": 6,
-      "drift": 3,
-      "open": 9,
-      "invariant": 9
+      "tension": 6,
+      "debt": 11,
+      "drift": 0,
+      "open": 10,
+      "invariant": 12
     }
   }
 }
