@@ -327,6 +327,7 @@ mod tests {
                 required: true,
                 deeps: vec![],
                 timeout_secs: 60,
+                test_format: None,
             }],
             model: ModelIdentity {
                 provider: "test".into(),

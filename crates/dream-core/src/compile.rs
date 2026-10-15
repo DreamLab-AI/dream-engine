@@ -208,10 +208,7 @@ pub fn compile(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let adr_example = match cfg.adr_convention.as_str() {
-        "3-digit" => "ADR-001",
-        _ => "ADR-0001",
-    };
+    let adr_example = format!("ADR-{:0>width$}", 1, width = cfg.adr_convention.pad());
     let labels = if cfg.labels.is_empty() {
         "none".to_string()
     } else {
@@ -235,7 +232,7 @@ pub fn compile(
             "labels" => labels.clone(),
             "discipline_list" => discipline_list.clone(),
             "ledger_path" => cfg.ledger_path.clone(),
-            "adr_example" => adr_example.to_string(),
+            "adr_example" => adr_example.clone(),
             _ => return None,
         })
     })
@@ -465,12 +462,12 @@ mod tests {
     #[test]
     fn substitution_is_single_pass() {
         let cfg = DreamConfig::from_json(
-            br#"{"repo": "a/{{deep}}", "slots": [{"deep": "d", "scan": []}]}"#,
+            br#"{"repo": "o/r", "slots": [{"deep": "{{repo}}", "scan": []}]}"#,
         )
         .unwrap();
-        let out = compile(&cfg, &cfg.slots[0], 1, &[], &PromptTemplate::new("{{repo}}|{{deep}}"))
+        let out = compile(&cfg, &cfg.slots[0], 1, &[], &PromptTemplate::new("{{deep}}|{{repo}}"))
             .unwrap();
-        assert_eq!(out, "a/{{deep}}|d");
+        assert_eq!(out, "{{repo}}|o/r");
     }
 
     #[test]

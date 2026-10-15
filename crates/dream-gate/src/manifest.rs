@@ -58,6 +58,11 @@ pub struct EvaluatorIdentity {
     pub deeps: Vec<String>,
     /// Wall-clock budget in seconds.
     pub timeout_secs: u64,
+    /// How per-test outcomes are read from this evaluator's output, frozen so
+    /// baseline and candidate are read the same way. `None` counts the
+    /// evaluator as one case. Absent from older manifests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_format: Option<crate::config::TestFormat>,
 }
 
 impl EvaluatorIdentity {
@@ -70,6 +75,7 @@ impl EvaluatorIdentity {
             required: spec.required,
             deeps: spec.deeps.clone(),
             timeout_secs: spec.timeout_secs,
+            test_format: spec.test_format,
         }
     }
 
@@ -363,6 +369,7 @@ mod tests {
             required,
             deeps: vec![],
             timeout_secs: 900,
+            test_format: None,
         }
     }
 
@@ -450,6 +457,7 @@ mod tests {
             required: true,
             deeps: vec!["hooks".into()],
             timeout_secs: 60,
+            test_format: None,
         });
         let required: Vec<&str> = m.required().iter().map(|e| e.name.as_str()).collect();
         assert_eq!(

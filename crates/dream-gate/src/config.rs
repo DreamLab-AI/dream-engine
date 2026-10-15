@@ -59,6 +59,119 @@ pub struct BuildStep {
     pub degrade_on_wasm_failure: bool,
 }
 
+/// The machine-readable per-test output format of an evaluator, when its
+/// output can be parsed into per-test outcomes (see `dream-core`'s `testfmt`).
+///
+/// Declared in the config, so it is frozen with the config digest and with
+/// the manifest: the format an evaluator is *read* with cannot change between
+/// baseline and candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TestFormat {
+    /// `cargo test` text output (`test name ... ok`).
+    Libtest,
+    /// JUnit XML (`<testsuite>`/`<testcase>`).
+    Junit,
+    /// Vitest `--reporter=json` output (Jest-compatible shape).
+    VitestJson,
+}
+
+/// ADR numbering convention.
+///
+/// Accepts what the reference validator accepts: `"3-digit"`, `"4-digit"` or
+/// an object `{ "pad": <integer >= 1>, "dir": "<non-empty>" }`. Absent means
+/// [`AdrConvention::Unset`] and this crate has no opinion.
+///
+/// ```
+/// use dream_gate::config::AdrConvention;
+/// let c: AdrConvention = serde_json::from_str(r#"{"pad":3,"dir":"docs/adr"}"#).unwrap();
+/// assert_eq!(c.pad(), 3);
+/// assert_eq!(c.dir(), Some("docs/adr"));
+/// assert!(serde_json::from_str::<AdrConvention>("\"5-digit\"").is_err());
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum AdrConvention {
+    /// Not configured.
+    #[default]
+    Unset,
+    /// `ADR-001`.
+    ThreeDigit,
+    /// `ADR-0001`.
+    FourDigit,
+    /// A custom zero-padding width and directory.
+    Custom {
+        /// Zero-padding width, at least 1.
+        pad: u32,
+        /// Directory holding the ADRs, non-empty.
+        dir: String,
+    },
+}
+
+impl AdrConvention {
+    /// True when not configured.
+    pub fn is_unset(&self) -> bool {
+        matches!(self, AdrConvention::Unset)
+    }
+
+    /// Zero-padding width; an unset convention reads as four digits, as in
+    /// the reference implementation.
+    pub fn pad(&self) -> usize {
+        match self {
+            AdrConvention::ThreeDigit => 3,
+            AdrConvention::Custom { pad, .. } => *pad as usize,
+            AdrConvention::Unset | AdrConvention::FourDigit => 4,
+        }
+    }
+
+    /// The configured directory, for the custom form only.
+    pub fn dir(&self) -> Option<&str> {
+        match self {
+            AdrConvention::Custom { dir, .. } => Some(dir),
+            _ => None,
+        }
+    }
+}
+
+impl Serialize for AdrConvention {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        match self {
+            // Never written: the field is skipped when unset.
+            AdrConvention::Unset => s.serialize_none(),
+            AdrConvention::ThreeDigit => s.serialize_str("3-digit"),
+            AdrConvention::FourDigit => s.serialize_str("4-digit"),
+            AdrConvention::Custom { pad, dir } => {
+                let mut st = s.serialize_struct("AdrConvention", 2)?;
+                st.serialize_field("pad", pad)?;
+                st.serialize_field("dir", dir)?;
+                st.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AdrConvention {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Name(String),
+            Custom { pad: u32, dir: String },
+        }
+        match Raw::deserialize(d)? {
+            Raw::Name(n) => match n.as_str() {
+                "3-digit" => Ok(AdrConvention::ThreeDigit),
+                "4-digit" => Ok(AdrConvention::FourDigit),
+                other => Err(D::Error::custom(format!(
+                    "adrConvention must be \"3-digit\", \"4-digit\", or {{ pad, dir }} (got {other:?})"
+                ))),
+            },
+            Raw::Custom { pad, dir } => Ok(AdrConvention::Custom { pad, dir }),
+        }
+    }
+}
+
 /// Default wall-clock budget for a single evaluator run, in seconds.
 ///
 /// Thirty minutes sits above a cold full test run and well below a nightly
@@ -84,6 +197,10 @@ pub struct EvaluatorSpec {
     pub deeps: Vec<String>,
     /// Wall-clock budget in seconds.
     pub timeout_secs: u64,
+    /// How to read per-test outcomes from the evaluator's output. `None`
+    /// (the default) counts the evaluator as one case.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_format: Option<TestFormat>,
 }
 
 impl EvaluatorSpec {
@@ -94,6 +211,7 @@ impl EvaluatorSpec {
             required: true,
             deeps: Vec::new(),
             timeout_secs: DEFAULT_EVALUATOR_TIMEOUT_SECS,
+            test_format: None,
         }
     }
 
@@ -123,6 +241,8 @@ impl<'de> Deserialize<'de> for EvaluatorSpec {
             deeps: Vec<String>,
             #[serde(default = "default_evaluator_timeout")]
             timeout_secs: u64,
+            #[serde(default)]
+            test_format: Option<TestFormat>,
         }
         #[derive(Deserialize)]
         #[serde(untagged)]
@@ -137,6 +257,7 @@ impl<'de> Deserialize<'de> for EvaluatorSpec {
                 required: x.required,
                 deeps: x.deeps,
                 timeout_secs: x.timeout_secs,
+                test_format: x.test_format,
             },
         })
     }
@@ -198,9 +319,9 @@ pub struct DreamConfig {
     /// Competitor repositories to study.
     #[serde(default)]
     pub competitors: Vec<String>,
-    /// ADR numbering convention; empty when unset.
-    #[serde(default)]
-    pub adr_convention: String,
+    /// ADR numbering convention; [`AdrConvention::Unset`] when absent.
+    #[serde(default, skip_serializing_if = "AdrConvention::is_unset")]
+    pub adr_convention: AdrConvention,
     /// Extra discipline names.
     #[serde(default)]
     pub extra_disciplines: Vec<String>,
@@ -240,8 +361,26 @@ impl DreamConfig {
     /// Check the document's invariants.
     pub fn validate(&self) -> Result<(), ConfigError> {
         let bad = |m: String| Err(ConfigError::Validation(m));
-        if self.repo.is_empty() {
-            return bad("repo must not be empty".into());
+        if !valid_repo_slug(&self.repo) {
+            return bad(format!("repo must be \"owner/name\" (got {:?})", self.repo));
+        }
+        if !self.cron.is_empty() {
+            if let Some(why) = bad_cron(&self.cron) {
+                return bad(format!("cron: {why}"));
+            }
+        }
+        for k in self.bonus_moduli.keys() {
+            if k.is_empty() || !k.bytes().all(|b| b.is_ascii_digit()) {
+                return bad(format!("bonusModuli key {k:?} must be an integer"));
+            }
+        }
+        if let AdrConvention::Custom { pad, dir } = &self.adr_convention {
+            if *pad < 1 {
+                return bad("adrConvention.pad must be an integer >= 1".into());
+            }
+            if dir.trim().is_empty() {
+                return bad("adrConvention.dir must be a non-empty string".into());
+            }
         }
         if self.slots.is_empty() {
             return bad("slots must not be empty".into());
@@ -298,6 +437,37 @@ impl DreamConfig {
     }
 }
 
+/// `^[\w.-]+/[\w.-]+$` with JavaScript's ASCII `\w`.
+fn valid_repo_slug(repo: &str) -> bool {
+    let ok = |part: &str| {
+        !part.is_empty()
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+    };
+    matches!(repo.split_once('/'), Some((o, n)) if ok(o) && ok(n))
+}
+
+/// Why a cron expression is unacceptable, or `None`: five whitespace-separated
+/// fields, and a minute field that is a single value `0..=59` (so the minimum
+/// interval is one hour).
+fn bad_cron(cron: &str) -> Option<&'static str> {
+    let fields: Vec<&str> = cron.split_whitespace().collect();
+    if fields.len() != 5 {
+        return Some("must be a 5-field expression");
+    }
+    let m = fields[0];
+    let single = !m.is_empty()
+        && m.len() <= 2
+        && m.bytes().all(|b| b.is_ascii_digit())
+        && (m.len() == 1 || m.as_bytes()[0] != b'0')
+        && m.parse::<u8>().is_ok_and(|v| v <= 59);
+    if !single {
+        return Some("minute field must be a single value from 0 to 59; minimum interval is 1 hour");
+    }
+    None
+}
+
 /// Why a `protected` glob is unacceptable, or `None` when it is fine.
 ///
 /// The set is additive, so a glob must be a plain repo-relative pattern:
@@ -341,7 +511,7 @@ mod tests {
     fn defaults_are_neutral_and_empty() {
         let c = cfg(serde_json::json!({})).unwrap();
         assert!(c.cron.is_empty());
-        assert!(c.adr_convention.is_empty());
+        assert!(c.adr_convention.is_unset());
         assert!(c.ledger_path.is_empty());
         assert!(c.branch_prefix.is_empty());
         assert!(c.protected.is_empty());
