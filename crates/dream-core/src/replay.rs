@@ -871,6 +871,29 @@ mod tests {
         assert_eq!(v.guard_agrees, Some(false));
     }
 
+    /// The flag alone (no extra globs) is load-bearing: a patch to a gate
+    /// crate file with no protected-looking name is refused only with it.
+    #[test]
+    fn the_self_referential_flag_alone_changes_the_outcome() {
+        const HELPER: &str = "diff --git a/crates/dream-gate/src/helpers.rs b/crates/dream-gate/src/helpers.rs\n--- a/crates/dream-gate/src/helpers.rs\n+++ b/crates/dream-gate/src/helpers.rs\n@@ -1 +1 @@\n-a\n+b\n";
+        let mut n = self_referential_night(HELPER);
+        n.policy = PolicyExtras {
+            self_referential: true,
+            extra_globs: vec![],
+        };
+        let dir = tempfile::tempdir().unwrap();
+        capture(dir.path(), &n).unwrap();
+        let v = verify(dir.path()).unwrap();
+        assert!(v.matches, "{:?}", v.diffs);
+        assert_eq!(v.guard_agrees, Some(true));
+        let p = dir.path().join("replay.json");
+        let mut rec: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
+        rec["policy"]["selfReferential"] = false.into();
+        std::fs::write(&p, serde_json::to_vec(&rec).unwrap()).unwrap();
+        assert_eq!(verify(dir.path()).unwrap().guard_agrees, Some(false));
+    }
+
     #[test]
     fn an_applied_patch_to_the_judge_is_vetoed_by_the_gate_under_the_stored_policy() {
         let mut n = inputs(
