@@ -28,4 +28,3 @@ pub(crate) fn run(dir: &Path, args: &[&str]) -> Result<String, GitError> {
         ))
     }
 }
-

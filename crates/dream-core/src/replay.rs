@@ -53,8 +53,8 @@ use std::path::Path;
 use dream_gate::gate::{self, CandidateState, GateContext, GateDecision};
 use dream_gate::guard::{self, GuardViolation, PolicyError, ProtectedPolicy};
 use dream_gate::manifest::{self, digest, write_atomic, ExperimentManifest};
-use dream_gate::pertest::{PairwiseOptions, TestOutcomes};
 use dream_gate::outcome::ExecOutcome;
+use dream_gate::pertest::{PairwiseOptions, TestOutcomes};
 use dream_gate::receipts::{self, classify, EvaluatorOutcome, EvaluatorReceipt, Phase};
 use dream_gate::verdict::parse_verdict_strict;
 use serde::{Deserialize, Serialize};
@@ -121,11 +121,19 @@ pub struct NightInputs {
 #[serde(tag = "state", rename_all = "kebab-case")]
 enum RecordedCandidate {
     #[serde(rename_all = "camelCase")]
-    Applied { tree_hash: String },
+    Applied {
+        tree_hash: String,
+    },
     NoPatch,
-    DidNotApply { detail: String },
-    Refused { detail: String },
-    Protected { paths: Vec<String> },
+    DidNotApply {
+        detail: String,
+    },
+    Refused {
+        detail: String,
+    },
+    Protected {
+        paths: Vec<String>,
+    },
     NotAttempted,
 }
 
@@ -365,9 +373,24 @@ pub fn verify(run_dir: &Path) -> Result<Verification, ReplayError> {
     let (inputs, recorded) = load(run_dir)?;
     let recomputed = decide(&inputs)?;
     let mut diffs = Vec::new();
-    field_diff("verdict", &recorded.verdict, &recomputed.verdict, &mut diffs);
-    field_diff("accepted", &recorded.accepted, &recomputed.accepted, &mut diffs);
-    field_diff("modelVerdict", &recorded.model_verdict, &recomputed.model_verdict, &mut diffs);
+    field_diff(
+        "verdict",
+        &recorded.verdict,
+        &recomputed.verdict,
+        &mut diffs,
+    );
+    field_diff(
+        "accepted",
+        &recorded.accepted,
+        &recomputed.accepted,
+        &mut diffs,
+    );
+    field_diff(
+        "modelVerdict",
+        &recorded.model_verdict,
+        &recomputed.model_verdict,
+        &mut diffs,
+    );
     field_diff("vetoes", &recorded.vetoes, &recomputed.vetoes, &mut diffs);
     field_diff(
         "requiredOutcomes",
@@ -375,7 +398,12 @@ pub fn verify(run_dir: &Path) -> Result<Verification, ReplayError> {
         &recomputed.required_outcomes,
         &mut diffs,
     );
-    field_diff("summary", &recorded.summary, &recomputed.summary, &mut diffs);
+    field_diff(
+        "summary",
+        &recorded.summary,
+        &recomputed.summary,
+        &mut diffs,
+    );
     for r in inputs
         .baseline_receipts
         .iter()
@@ -509,7 +537,10 @@ mod tests {
     fn nights() -> Vec<(&'static str, NightInputs)> {
         let accept_report = "analysis\nVERDICT: ACCEPT\n";
         vec![
-            ("ACCEPT", inputs(accept_report, applied(), vec![pass(Phase::Candidate)])),
+            (
+                "ACCEPT",
+                inputs(accept_report, applied(), vec![pass(Phase::Candidate)]),
+            ),
             (
                 "REJECT",
                 inputs(
@@ -518,13 +549,19 @@ mod tests {
                     vec![receipt(Phase::Candidate, exec(Some(1), "FAIL\n", None))],
                 ),
             ),
-            ("INCONCLUSIVE", inputs(accept_report, CandidateState::NoPatch, vec![])),
+            (
+                "INCONCLUSIVE",
+                inputs(accept_report, CandidateState::NoPatch, vec![]),
+            ),
             (
                 "BLOCKED-ENV",
                 inputs(
                     accept_report,
                     applied(),
-                    vec![receipt(Phase::Candidate, exec(None, "", Some("runner unreachable")))],
+                    vec![receipt(
+                        Phase::Candidate,
+                        exec(None, "", Some("runner unreachable")),
+                    )],
                 ),
             ),
             (
@@ -563,10 +600,14 @@ mod tests {
         assert_eq!(v.guard_agrees, Some(true));
         // Doctor the record so the state says Applied while the patch is protected.
         let mut rec: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(dir.path().join("replay.json")).unwrap()).unwrap();
+            serde_json::from_slice(&std::fs::read(dir.path().join("replay.json")).unwrap())
+                .unwrap();
         rec["candidate"] = serde_json::json!({"state": "applied", "treeHash": "2".repeat(40)});
-        std::fs::write(dir.path().join("replay.json"), serde_json::to_vec_pretty(&rec).unwrap())
-            .unwrap();
+        std::fs::write(
+            dir.path().join("replay.json"),
+            serde_json::to_vec_pretty(&rec).unwrap(),
+        )
+        .unwrap();
         std::fs::write(dir.path().join("candidate.patch"), PROTECTED).unwrap();
         let v = verify(dir.path()).unwrap();
         assert!(!v.matches);
@@ -585,8 +626,16 @@ mod tests {
         std::fs::write(&p, serde_json::to_vec_pretty(&d).unwrap()).unwrap();
         let v = verify(dir.path()).unwrap();
         assert!(!v.matches);
-        assert!(v.diffs.iter().any(|d| d.starts_with("verdict:")), "{:?}", v.diffs);
-        assert!(v.diffs.iter().any(|d| d.starts_with("accepted:")), "{:?}", v.diffs);
+        assert!(
+            v.diffs.iter().any(|d| d.starts_with("verdict:")),
+            "{:?}",
+            v.diffs
+        );
+        assert!(
+            v.diffs.iter().any(|d| d.starts_with("accepted:")),
+            "{:?}",
+            v.diffs
+        );
     }
 
     #[test]
@@ -599,7 +648,10 @@ mod tests {
         assert!(text.contains("\"exitCode\": 0"), "{text}");
         std::fs::write(&p, text.replace("\"exitCode\": 0", "\"exitCode\": 1")).unwrap();
         let v = verify(dir.path()).unwrap();
-        assert!(!v.matches, "recomputing must not trust the recorded verdict");
+        assert!(
+            !v.matches,
+            "recomputing must not trust the recorded verdict"
+        );
         assert_eq!(v.recorded.verdict, "ACCEPT");
     }
 
@@ -609,11 +661,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         capture(dir.path(), &n).unwrap();
         std::fs::write(dir.path().join("report.md"), "VERDICT: REJECT\n").unwrap();
-        assert!(matches!(verify(dir.path()), Err(ReplayError::ReportDigestMismatch)));
+        assert!(matches!(
+            verify(dir.path()),
+            Err(ReplayError::ReportDigestMismatch)
+        ));
 
         let dir = tempfile::tempdir().unwrap();
         capture(dir.path(), &n).unwrap();
-        std::fs::write(dir.path().join("config.json"), CONFIG.replace("docs/LEDGER.md", "x.md")).unwrap();
+        std::fs::write(
+            dir.path().join("config.json"),
+            CONFIG.replace("docs/LEDGER.md", "x.md"),
+        )
+        .unwrap();
         assert!(matches!(verify(dir.path()), Err(ReplayError::Policy(_))));
     }
 
@@ -624,10 +683,14 @@ mod tests {
         let (_, n) = nights().remove(0);
         capture(dir.path(), &n).unwrap();
         let p = dir.path().join("replay.json");
-        let mut rec: serde_json::Value = serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
+        let mut rec: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
         rec["schema"] = 99.into();
         std::fs::write(&p, serde_json::to_vec(&rec).unwrap()).unwrap();
-        assert!(matches!(verify(dir.path()), Err(ReplayError::UnsupportedSchema(99))));
+        assert!(matches!(
+            verify(dir.path()),
+            Err(ReplayError::UnsupportedSchema(99))
+        ));
     }
 
     #[test]
@@ -635,21 +698,43 @@ mod tests {
         let (_, n) = nights().remove(0);
         let dir = tempfile::tempdir().unwrap();
         capture(dir.path(), &n).unwrap();
-        let mut files: Vec<String> = ["manifest.json", "replay.json", "decision.json", "report.md",
-            "candidate.patch", "config.json", "receipts/baseline/check.json", "receipts/candidate/check.json"]
-            .iter()
-            .filter(|f| !dir.path().join(f).exists())
-            .map(|f| f.to_string())
-            .collect();
+        let mut files: Vec<String> = [
+            "manifest.json",
+            "replay.json",
+            "decision.json",
+            "report.md",
+            "candidate.patch",
+            "config.json",
+            "receipts/baseline/check.json",
+            "receipts/candidate/check.json",
+        ]
+        .iter()
+        .filter(|f| !dir.path().join(f).exists())
+        .map(|f| f.to_string())
+        .collect();
         files.sort();
         assert!(files.is_empty(), "missing: {files:?}");
         let rec: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(dir.path().join("replay.json")).unwrap()).unwrap();
-        let mut keys: Vec<&str> = rec.as_object().unwrap().keys().map(String::as_str).collect();
+            serde_json::from_slice(&std::fs::read(dir.path().join("replay.json")).unwrap())
+                .unwrap();
+        let mut keys: Vec<&str> = rec
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["candidate", "candidateConfigDigest", "fallbackLedgerPath", "options", "reportDigest", "schema", "tests"]
+            [
+                "candidate",
+                "candidateConfigDigest",
+                "fallbackLedgerPath",
+                "options",
+                "reportDigest",
+                "schema",
+                "tests"
+            ]
         );
         assert_eq!(rec["schema"], 1);
         assert_eq!(rec["candidate"]["state"], "applied");

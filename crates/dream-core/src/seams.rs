@@ -358,8 +358,7 @@ pub struct GhForge;
 
 impl Forge for GhForge {
     fn publish_draft(&self, pr: &DraftPr) -> PrOutcome {
-        let pushed =
-            crate::git::run(&pr.repo_dir, &["push", "-u", "origin", &pr.branch]).is_ok();
+        let pushed = crate::git::run(&pr.repo_dir, &["push", "-u", "origin", &pr.branch]).is_ok();
         let pr_url = if pushed {
             gh_pr_create(&pr.repo_dir, pr)
         } else {

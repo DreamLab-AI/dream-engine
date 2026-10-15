@@ -132,7 +132,7 @@ pub fn persist_receipts(
 }
 
 /// Load prior-night receipt objects for this repo, most recent first,
-/// capped at [`PRIOR_NIGHTS`] nights. Missing/unreadable indexes are
+/// capped at six nights. Missing/unreadable indexes are
 /// skipped — early nights simply have no governed history yet.
 pub fn load_prior_objects(
     artefact_dir: &Path,
@@ -345,7 +345,8 @@ pub async fn govern(
     // floor matters: reasoning models truncated below ~1536 tokens return
     // empty text; 4096 leaves room for large indexes.
     let prompt = planner_prompt(objects, deep, scans);
-    let req = |m: &dyn Llm| LlmRequest::new(prompt.as_str(), m.identity().max_tokens.clamp(2048, 4096));
+    let req =
+        |m: &dyn Llm| LlmRequest::new(prompt.as_str(), m.identity().max_tokens.clamp(2048, 4096));
     let first = req(llm);
     let reply = match llm.complete(&first).await {
         Ok(r) => r,

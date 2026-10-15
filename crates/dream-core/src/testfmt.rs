@@ -115,7 +115,9 @@ fn strip_doc_line(name: &str) -> &str {
 /// The panic message of one `---- name stdout ----` block.
 fn panic_cause(block: &[&str]) -> String {
     for (i, l) in block.iter().enumerate() {
-        let Some(at) = l.find("panicked at ") else { continue };
+        let Some(at) = l.find("panicked at ") else {
+            continue;
+        };
         let after = &l[at + "panicked at ".len()..];
         // Old format: panicked at 'msg', file:line:col
         if let Some(rest) = after.strip_prefix('\'') {
@@ -128,7 +130,9 @@ fn panic_cause(block: &[&str]) -> String {
             .iter()
             .map(|m| m.trim())
             .take_while(|m| {
-                !m.is_empty() && !m.starts_with("stack backtrace") && !m.starts_with("note: run with")
+                !m.is_empty()
+                    && !m.starts_with("stack backtrace")
+                    && !m.starts_with("note: run with")
             })
             .collect();
         if !msg.is_empty() {
@@ -151,9 +155,7 @@ fn parse_libtest_section(label: Option<&str>, lines: &[&str], out: &mut Vec<Test
         {
             let start = i + 1;
             let mut end = start;
-            while end < lines.len()
-                && !lines[end].starts_with("---- ")
-                && lines[end] != "failures:"
+            while end < lines.len() && !lines[end].starts_with("---- ") && lines[end] != "failures:"
             {
                 end += 1;
             }
@@ -167,8 +169,12 @@ fn parse_libtest_section(label: Option<&str>, lines: &[&str], out: &mut Vec<Test
         }
     }
     for l in lines {
-        let Some(rest) = l.strip_prefix("test ") else { continue };
-        let Some((name, status)) = rest.rsplit_once(" ... ") else { continue };
+        let Some(rest) = l.strip_prefix("test ") else {
+            continue;
+        };
+        let Some((name, status)) = rest.rsplit_once(" ... ") else {
+            continue;
+        };
         let name = name.strip_suffix(" - should panic").unwrap_or(name);
         let name = strip_doc_line(name);
         let status = status.trim();
@@ -302,7 +308,11 @@ pub fn parse_vitest_json(text: &str, root: Option<&str>) -> Result<Vec<TestCase>
             continue;
         }
         for t in &f.assertion_results {
-            let name = if t.full_name.is_empty() { &t.title } else { &t.full_name };
+            let name = if t.full_name.is_empty() {
+                &t.title
+            } else {
+                &t.full_name
+            };
             let st = match t.status.as_str() {
                 "passed" => TestStatus::Passed,
                 "failed" => TestStatus::failed(first_line(
@@ -358,7 +368,11 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                     b"testcase" => {
                         let class = attr(&e, "classname");
                         let name = attr(&e, "name");
-                        let full = if class.is_empty() { name } else { format!("{class}::{name}") };
+                        let full = if class.is_empty() {
+                            name
+                        } else {
+                            format!("{class}::{name}")
+                        };
                         cur = Some((full, None, false));
                     }
                     b"failure" | b"error" if cur.is_some() => {
@@ -376,13 +390,21 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                 b"testcase" => {
                     let class = attr(&e, "classname");
                     let name = attr(&e, "name");
-                    let full = if class.is_empty() { name } else { format!("{class}::{name}") };
+                    let full = if class.is_empty() {
+                        name
+                    } else {
+                        format!("{class}::{name}")
+                    };
                     cases.push(TestCase::new(full, TestStatus::Passed));
                 }
                 b"failure" | b"error" => {
                     if let Some(c) = cur.as_mut() {
                         let m = attr(&e, "message");
-                        c.1 = Some(if m.is_empty() { "test failed".into() } else { clip(m) });
+                        c.1 = Some(if m.is_empty() {
+                            "test failed".into()
+                        } else {
+                            clip(m)
+                        });
                     }
                 }
                 b"skipped" => {
@@ -409,7 +431,11 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                         if let (Some((msg, text)), Some(c)) = (in_fail.take(), cur.as_mut()) {
                             let cause = if msg.trim().is_empty() {
                                 let l = first_line(&text);
-                                if l.is_empty() { "test failed".to_string() } else { l }
+                                if l.is_empty() {
+                                    "test failed".to_string()
+                                } else {
+                                    l
+                                }
                             } else {
                                 clip(msg)
                             };
@@ -435,7 +461,9 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
         }
     }
     if depth_open != 0 || cur.is_some() {
-        return Err(TestFmtError::Malformed("junit xml: unclosed element".into()));
+        return Err(TestFmtError::Malformed(
+            "junit xml: unclosed element".into(),
+        ));
     }
     if cases.is_empty() {
         return Err(TestFmtError::NoTests);
@@ -469,11 +497,19 @@ pub fn parse_exec(
             parse_libtest(&text)
         }
         TestFormat::VitestJson => {
-            let text = if exec.stdout.contains('{') { &exec.stdout } else { &exec.stderr };
+            let text = if exec.stdout.contains('{') {
+                &exec.stdout
+            } else {
+                &exec.stderr
+            };
             parse_vitest_json(text, root)
         }
         TestFormat::Junit => {
-            let text = if exec.stdout.contains('<') { &exec.stdout } else { &exec.stderr };
+            let text = if exec.stdout.contains('<') {
+                &exec.stdout
+            } else {
+                &exec.stderr
+            };
             parse_junit(text)
         }
     }
@@ -553,7 +589,10 @@ mod tests {
         match &get(&c, &format!("{u}doubles_wrongly")).status {
             TestStatus::Failed { cause } => {
                 assert!(cause.contains("two doubled should be five"), "{cause}");
-                assert!(cause.contains("left: 4") && cause.contains("right: 5"), "{cause}");
+                assert!(
+                    cause.contains("left: 4") && cause.contains("right: 5"),
+                    "{cause}"
+                );
                 assert!(!cause.contains("RUST_BACKTRACE"), "{cause}");
             }
             other => panic!("{other:?}"),
@@ -572,10 +611,18 @@ mod tests {
     #[test]
     fn libtest_backtrace_noise_does_not_leak_into_the_cause() {
         let c = parse_libtest(LIBTEST_BACKTRACE).unwrap();
-        let f = c.iter().find(|c| c.name.ends_with("doubles_wrongly")).unwrap();
-        let TestStatus::Failed { cause } = &f.status else { panic!() };
+        let f = c
+            .iter()
+            .find(|c| c.name.ends_with("doubles_wrongly"))
+            .unwrap();
+        let TestStatus::Failed { cause } = &f.status else {
+            panic!()
+        };
         assert!(cause.contains("two doubled should be five"));
-        assert!(!cause.contains("rust_begin_unwind") && !cause.contains("stack backtrace"), "{cause}");
+        assert!(
+            !cause.contains("rust_begin_unwind") && !cause.contains("stack backtrace"),
+            "{cause}"
+        );
     }
 
     #[test]
@@ -604,7 +651,10 @@ mod tests {
 
     #[test]
     fn libtest_no_tests_is_an_error_not_an_empty_success() {
-        for text in ["", "error[E0432]: unresolved import\nerror: could not compile\n"] {
+        for text in [
+            "",
+            "error[E0432]: unresolved import\nerror: could not compile\n",
+        ] {
             assert_eq!(parse_libtest(text), Err(TestFmtError::NoTests));
         }
         // A terse run prints dots, which carry no names.
@@ -618,17 +668,30 @@ mod tests {
     fn vitest_json_real_run() {
         let c = parse_vitest_json(VITEST_JSON, Some("/work/vt")).unwrap();
         assert_eq!(c.len(), 3, "skipped is not a case: {:?}", names(&c));
-        assert_eq!(get(&c, "sample.test.js::math adds").status, TestStatus::Passed);
-        assert_eq!(get(&c, "sample.test.js::strings upper-cases").status, TestStatus::Passed);
+        assert_eq!(
+            get(&c, "sample.test.js::math adds").status,
+            TestStatus::Passed
+        );
+        assert_eq!(
+            get(&c, "sample.test.js::strings upper-cases").status,
+            TestStatus::Passed
+        );
         match &get(&c, "sample.test.js::math subtracts wrongly").status {
             TestStatus::Failed { cause } => {
-                assert_eq!(cause, "AssertionError: expected 2 to be 5 // Object.is equality");
+                assert_eq!(
+                    cause,
+                    "AssertionError: expected 2 to be 5 // Object.is equality"
+                );
             }
             other => panic!("{other:?}"),
         }
         // Without a root the absolute path is kept as is.
         let abs = parse_vitest_json(VITEST_JSON, None).unwrap();
-        assert!(abs[0].name.starts_with("/work/vt/sample.test.js::"), "{}", abs[0].name);
+        assert!(
+            abs[0].name.starts_with("/work/vt/sample.test.js::"),
+            "{}",
+            abs[0].name
+        );
     }
 
     #[test]
@@ -637,23 +700,38 @@ mod tests {
         let c = parse_vitest_json(j, Some("/r")).unwrap();
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].name, "a.test.ts::(suite)");
-        assert_eq!(c[0].status, TestStatus::failed("Error: Cannot find module './x'"));
+        assert_eq!(
+            c[0].status,
+            TestStatus::failed("Error: Cannot find module './x'")
+        );
     }
 
     #[test]
     fn vitest_json_garbage_and_empty_are_errors() {
-        assert!(matches!(parse_vitest_json("not json", None), Err(TestFmtError::Malformed(_))));
-        assert_eq!(parse_vitest_json(r#"{"testResults":[]}"#, None), Err(TestFmtError::NoTests));
+        assert!(matches!(
+            parse_vitest_json("not json", None),
+            Err(TestFmtError::Malformed(_))
+        ));
+        assert_eq!(
+            parse_vitest_json(r#"{"testResults":[]}"#, None),
+            Err(TestFmtError::NoTests)
+        );
         // Noise before the JSON object (a reporter banner) is tolerated.
         let noisy = format!("RUN v2.1.9 /r\n{VITEST_JSON}\n");
-        assert_eq!(parse_vitest_json(&noisy, Some("/work/vt")).unwrap().len(), 3);
+        assert_eq!(
+            parse_vitest_json(&noisy, Some("/work/vt")).unwrap().len(),
+            3
+        );
     }
 
     #[test]
     fn junit_real_vitest_run() {
         let c = parse_junit(JUNIT).unwrap();
         assert_eq!(c.len(), 3, "skipped is not a case: {:?}", names(&c));
-        assert_eq!(get(&c, "sample.test.js::math > adds").status, TestStatus::Passed);
+        assert_eq!(
+            get(&c, "sample.test.js::math > adds").status,
+            TestStatus::Passed
+        );
         match &get(&c, "sample.test.js::math > subtracts wrongly").status {
             TestStatus::Failed { cause } => {
                 assert_eq!(cause, "expected 2 to be 5 // Object.is equality");
@@ -677,7 +755,10 @@ trace line 2</error></testcase>
         let c = parse_junit(xml).unwrap();
         assert_eq!(c.len(), 4);
         assert_eq!(get(&c, "com.acme.A::ok").status, TestStatus::Passed);
-        assert_eq!(get(&c, "com.acme.A::boom").status, TestStatus::failed("trace line 1"));
+        assert_eq!(
+            get(&c, "com.acme.A::boom").status,
+            TestStatus::failed("trace line 1")
+        );
         assert_eq!(
             get(&c, "com.acme.B::bad & ugly").status,
             TestStatus::failed("expected <1> but was <2>")
@@ -687,7 +768,10 @@ trace line 2</error></testcase>
 
     #[test]
     fn junit_malformed_and_empty_are_errors_and_entities_are_not_expanded() {
-        assert!(matches!(parse_junit("<testsuite><testcase name='a'>"), Err(TestFmtError::Malformed(_))));
+        assert!(matches!(
+            parse_junit("<testsuite><testcase name='a'>"),
+            Err(TestFmtError::Malformed(_))
+        ));
         assert_eq!(parse_junit("<testsuites/>"), Err(TestFmtError::NoTests));
         // A DOCTYPE with an external entity is inert: nothing is fetched or
         // expanded, and the case still parses.
@@ -713,7 +797,14 @@ trace line 2</error></testcase>
         let mut timed = exec(LIBTEST_FAIL);
         timed.timed_out = true;
         assert!(outcomes(TestFormat::Libtest, &base, &timed, None, None).is_none());
-        assert!(outcomes(TestFormat::Libtest, &base, &exec("compile error"), None, None).is_none());
+        assert!(outcomes(
+            TestFormat::Libtest,
+            &base,
+            &exec("compile error"),
+            None,
+            None
+        )
+        .is_none());
     }
 
     #[test]

@@ -190,9 +190,14 @@ mod tests {
 
     #[test]
     fn a_new_or_fixed_fingerprint_is_not_stuck() {
-        let m = advance_failures(&Manifest::new(0), "BLOCKED-ENV", &[harness("a", "boom")]).manifest;
+        let m =
+            advance_failures(&Manifest::new(0), "BLOCKED-ENV", &[harness("a", "boom")]).manifest;
         // A second, different fault appears alongside: something is new.
-        let n = advance_failures(&m, "BLOCKED-ENV", &[harness("a", "boom"), harness("b", "kaput")]);
+        let n = advance_failures(
+            &m,
+            "BLOCKED-ENV",
+            &[harness("a", "boom"), harness("b", "kaput")],
+        );
         assert!(!n.stuck && n.classification.new.len() == 1);
         // One fault went away: the set is not identical to last night's.
         let m2 = n.manifest;
@@ -215,7 +220,11 @@ mod tests {
         let v = [evidence("tests", "regressed"), harness("tests", "boom")];
         let n = advance_failures(&Manifest::new(0), "BLOCKED-ENV", &v);
         assert_eq!(n.manifest.records.len(), 1);
-        let none = advance_failures(&Manifest::new(0), "REJECT", &[evidence("tests", "regressed")]);
+        let none = advance_failures(
+            &Manifest::new(0),
+            "REJECT",
+            &[evidence("tests", "regressed")],
+        );
         assert!(none.manifest.records.is_empty());
     }
 
@@ -243,7 +252,11 @@ mod tests {
         assert_eq!(u2.manifest.step, 2, "step counts recorded nights");
         // A different directory is a different repo.
         let other = tempfile::tempdir().unwrap();
-        assert!(!record_night(other.path(), "beta", "BLOCKED-ENV", &v).unwrap().stuck);
+        assert!(
+            !record_night(other.path(), "beta", "BLOCKED-ENV", &v)
+                .unwrap()
+                .stuck
+        );
         // Corrupt file: start afresh rather than wedge the night.
         std::fs::write(failures_path(d.path()), "{ not json").unwrap();
         let u3 = record_night(d.path(), "alpha", "BLOCKED-ENV", &v).unwrap();
@@ -263,7 +276,10 @@ mod tests {
                 night_id,
                 fingerprints,
             } => {
-                assert_eq!((repo.as_str(), night_id.as_str()), ("alpha", "2026-10-15-alpha"));
+                assert_eq!(
+                    (repo.as_str(), night_id.as_str()),
+                    ("alpha", "2026-10-15-alpha")
+                );
                 assert_eq!(fingerprints.len(), 1);
                 assert_eq!(fingerprints[0].len(), 16);
             }
@@ -298,14 +314,33 @@ mod tests {
 
     #[test]
     fn dry_streak_counts_trailing_reject_and_inconclusive() {
-        assert_eq!(dry_streak_text(&ledger(&["ACCEPT", "INCONCLUSIVE", "REJECT", "INCONCLUSIVE"])), 3);
-        assert_eq!(dry_streak_text(&ledger(&["REJECT", "REJECT"])), 2, "REJECT now counts");
+        assert_eq!(
+            dry_streak_text(&ledger(&[
+                "ACCEPT",
+                "INCONCLUSIVE",
+                "REJECT",
+                "INCONCLUSIVE"
+            ])),
+            3
+        );
+        assert_eq!(
+            dry_streak_text(&ledger(&["REJECT", "REJECT"])),
+            2,
+            "REJECT now counts"
+        );
         assert_eq!(dry_streak_text(&ledger(&["INCONCLUSIVE", "ACCEPT"])), 0);
     }
 
     #[test]
     fn operational_rows_neither_advance_nor_reset_the_streak() {
-        let l = ledger(&["REJECT", "BLOCKED-ENV", "HANDOFF", "OPERATOR", "INCONCLUSIVE", "BLOCKED-ENV"]);
+        let l = ledger(&[
+            "REJECT",
+            "BLOCKED-ENV",
+            "HANDOFF",
+            "OPERATOR",
+            "INCONCLUSIVE",
+            "BLOCKED-ENV",
+        ]);
         assert_eq!(dry_streak_text(&l), 2);
         assert_eq!(dry_streak_text(""), 0);
         assert_eq!(dry_streak_text(&empty_ledger()), 0);

@@ -23,8 +23,8 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
 
-pub use dream_gate::outcome::ExecOutcome;
 use dream_gate::outcome::shell_quote;
+pub use dream_gate::outcome::ExecOutcome;
 
 /// Runs one evaluator command in a working directory under a wall-clock budget.
 pub trait EvaluatorRunner: Send + Sync {

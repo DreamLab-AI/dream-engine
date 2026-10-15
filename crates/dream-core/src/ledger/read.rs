@@ -429,8 +429,9 @@ pub fn learning_signals(rows: &[LedgerRow], opts: &SignalOptions) -> LearningSig
     let low_score_streak = last3.len() == 3 && last3.iter().all(|x| *x < 5.0);
 
     let last3_eval = &recent[recent.len().saturating_sub(3)..];
-    let blocked_eval_streak =
-        recent.len() >= 3 && last3_eval.len() == 3 && last3_eval.iter().all(|r| r.evaluated == "blocked");
+    let blocked_eval_streak = recent.len() >= 3
+        && last3_eval.len() == 3
+        && last3_eval.iter().all(|r| r.evaluated == "blocked");
 
     LearningSignals {
         zero_merge_streak,
@@ -525,7 +526,10 @@ mod tests {
 
     #[test]
     fn newlines_in_a_cell_collapse_to_one_space() {
-        let l = append(&empty_ledger(), &row(|r| r.finding = "a | b\r\nc\nd".into()));
+        let l = append(
+            &empty_ledger(),
+            &row(|r| r.finding = "a | b\r\nc\nd".into()),
+        );
         assert_eq!(parse_ledger(&l).rows.len(), 1);
         assert_eq!(parse_ledger(&l).rows[0].finding, "a | b c d");
     }
@@ -567,7 +571,10 @@ mod tests {
 
     #[test]
     fn verify_flags_out_of_range_verdict_date_and_evaluated() {
-        let v = verify_ledger(&append(&empty_ledger(), &row(|r| r.verdict = "MAYBE".into())));
+        let v = verify_ledger(&append(
+            &empty_ledger(),
+            &row(|r| r.verdict = "MAYBE".into()),
+        ));
         assert!(!v.ok);
         assert!(v.errors.join(",").contains("verdict"));
         let v = verify_ledger(&append(
@@ -668,10 +675,15 @@ mod tests {
 
     #[test]
     fn duplicate_directions_need_three_repeats_and_use_the_js_six_token_key() {
-        let mut rows = many(3, |_, r| r.finding = "improve router calibration loop".into());
+        let mut rows = many(3, |_, r| {
+            r.finding = "improve router calibration loop".into()
+        });
         rows.push(row(|r| r.finding = "totally different thing here".into()));
         let s = learning_signals(&rows, &SignalOptions::default());
-        assert_eq!(s.duplicate_directions, vec!["improve router calibration loop"]);
+        assert_eq!(
+            s.duplicate_directions,
+            vec!["improve router calibration loop"]
+        );
         // Punctuation-led findings leave a leading space; JS split(/\s+/) then
         // yields an empty first token that consumes one of the six slots.
         let rows = many(3, |i, r| {
@@ -695,13 +707,22 @@ mod tests {
             r.verdict = "INCONCLUSIVE".into();
         });
         assert!(learning_signals(&rows, &SignalOptions::default()).blocked_eval_streak);
-        assert_eq!(learning_signals(&rows, &SignalOptions::default()).nights_considered, 5);
+        assert_eq!(
+            learning_signals(&rows, &SignalOptions::default()).nights_considered,
+            5
+        );
     }
 
     #[test]
     fn verdict_stats_counts_and_buckets_other() {
         let mut rows = vec![];
-        for v in ["ACCEPT", "REJECT", "INCONCLUSIVE", "INCONCLUSIVE", "HANDOFF"] {
+        for v in [
+            "ACCEPT",
+            "REJECT",
+            "INCONCLUSIVE",
+            "INCONCLUSIVE",
+            "HANDOFF",
+        ] {
             rows.push(row(|r| r.verdict = v.into()));
         }
         let s = verdict_stats(&rows);

@@ -199,10 +199,13 @@ pub fn compile(
         "Human-review-only. The nightly NEVER merges; a human does."
     };
 
-    let disciplines = ["evaluation-is-not-promotion", "witness-every-quantitative-claim"]
-        .into_iter()
-        .map(str::to_string)
-        .chain(cfg.extra_disciplines.iter().cloned());
+    let disciplines = [
+        "evaluation-is-not-promotion",
+        "witness-every-quantitative-claim",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .chain(cfg.extra_disciplines.iter().cloned());
     let discipline_list = disciplines
         .map(|d| format!("- {d}"))
         .collect::<Vec<_>>()
@@ -357,7 +360,14 @@ mod tests {
     }
 
     fn prompt(cfg: &DreamConfig) -> String {
-        compile(cfg, &cfg.slots[0], 20260815, &[], &PromptTemplate::builtin()).unwrap()
+        compile(
+            cfg,
+            &cfg.slots[0],
+            20260815,
+            &[],
+            &PromptTemplate::builtin(),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -403,7 +413,10 @@ mod tests {
             "Append one ledger row",
             "Run every evaluator entrypoint",
         ] {
-            assert!(!p.contains(banned), "prompt still asks the model to: {banned}");
+            assert!(
+                !p.contains(banned),
+                "prompt still asks the model to: {banned}"
+            );
         }
         assert!(p.contains(
             "the engine fills the issue, PR, witness, prior-night-fate and reviewer columns"
@@ -465,8 +478,14 @@ mod tests {
             br#"{"repo": "o/r", "slots": [{"deep": "{{repo}}", "scan": []}]}"#,
         )
         .unwrap();
-        let out = compile(&cfg, &cfg.slots[0], 1, &[], &PromptTemplate::new("{{deep}}|{{repo}}"))
-            .unwrap();
+        let out = compile(
+            &cfg,
+            &cfg.slots[0],
+            1,
+            &[],
+            &PromptTemplate::new("{{deep}}|{{repo}}"),
+        )
+        .unwrap();
         assert_eq!(out, "{{repo}}|o/r");
     }
 

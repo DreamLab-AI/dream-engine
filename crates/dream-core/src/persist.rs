@@ -31,9 +31,6 @@ pub enum PersistError {
     /// attempt's stderr so the gate's `DidNotApply` detail says why.
     #[error("patch did not apply: {0}")]
     PatchDidNotApply(String),
-    /// The report carried no candidate patch.
-    #[error("no candidate patch in report")]
-    NoPatch,
     /// The protected-path guard refused the patch. Raised **before** any git
     /// command touches the repository.
     #[error("patch refused by the guard: {0}")]
@@ -193,7 +190,8 @@ pub fn build_branch_worktree(
     // Last resort: the mechanical repairs in normalise_patch, tried only when
     // the diff as written failed every strategy and the repairs changed it.
     if applied_via.is_none() {
-        let (normalised, notes) = normalise_patch(patch, |p| crate::source::read_blob(repo, base, p));
+        let (normalised, notes) =
+            normalise_patch(patch, |p| crate::source::read_blob(repo, base, p));
         if !notes.is_empty() {
             // The normalised text is what would be applied: guard it too.
             if let Err(v) = guard::check(&normalised, policy) {
@@ -242,7 +240,9 @@ pub fn build_branch_worktree(
         return Err(PersistError::PatchDidNotApply(last_err.trim().to_string()));
     };
 
-    if let Err(e) = git::run(&wt, &["add", "-A"]).and_then(|_| git::run(&wt, &["commit", "-m", commit_msg])) {
+    if let Err(e) =
+        git::run(&wt, &["add", "-A"]).and_then(|_| git::run(&wt, &["commit", "-m", commit_msg]))
+    {
         cleanup(repo, &wt);
         return Err(e.into());
     }
@@ -323,8 +323,15 @@ mod tests {
         std::fs::write(dir.join("dirty.txt"), "operator wip\n").unwrap(); // uncommitted
         let patch =
             "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n one\n+two\n";
-        let b = build_branch_worktree(&dir, "dream/x-2026-08-27", patch, "dream: add two", "HEAD", &ProtectedPolicy::default())
-            .unwrap();
+        let b = build_branch_worktree(
+            &dir,
+            "dream/x-2026-08-27",
+            patch,
+            "dream: add two",
+            "HEAD",
+            &ProtectedPolicy::default(),
+        )
+        .unwrap();
         assert_eq!(show(&b.worktree, "HEAD:f.txt"), "one\ntwo\n");
         assert_eq!(
             std::fs::read_to_string(dir.join("dirty.txt")).unwrap(),
@@ -339,12 +346,24 @@ mod tests {
         // end-of-file, so every plain strategy refuses it.
         let (_g, dir) = scratch("a\nb\nc\nd\ne\nf\ng\n");
         let patch = "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1,3 +1,3 @@\n a\n b\n-c\n+C\n";
-        let b = build_branch_worktree(&dir, "dream/trail-2026-10-11", patch, "m", "HEAD", &ProtectedPolicy::default()).unwrap();
+        let b = build_branch_worktree(
+            &dir,
+            "dream/trail-2026-10-11",
+            patch,
+            "m",
+            "HEAD",
+            &ProtectedPolicy::default(),
+        )
+        .unwrap();
         assert_eq!(
             std::fs::read_to_string(b.worktree.join("f.txt")).unwrap(),
             "a\nb\nC\nd\ne\nf\ng\n"
         );
-        assert!(b.applied_via.starts_with("normalised("), "{}", b.applied_via);
+        assert!(
+            b.applied_via.starts_with("normalised("),
+            "{}",
+            b.applied_via
+        );
         assert!(b.applied_via.contains("trailing context"));
         remove_worktree(&dir, &b.worktree);
     }
@@ -364,7 +383,15 @@ mod tests {
             c.output().unwrap();
         }
         let patch = "--- a/f.txt\n+++ b/f.txt\n@@ -1,9 +1,9 @@\n one\n-two\n+TWO\n three\n\n--- a/g.txt\n+++ b/g.txt\n@@ -1,9 +1,9 @@\n x\n-y\n+Y\n z\n";
-        let b = build_branch_worktree(&dir, "dream/headers-2026-10-11", patch, "m", "HEAD", &ProtectedPolicy::default()).unwrap();
+        let b = build_branch_worktree(
+            &dir,
+            "dream/headers-2026-10-11",
+            patch,
+            "m",
+            "HEAD",
+            &ProtectedPolicy::default(),
+        )
+        .unwrap();
         assert_eq!(
             std::fs::read_to_string(b.worktree.join("f.txt")).unwrap(),
             "one\nTWO\nthree\n"
@@ -373,7 +400,11 @@ mod tests {
             std::fs::read_to_string(b.worktree.join("g.txt")).unwrap(),
             "x\nY\nz\n"
         );
-        assert!(b.applied_via.contains("header synthesised"), "{}", b.applied_via);
+        assert!(
+            b.applied_via.contains("header synthesised"),
+            "{}",
+            b.applied_via
+        );
         remove_worktree(&dir, &b.worktree);
     }
 
@@ -401,7 +432,15 @@ mod tests {
         let (_g, dir) = scratch("one\n");
         let patch =
             "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,5 @@\n one\n+two\n";
-        let b = build_branch_worktree(&dir, "dream/recount-2026-09-25", patch, "m", "HEAD", &ProtectedPolicy::default()).unwrap();
+        let b = build_branch_worktree(
+            &dir,
+            "dream/recount-2026-09-25",
+            patch,
+            "m",
+            "HEAD",
+            &ProtectedPolicy::default(),
+        )
+        .unwrap();
         assert_eq!(show(&b.worktree, "HEAD:f.txt"), "one\ntwo\n");
         remove_worktree(&dir, &b.worktree);
     }
@@ -411,8 +450,15 @@ mod tests {
         let (_g, dir) = scratch("one\n");
         let patch =
             "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-absent\n+x\n";
-        let err =
-            build_branch_worktree(&dir, "dream/noapply-2026-09-25", patch, "m", "HEAD", &ProtectedPolicy::default()).unwrap_err();
+        let err = build_branch_worktree(
+            &dir,
+            "dream/noapply-2026-09-25",
+            patch,
+            "m",
+            "HEAD",
+            &ProtectedPolicy::default(),
+        )
+        .unwrap_err();
         match err {
             PersistError::PatchDidNotApply(detail) => {
                 assert!(
@@ -455,7 +501,15 @@ mod tests {
             .unwrap();
         let patch =
             "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n one\n+two\n";
-        let b = build_branch_worktree(&dir, "dream/base-2026-09-25", patch, "m", &base, &ProtectedPolicy::default()).unwrap();
+        let b = build_branch_worktree(
+            &dir,
+            "dream/base-2026-09-25",
+            patch,
+            "m",
+            &base,
+            &ProtectedPolicy::default(),
+        )
+        .unwrap();
         assert_eq!(
             std::fs::read_to_string(b.worktree.join("f.txt")).unwrap(),
             "one\ntwo\n"
@@ -476,7 +530,10 @@ mod tests {
             &ProtectedPolicy::default(),
         )
         .unwrap_err();
-        assert!(matches!(err, PersistError::Guard(GuardViolation::Protected { .. })), "{err:?}");
+        assert!(
+            matches!(err, PersistError::Guard(GuardViolation::Protected { .. })),
+            "{err:?}"
+        );
         let wl = Command::new("git")
             .arg("-C")
             .arg(&dir)

@@ -489,7 +489,9 @@ pub fn select(
 pub fn index_listing(files: &[TrackedFile], cap: usize, deny: &Denylist) -> String {
     let mut usable: Vec<&TrackedFile> = files
         .iter()
-        .filter(|f| f.size <= MAX_READABLE_BYTES && !deny.denies(&f.path) && !is_binary_ext(&f.path))
+        .filter(|f| {
+            f.size <= MAX_READABLE_BYTES && !deny.denies(&f.path) && !is_binary_ext(&f.path)
+        })
         .collect();
     usable.sort_by(|a, b| {
         a.path
@@ -1037,7 +1039,7 @@ pub async fn repair(
 }
 
 /// `path` and 1-based line of the first hunk git refused, from a
-/// `git apply` error ("error: patch failed: <path>:<line>").
+/// `git apply` error (`error: patch failed: <path>:<line>`).
 pub fn failing_hunk(apply_error: &str) -> Option<(String, usize)> {
     let rest = apply_error.split("patch failed: ").nth(1)?;
     let spec = rest.split_whitespace().next()?;
@@ -1728,24 +1730,18 @@ mod tests {
             cfg: &SourceConfig::default(),
             deny: &Denylist::default(),
         };
-        let (section, rec) = futures::executor::block_on(gather(
-            &primary,
-            Some(&fb),
-            &input,
-            &|s: &str| s.to_string(),
-        ))
-        .unwrap();
+        let (section, rec) =
+            futures::executor::block_on(gather(&primary, Some(&fb), &input, &|s: &str| {
+                s.to_string()
+            }))
+            .unwrap();
         assert_eq!(rec.planner, "ok-fallback");
         assert!(section.contains("fn b()") && section.contains("fn a()"));
         // Both fail: the evidence-mentioned file still arrives.
         let primary = Fake::new(vec![Err(LlmError::Empty)]);
-        let (section, rec) = futures::executor::block_on(gather(
-            &primary,
-            None,
-            &input,
-            &|s: &str| s.to_string(),
-        ))
-        .unwrap();
+        let (section, rec) =
+            futures::executor::block_on(gather(&primary, None, &input, &|s: &str| s.to_string()))
+                .unwrap();
         assert!(rec.planner.starts_with("failed"));
         assert!(section.contains("fn a()") && !section.contains("fn b()"));
         // Disabled: nothing, and no model call.
@@ -1755,8 +1751,9 @@ mod tests {
         };
         let silent = Fake::new(vec![]);
         let input = GatherInput { cfg: &off, ..input };
-        assert!(futures::executor::block_on(gather(&silent, None, &input, &|s: &str| s
-            .to_string()))
+        assert!(futures::executor::block_on(
+            gather(&silent, None, &input, &|s: &str| s.to_string())
+        )
         .is_none());
     }
 

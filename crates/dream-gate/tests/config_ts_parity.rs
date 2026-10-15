@@ -25,7 +25,9 @@ fn repo_must_be_owner_slash_name_with_word_dot_dash_chars() {
     for ok in ["a/b", "Dream-Lab.AI/dream_engine.rs", "0/9"] {
         assert!(load(json!({"repo": ok})).is_ok(), "{ok}");
     }
-    for bad in ["", "noslash", "a/b/c", "a/", "/b", "a b/c", "a/b c", "o/r\n", "ö/r", "a/b;rm"] {
+    for bad in [
+        "", "noslash", "a/b/c", "a/", "/b", "a b/c", "a/b c", "o/r\n", "ö/r", "a/b;rm",
+    ] {
         assert!(load(json!({"repo": bad})).is_err(), "{bad:?}");
     }
 }
@@ -61,11 +63,15 @@ fn bonus_moduli_keys_must_be_integers() {
 #[test]
 fn adr_convention_accepts_the_two_strings_and_a_pad_dir_object() {
     assert_eq!(
-        load(json!({"adrConvention": "3-digit"})).unwrap().adr_convention,
+        load(json!({"adrConvention": "3-digit"}))
+            .unwrap()
+            .adr_convention,
         AdrConvention::ThreeDigit
     );
     assert_eq!(
-        load(json!({"adrConvention": "4-digit"})).unwrap().adr_convention,
+        load(json!({"adrConvention": "4-digit"}))
+            .unwrap()
+            .adr_convention,
         AdrConvention::FourDigit
     );
     let c = load(json!({"adrConvention": {"pad": 5, "dir": "docs/decisions"}})).unwrap();
@@ -76,7 +82,10 @@ fn adr_convention_accepts_the_two_strings_and_a_pad_dir_object() {
             dir: "docs/decisions".into()
         }
     );
-    assert_eq!(load(json!({})).unwrap().adr_convention, AdrConvention::Unset);
+    assert_eq!(
+        load(json!({})).unwrap().adr_convention,
+        AdrConvention::Unset
+    );
     for bad in [
         json!("5-digit"),
         json!(""),
@@ -122,11 +131,22 @@ fn test_format_is_an_optional_evaluator_field() {
         "plain": "make check"
     }}))
     .unwrap();
-    assert_eq!(c.evaluator_entrypoints["unit"].test_format, Some(TestFormat::Libtest));
-    assert_eq!(c.evaluator_entrypoints["ui"].test_format, Some(TestFormat::VitestJson));
-    assert_eq!(c.evaluator_entrypoints["j"].test_format, Some(TestFormat::Junit));
+    assert_eq!(
+        c.evaluator_entrypoints["unit"].test_format,
+        Some(TestFormat::Libtest)
+    );
+    assert_eq!(
+        c.evaluator_entrypoints["ui"].test_format,
+        Some(TestFormat::VitestJson)
+    );
+    assert_eq!(
+        c.evaluator_entrypoints["j"].test_format,
+        Some(TestFormat::Junit)
+    );
     assert_eq!(c.evaluator_entrypoints["plain"].test_format, None);
-    assert!(load(json!({"evaluatorEntrypoints": {"x": {"cmd": "c", "testFormat": "tap"}}})).is_err());
+    assert!(
+        load(json!({"evaluatorEntrypoints": {"x": {"cmd": "c", "testFormat": "tap"}}})).is_err()
+    );
 }
 
 #[test]

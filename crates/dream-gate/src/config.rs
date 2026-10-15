@@ -463,7 +463,9 @@ fn bad_cron(cron: &str) -> Option<&'static str> {
         && (m.len() == 1 || m.as_bytes()[0] != b'0')
         && m.parse::<u8>().is_ok_and(|v| v <= 59);
     if !single {
-        return Some("minute field must be a single value from 0 to 59; minimum interval is 1 hour");
+        return Some(
+            "minute field must be a single value from 0 to 59; minimum interval is 1 hour",
+        );
     }
     None
 }

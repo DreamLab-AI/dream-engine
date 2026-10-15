@@ -49,7 +49,7 @@ const COLUMNS: [&str; 12] = [
     "Review-minutes",
 ];
 
-/// One ledger row. Fields map one-to-one onto [`COLUMNS`].
+/// One ledger row. Fields map one-to-one onto the twelve table columns, in order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LedgerRow {
     /// YYYY-MM-DD.
@@ -275,7 +275,8 @@ pub fn enforce_contract(row: &mut LedgerRow, fallback: &str) -> Vec<&'static str
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        let clipped = dream_gate::verdict::clip_words(&clean, dream_gate::verdict::FINDING_MAX_UTF16);
+        let clipped =
+            dream_gate::verdict::clip_words(&clean, dream_gate::verdict::FINDING_MAX_UTF16);
         row.finding = if dream_gate::verdict::ledger_cell_ok(&clipped) {
             clipped
         } else {
@@ -677,7 +678,11 @@ mod tests {
     fn escape_cell_neutralises_pipes_and_newlines() {
         assert_eq!(escape_cell("a|b"), "a\\|b");
         assert_eq!(escape_cell("a\nb"), "a b");
-        assert_eq!(escape_cell("a\r\nb"), "a b", "CRLF collapses to one space, as in the TS escapeCell");
+        assert_eq!(
+            escape_cell("a\r\nb"),
+            "a b",
+            "CRLF collapses to one space, as in the TS escapeCell"
+        );
         assert_eq!(escape_cell("plain"), "plain");
     }
 

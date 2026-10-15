@@ -395,7 +395,15 @@ mod tests {
     fn a_good_candidate_is_applied_isolated_and_passes_the_rerun() {
         let (_d, repo) = scratch_repo();
         let patch = "diff --git a/README.md b/README.md\nnew file mode 100644\n--- /dev/null\n+++ b/README.md\n@@ -0,0 +1 @@\n+notes\n";
-        let c = prepare(&repo, "dream/good-2026-09-05", patch, "dream: add notes", "HEAD", &policy()).unwrap();
+        let c = prepare(
+            &repo,
+            "dream/good-2026-09-05",
+            patch,
+            "dream: add notes",
+            "HEAD",
+            &policy(),
+        )
+        .unwrap();
         assert_eq!(c.tree_hash.len(), 40);
         assert_eq!(c.patch_digest, digest(patch.as_bytes()));
         let m = manifest("value");
@@ -425,7 +433,15 @@ mod tests {
     fn a_candidate_that_breaks_the_evaluator_is_vetoed() {
         let (_d, repo) = scratch_repo();
         let patch = "diff --git a/value.txt b/value.txt\n--- a/value.txt\n+++ b/value.txt\n@@ -1 +1 @@\n-42\n+41\n";
-        let c = prepare(&repo, "dream/bad-2026-09-05", patch, "dream: break", "HEAD", &policy()).unwrap();
+        let c = prepare(
+            &repo,
+            "dream/bad-2026-09-05",
+            patch,
+            "dream: break",
+            "HEAD",
+            &policy(),
+        )
+        .unwrap();
         let m = manifest("value");
         let receipts = evaluate(&LocalRunner, c.worktree.to_str().unwrap(), &m.required());
         assert!(!receipts[0].outcome.is_pass());
@@ -450,7 +466,14 @@ mod tests {
         let (_d, repo) = scratch_repo();
         let patch = "diff --git a/value.txt b/value.txt\n--- a/value.txt\n+++ b/value.txt\n@@ -1 +1 @@\n-nope\n+x\n";
         assert!(matches!(
-            prepare(&repo, "dream/noapply-2026-09-05", patch, "m", "HEAD", &policy()),
+            prepare(
+                &repo,
+                "dream/noapply-2026-09-05",
+                patch,
+                "m",
+                "HEAD",
+                &policy()
+            ),
             Err(PersistError::PatchDidNotApply(_))
         ));
         assert!(branches(&repo).is_empty());
@@ -497,10 +520,23 @@ mod tests {
         );
         assert!(rec.calls().is_empty(), "ran: {:?}", rec.calls());
         assert!(a.prepared.is_none() && a.receipts.is_empty() && a.build.is_none());
-        assert!(branches(&repo).is_empty(), "branch created for a protected patch");
-        assert_eq!(worktrees(&repo), 1, "worktree created for a protected patch");
+        assert!(
+            branches(&repo).is_empty(),
+            "branch created for a protected patch"
+        );
+        assert_eq!(
+            worktrees(&repo),
+            1,
+            "worktree created for a protected patch"
+        );
         // The gate turns that state into a REJECT with a protected-path veto.
-        let d = gate::decide(&m, &accept(), &a.state, &a.receipts, &GateContext::new(&pol));
+        let d = gate::decide(
+            &m,
+            &accept(),
+            &a.state,
+            &a.receipts,
+            &GateContext::new(&pol),
+        );
         assert!(!d.accepted);
         assert_eq!(d.verdict, "REJECT");
         assert!(d.vetoes.iter().any(|v| v.subject == "protected-path"));
@@ -515,7 +551,11 @@ mod tests {
         let required = m.required();
         let rec = Recording::new();
         let a = run(&input(&repo, patch, &pol, None, &required), &rec, None);
-        assert!(matches!(a.state, CandidateState::Protected { .. }), "{:?}", a.state);
+        assert!(
+            matches!(a.state, CandidateState::Protected { .. }),
+            "{:?}",
+            a.state
+        );
         assert!(rec.calls().is_empty());
         assert!(branches(&repo).is_empty());
     }
@@ -532,7 +572,11 @@ mod tests {
             &rec,
             None,
         );
-        assert!(matches!(&a.state, CandidateState::Refused { detail } if detail.starts_with("guard:")), "{:?}", a.state);
+        assert!(
+            matches!(&a.state, CandidateState::Refused { detail } if detail.starts_with("guard:")),
+            "{:?}",
+            a.state
+        );
         assert!(rec.calls().is_empty());
         assert!(branches(&repo).is_empty());
         assert_eq!(worktrees(&repo), 1);
@@ -560,18 +604,37 @@ mod tests {
         let required = m.required();
         let rec = Recording::new();
         let a = run(
-            &input(&repo, patch, &pol, Some(("test -f README.md", 30)), &required),
+            &input(
+                &repo,
+                patch,
+                &pol,
+                Some(("test -f README.md", 30)),
+                &required,
+            ),
             &rec,
             None,
         );
-        assert_eq!(rec.calls(), vec!["test -f README.md", "bash scripts/check.sh"]);
-        assert_eq!(a.build.as_ref().unwrap().exit_code, Some(0), "build ran in the candidate tree");
+        assert_eq!(
+            rec.calls(),
+            vec!["test -f README.md", "bash scripts/check.sh"]
+        );
+        assert_eq!(
+            a.build.as_ref().unwrap().exit_code,
+            Some(0),
+            "build ran in the candidate tree"
+        );
         let CandidateState::Applied { patch: carried, .. } = &a.state else {
             panic!("{:?}", a.state)
         };
         assert_eq!(carried, patch, "the applied patch is carried into the gate");
         assert!(a.receipts[0].outcome.is_pass());
-        let d = gate::decide(&m, &accept(), &a.state, &a.receipts, &GateContext::new(&pol));
+        let d = gate::decide(
+            &m,
+            &accept(),
+            &a.state,
+            &a.receipts,
+            &GateContext::new(&pol),
+        );
         assert!(d.accepted, "{d:?}");
         discard(&repo, a.prepared.as_ref().unwrap());
     }
@@ -585,8 +648,14 @@ mod tests {
         let required = m.required();
         let rec = Recording::new();
         let fail = |_: &PreparedCandidate| Err("no route".to_string());
-        let a = run(&input(&repo, patch, &pol, None, &required), &rec, Some(&fail));
-        assert!(matches!(&a.state, CandidateState::DidNotApply { detail } if detail.contains("no route")));
+        let a = run(
+            &input(&repo, patch, &pol, None, &required),
+            &rec,
+            Some(&fail),
+        );
+        assert!(
+            matches!(&a.state, CandidateState::DidNotApply { detail } if detail.contains("no route"))
+        );
         assert!(a.prepared.is_some());
         assert!(rec.calls().is_empty());
         discard(&repo, a.prepared.as_ref().unwrap());

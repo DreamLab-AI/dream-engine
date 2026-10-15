@@ -48,6 +48,17 @@ command-path extraction; list such files in the config's `protected` globs.
 | non-zero exit, explicit FAIL, protected path touched, new failure fingerprint, pairwise-policy rejection | evidence | `REJECT` |
 | no patch, unreadable verdict line | unproven | `INCONCLUSIVE` |
 
+## Config vocabulary
+
+`DreamConfig` validates what the reference TypeScript `validateConfig`
+validates: `repo` is `owner/name` (`[\w.-]` parts), a present `cron` has five
+fields and a single fixed minute (so the minimum interval is one hour), every
+`bonusModuli` key is an integer, `adrConvention` is `"3-digit"`, `"4-digit"` or
+`{ "pad": n >= 1, "dir": "..." }` (`AdrConvention`). An absent `cron` is
+accepted: this crate has no opinion about scheduling. An evaluator may declare
+`"testFormat": "libtest" | "junit" | "vitest-json"` (`TestFormat`), frozen into
+the manifest, so per-test output is read the same way on both trees.
+
 ## Licence
 
 MIT OR Apache-2.0.

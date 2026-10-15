@@ -102,7 +102,14 @@ fn the_fork_config_compiles_with_the_darwin_pin_intact() {
     // These hold for the mechanism because the evaluator command and the extra
     // disciplines are carried verbatim.
     let cfg = DreamConfig::from_json(fixture("fork-dream.config.json").as_bytes()).unwrap();
-    let prompt = compile(&cfg, &cfg.slots[0], 20261001, &[], &PromptTemplate::builtin()).unwrap();
+    let prompt = compile(
+        &cfg,
+        &cfg.slots[0],
+        20261001,
+        &[],
+        &PromptTemplate::builtin(),
+    )
+    .unwrap();
     let mentions: Vec<&str> = prompt
         .match_indices("@metaharness/darwin")
         .map(|(i, _)| {
@@ -117,7 +124,9 @@ fn the_fork_config_compiles_with_the_darwin_pin_intact() {
     let is_pin = |m: &&str| {
         m.strip_prefix("@metaharness/darwin@").is_some_and(|v| {
             let p: Vec<&str> = v.split('.').collect();
-            p.len() == 3 && p.iter().all(|x| !x.is_empty() && x.bytes().all(|b| b.is_ascii_digit()))
+            p.len() == 3
+                && p.iter()
+                    .all(|x| !x.is_empty() && x.bytes().all(|b| b.is_ascii_digit()))
         })
     };
     assert!(mentions.iter().all(is_pin), "{mentions:?}");
@@ -138,7 +147,9 @@ fn the_fork_config_compiles_with_the_darwin_pin_intact() {
 /// `VETOED: Given …` is a hypothesis leak here and passes the TS `^given`.
 /// Splits the Rust result into (rows both implementations flag, rows only the
 /// tightened rules flag); the second list is exactly the VETOED-prefixed rows.
-fn split_by_tightening(md: &str, from: &str) -> (Vec<(String, &'static str)>, Vec<(String, &'static str)>) {
+type Found = Vec<(String, &'static str)>;
+
+fn split_by_tightening(md: &str, from: &str) -> (Found, Found) {
     let (mut both, mut tightened) = (vec![], vec![]);
     for line in md.lines() {
         let vetoed = line
@@ -167,7 +178,11 @@ fn the_fork_ledger_complies_from_the_cutoff_as_validate_ledger_reports() {
     let md = fixture("fork-LEDGER.md");
     assert_eq!(CONTRACT_ENFORCE_FROM, "2026-09-06");
     let (both, tightened) = split_by_tightening(&md, "2026-09-06");
-    assert_eq!(both, vec![], "everything the TS flags, and nothing it does not, outside the tightening");
+    assert_eq!(
+        both,
+        vec![],
+        "everything the TS flags, and nothing it does not, outside the tightening"
+    );
     // DIVERGENCE (deliberate, in dream-gate): four rows from the cutoff on
     // read `VETOED: Given …`, a frozen-hypothesis leak the TS `^given` rule
     // cannot see behind the prefix. This crate flags them.
@@ -244,12 +259,26 @@ fn learning_signals_and_stats_agree_on_the_fork_ledger() {
     assert_eq!(rows.len(), 46);
     // TS parsePriorFates: only the explicit #N:FATE tokens, latest wins.
     let fates = parse_prior_fates(&rows);
-    let mut f: Vec<_> = fates.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let mut f: Vec<_> = fates
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
     f.sort();
-    assert_eq!(f, [("11", "MERGED"), ("15", "MERGED"), ("7", "MERGED"), ("9", "MERGED")]);
+    assert_eq!(
+        f,
+        [
+            ("11", "MERGED"),
+            ("15", "MERGED"),
+            ("7", "MERGED"),
+            ("9", "MERGED")
+        ]
+    );
     // TS learningSignals(rows) with default options (window 14).
     let s = learning_signals(&rows, &SignalOptions::default());
-    assert!(s.zero_merge_streak, "no PR in the last 14 rows is a merged number");
+    assert!(
+        s.zero_merge_streak,
+        "no PR in the last 14 rows is a merged number"
+    );
     assert_eq!(
         s.duplicate_directions,
         [
@@ -262,7 +291,10 @@ fn learning_signals_and_stats_agree_on_the_fork_ledger() {
     assert_eq!(s.nights_considered, 14);
     // TS verdictStats.
     let st = verdict_stats(&rows);
-    assert_eq!((st.accept, st.reject, st.inconclusive, st.other), (23, 3, 12, 8));
+    assert_eq!(
+        (st.accept, st.reject, st.inconclusive, st.other),
+        (23, 3, 12, 8)
+    );
 }
 
 #[test]
@@ -274,7 +306,11 @@ fn documented_divergences() {
     //    so neither width warns.
     let p = parse_ledger(&md);
     assert!(p.warnings.is_empty(), "{:?}", p.warnings);
-    let wide = p.rows.iter().filter(|r| r.reviewer.is_empty() && r.review_minutes.is_empty()).count();
+    let wide = p
+        .rows
+        .iter()
+        .filter(|r| r.reviewer.is_empty() && r.review_minutes.is_empty())
+        .count();
     assert_eq!(wide, 46, "no fork row carries a reviewer");
     // 2. A violation here is (date, rule); the TS adds a free-text `detail`.
     // 3. Witness: the TS accepts a commit of 7-40 hex characters, this crate
@@ -302,17 +338,30 @@ fn the_ts_witness_test_vector() {
     let report_hash = "5e921d699372e416cb1259ab8f71c7323cb1d984fac14ce3c3c436ec6a8ca639";
     let witness = "25031322a1eb352f88530ff9a5a8f97cc2bb3cc2a29009b85b4a78018e49b39e";
     assert_eq!(dream_gate::witness::hash_report(REPORT), report_hash);
-    assert_eq!(dream_gate::witness::witness(REPORT, COMMIT).unwrap(), witness);
+    assert_eq!(
+        dream_gate::witness::witness(REPORT, COMMIT).unwrap(),
+        witness
+    );
     assert!(dream_gate::witness::verify(REPORT, COMMIT, witness).unwrap());
     // Case-insensitive and trimmed, as TS verify().
-    assert!(dream_gate::witness::verify(REPORT, COMMIT, &format!("  {}  ", witness.to_uppercase())).unwrap());
+    assert!(dream_gate::witness::verify(
+        REPORT,
+        COMMIT,
+        &format!("  {}  ", witness.to_uppercase())
+    )
+    .unwrap());
     // Commit is lowercased and trimmed (TS normalizeCommit).
     assert_eq!(
         dream_gate::witness::witness(REPORT, &format!("  {}  ", COMMIT.to_uppercase())).unwrap(),
         witness
     );
     // A single-byte mutation, or another commit, does not verify.
-    assert!(!dream_gate::witness::verify("# Dream Cycle 2026-08-13\nverdict: INCONCLUSIVF\n", COMMIT, witness).unwrap());
+    assert!(!dream_gate::witness::verify(
+        "# Dream Cycle 2026-08-13\nverdict: INCONCLUSIVF\n",
+        COMMIT,
+        witness
+    )
+    .unwrap());
     assert!(!dream_gate::witness::verify(REPORT, &"a".repeat(40), witness).unwrap());
     // Bad commits are errors, not quiet falses.
     assert!(dream_gate::witness::witness(REPORT, "nothex!!").is_err());

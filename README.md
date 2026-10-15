@@ -52,7 +52,7 @@ is in [docs/concepts.md](docs/concepts.md).
 | [`pairwise-gate`](crates/pairwise-gate) | Selection policies over paired candidate and baseline results: `Margin`, `Floor`, `SignTest`, `WilsonLower`, `NoRegression`, `TrainDev`. Faults never count as losses. | In the repository, `0.1.0`; not yet published |
 | [`failure-fingerprint`](crates/failure-fingerprint) | A 16-hex-character SHA-256 identity for a failure mode, and a `New` / `Persisting` / `Fixed` classification across steps. | In the repository, `0.1.0`; not yet published |
 | `dream-gate` | The protected-path guard, config-digest binding and the veto classes that turn evaluator evidence into a verdict. | Planned |
-| `dream-core` | The manifest, the run state machine, the seams (`Llm`, `MemorySink`, `EvaluatorRunner`, `Notifier`, `Forge`) and the nightly driver. | Planned |
+| [`dream-core`](crates/dream-core) | Evaluator runners, the candidate worktree with guard-before-apply ordering, the ledger and its signals, harness-stall detection, replay, source reading, and the seams (`Llm`, `MemorySink`, `Notifier`, `Forge`). The nightly driver that sequences them is the host's. | In the repository, `0.1.0`; not yet published |
 
 The two built crates are small and independent of the rest, and each has its
 own README. The statistics are checked against reference values computed
