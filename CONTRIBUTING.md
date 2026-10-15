@@ -16,7 +16,7 @@ RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace
 ```
 
 Every public item carries rustdoc, and examples must compile. The minimum Rust
-version is 1.85.
+version is 1.89.
 
 ## Rules that matter here
 

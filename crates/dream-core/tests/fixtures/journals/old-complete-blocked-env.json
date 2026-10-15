@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "runId": "7d4baacd3dc2723f",
+  "nightId": "2026-10-08-alpha",
+  "repo": "alpha",
+  "date": "2026-10-08",
+  "phase": "complete",
+  "attempts": 1,
+  "maxAttempts": 2,
+  "resumedFrom": null,
+  "firstSeen": "2026-10-08T01:06:55.499552627+00:00",
+  "updatedAt": "2026-10-08T01:16:30.138126725+00:00",
+  "lastError": null,
+  "verdict": "BLOCKED-ENV"
+}

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "runId": "4121dd53a430447a",
+  "nightId": "2026-10-12-alpha",
+  "repo": "alpha",
+  "date": "2026-10-12",
+  "phase": "manifest-frozen",
+  "attempts": 1,
+  "maxAttempts": 2,
+  "resumedFrom": null,
+  "firstSeen": "2026-10-12T01:10:35.754657394+00:00",
+  "updatedAt": "2026-10-12T01:10:35.754795809+00:00",
+  "lastError": null,
+  "verdict": null
+}

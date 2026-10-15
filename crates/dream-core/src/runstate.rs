@@ -17,9 +17,12 @@
 //! rule is therefore night-level: once a night is `Persisted` or `Complete` it
 //! is over regardless of run id, and only [`reset_night`] reopens it.
 
+use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use dream_gate::manifest::write_atomic;
 
@@ -136,8 +139,158 @@ impl Resume {
     }
 }
 
+/// Why the run journal could not be trusted.
+///
+/// Absence is **not** an error ([`load_checked`] returns `Ok(None)`): only a
+/// journal that exists but cannot be read, parsed or matched to this night is.
+/// The engine treats every variant as `BLOCKED-ENV` for the night, leaves the
+/// file untouched as evidence, and points the operator at `reset-night`.
+#[derive(Debug, Error)]
+pub enum JournalError {
+    /// An I/O failure that is not "file not found" (permissions, a directory
+    /// where the file should be, a failed write).
+    #[error("run journal I/O error at {path}: {source}")]
+    Io {
+        /// The journal path.
+        path: PathBuf,
+        /// The underlying error.
+        #[source]
+        source: std::io::Error,
+    },
+    /// The file exists but is not a valid journal (truncated or garbled JSON).
+    #[error("run journal at {path} is corrupt: {detail}")]
+    Corrupt {
+        /// The journal path.
+        path: PathBuf,
+        /// The parse error.
+        detail: String,
+    },
+    /// The journal was written by an engine speaking a schema this one does
+    /// not know.
+    #[error("run journal at {path} has schema {found}, this engine reads schema {supported}")]
+    UnknownSchema {
+        /// The journal path.
+        path: PathBuf,
+        /// The schema the file declares.
+        found: u32,
+        /// The schema this build understands ([`RUNSTATE_SCHEMA`]).
+        supported: u32,
+    },
+    /// The journal in this night's directory records a different repo, date
+    /// or night id, so it cannot be this night's.
+    #[error(
+        "run journal at {path} belongs to another night \
+         (repo {repo:?}, date {date:?}, night {night_id:?})"
+    )]
+    WrongNight {
+        /// The journal path.
+        path: PathBuf,
+        /// Repo recorded in the journal.
+        repo: String,
+        /// Date recorded in the journal.
+        date: String,
+        /// Night id recorded in the journal.
+        night_id: String,
+    },
+}
+
 fn path(dir: &Path) -> PathBuf {
     dir.join("run-state.json")
+}
+
+/// Why a [`NightLock`] could not be taken.
+#[derive(Debug, Error)]
+pub enum LockError {
+    /// Another engine (or another holder in this process) has the night.
+    #[error("night is locked by another engine: {path}")]
+    Held {
+        /// The lock file.
+        path: PathBuf,
+    },
+    /// The lock file could not be created or locked.
+    #[error("night lock {path}: {source}")]
+    Io {
+        /// The lock file.
+        path: PathBuf,
+        /// The underlying error.
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+/// An exclusive advisory lock on one night directory.
+///
+/// Two engines that both read an absent journal would otherwise both run the
+/// night and both publish. Take the lock **before** the first journal read and
+/// hold it across check → freeze → execute → persist; dropping it (or the
+/// process dying, however abruptly) releases it. The lock is `flock`-style on
+/// `<night_dir>/.lock` ([`File::try_lock`]), so it is per open file
+/// description: a second [`NightLock::acquire`] in the same process conflicts
+/// exactly like one from another process.
+#[derive(Debug)]
+pub struct NightLock {
+    // Held for its Drop: closing the descriptor releases the lock.
+    _file: File,
+    path: PathBuf,
+}
+
+impl NightLock {
+    /// Take the lock for `dir` (created if absent) without blocking.
+    ///
+    /// # Errors
+    ///
+    /// [`LockError::Held`] when someone else holds it; [`LockError::Io`]
+    /// otherwise.
+    pub fn acquire(dir: &Path) -> Result<Self, LockError> {
+        let lock_path = dir.join(".lock");
+        let io = |source| LockError::Io {
+            path: lock_path.clone(),
+            source,
+        };
+        std::fs::create_dir_all(dir).map_err(io)?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock_path)
+            .map_err(io)?;
+        match file.try_lock() {
+            Ok(()) => Ok(Self {
+                _file: file,
+                path: lock_path,
+            }),
+            Err(std::fs::TryLockError::WouldBlock) => Err(LockError::Held { path: lock_path }),
+            Err(std::fs::TryLockError::Error(e)) => Err(io(e)),
+        }
+    }
+
+    /// Like [`NightLock::acquire`], but keeps retrying a held lock for up to
+    /// `wait`.
+    ///
+    /// A descriptor is briefly duplicated into any child forked by another
+    /// thread before it execs, so a lock that was *just* released can look held
+    /// for a few milliseconds. A real holder keeps the night for the whole run,
+    /// so a short wait costs nothing and removes the false "held".
+    ///
+    /// # Errors
+    ///
+    /// As [`NightLock::acquire`], after `wait` has elapsed.
+    pub fn acquire_within(dir: &Path, wait: std::time::Duration) -> Result<Self, LockError> {
+        let deadline = std::time::Instant::now() + wait;
+        loop {
+            match Self::acquire(dir) {
+                Err(LockError::Held { .. }) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                other => return other,
+            }
+        }
+    }
+
+    /// The lock file's path.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 fn now() -> String {
@@ -150,9 +303,64 @@ fn save(dir: &Path, state: &RunState) -> std::io::Result<()> {
     write_atomic(&path(dir), &bytes)
 }
 
-/// Read the journal for `dir`, if one exists and parses.
+fn save_checked(dir: &Path, state: &RunState) -> Result<(), JournalError> {
+    save(dir, state).map_err(|source| JournalError::Io {
+        path: path(dir),
+        source,
+    })
+}
+
+/// Read the journal for `dir`, distinguishing **absent** from **unusable**.
+///
+/// `Ok(None)` means there is no journal. A file that cannot be read, does not
+/// parse, or declares a schema other than [`RUNSTATE_SCHEMA`] is an error: a
+/// damaged record must never read as a fresh night, because that reopens a
+/// finished one and resets its attempt budget. Unknown JSON fields are
+/// tolerated, so every journal an earlier build wrote still loads.
+pub fn load_checked(dir: &Path) -> Result<Option<RunState>, JournalError> {
+    let p = path(dir);
+    let text = match std::fs::read_to_string(&p) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => return Err(JournalError::Io { path: p, source }),
+    };
+    // Read the version first so a future schema reports as such rather than
+    // as a parse failure of a shape this build does not know.
+    #[derive(Deserialize)]
+    struct Probe {
+        schema: Option<u32>,
+    }
+    let corrupt = |e: serde_json::Error| JournalError::Corrupt {
+        path: p.clone(),
+        detail: e.to_string(),
+    };
+    let probe: Probe = serde_json::from_str(&text).map_err(corrupt)?;
+    match probe.schema {
+        Some(RUNSTATE_SCHEMA) => {}
+        Some(found) => {
+            return Err(JournalError::UnknownSchema {
+                path: p,
+                found,
+                supported: RUNSTATE_SCHEMA,
+            })
+        }
+        None => {
+            return Err(JournalError::Corrupt {
+                path: p,
+                detail: "no schema field".into(),
+            })
+        }
+    }
+    serde_json::from_str(&text).map(Some).map_err(corrupt)
+}
+
+/// Read the journal for `dir`, if one exists and is valid.
+///
+/// A thin compatibility wrapper over [`load_checked`] that folds every error
+/// into `None`. Do not use it to decide whether a night may run: it cannot
+/// tell a missing journal from a damaged one.
 pub fn load(dir: &Path) -> Option<RunState> {
-    serde_json::from_str(&std::fs::read_to_string(path(dir)).ok()?).ok()
+    load_checked(dir).ok().flatten()
 }
 
 /// The night-level terminal rule: has the night `(repo, date, night_id)` in
@@ -165,37 +373,98 @@ pub fn load(dir: &Path) -> Option<RunState> {
 /// begun, the night is over whatever the run id says. A `Persisted` record
 /// (the process died before closing out) is finalised to `Complete` with the
 /// verdict recorded at [`persist`]. Callers that would otherwise freeze a new
-/// manifest should ask this first. Returns `None` for any other state,
-/// including a journal for a different night.
-pub fn finished_night(dir: &Path, repo: &str, date: &str, night_id: &str) -> Option<RunState> {
-    let mut prior = load(dir)?;
+/// manifest should ask this first. `Ok(None)` for any other state, including
+/// an absent journal or one for a different night.
+///
+/// # Errors
+///
+/// A journal that exists but is unreadable, corrupt or of an unknown schema
+/// ([`JournalError`]): "not finished" cannot be concluded from a record that
+/// cannot be read.
+pub fn finished_night(
+    dir: &Path,
+    repo: &str,
+    date: &str,
+    night_id: &str,
+) -> Result<Option<RunState>, JournalError> {
+    let Some(mut prior) = load_checked(dir)? else {
+        return Ok(None);
+    };
     if prior.repo != repo || prior.date != date || prior.night_id != night_id {
-        return None;
+        return Ok(None);
     }
     match prior.phase {
-        Phase::Complete => Some(prior),
+        Phase::Complete => Ok(Some(prior)),
         Phase::Persisted => {
             prior.phase = Phase::Complete;
             prior.updated_at = now();
             // Best effort: the answer does not depend on the write landing.
             let _ = save(dir, &prior);
-            Some(prior)
+            Ok(Some(prior))
         }
-        _ => None,
+        _ => Ok(None),
     }
 }
 
-/// Archive (rename, never delete) the night's run-state and manifest as
-/// `run-state-superseded-<timestamp>.json` / `manifest-superseded-<timestamp>.json`,
+static ARCHIVE_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Archive (never delete, never overwrite) the night's run-state and manifest
+/// as `run-state-superseded-<stamp>.json` / `manifest-superseded-<stamp>.json`,
 /// so the next [`begin`] is fresh. This is the operator's explicit way to run a
-/// different experiment on a night that already finished. Absent files are
-/// skipped, so resetting an untouched night is a no-op.
+/// different experiment on a night that already finished, and to clear a
+/// journal [`begin`] refused as corrupt. Absent files are skipped, so
+/// resetting an untouched night is a no-op.
+///
+/// The stamp is UTC nanoseconds plus the process id and a counter, and each
+/// archive is created by hard link, which fails rather than replacing an
+/// existing name. Both files are archived or neither is: if the second cannot
+/// be, the first archive is removed and the night is left as it was. The night
+/// lock ([`NightLock`]) is taken for the duration; a running engine makes this
+/// fail with [`std::io::ErrorKind::WouldBlock`].
 pub fn reset_night(dir: &Path) -> std::io::Result<()> {
-    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%S%3fZ");
+    let _lock = match NightLock::acquire_within(dir, std::time::Duration::from_millis(500)) {
+        Ok(l) => l,
+        Err(LockError::Held { path }) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                format!("night is in use by a running engine ({})", path.display()),
+            ))
+        }
+        Err(LockError::Io { source, .. }) => return Err(source),
+    };
+    let stamp = format!(
+        "{}-{}-{}",
+        chrono::Utc::now().format("%Y%m%dT%H%M%S%9fZ"),
+        std::process::id(),
+        ARCHIVE_SEQ.fetch_add(1, Ordering::Relaxed)
+    );
+    let mut done: Vec<(PathBuf, PathBuf)> = Vec::new(); // (source, archive)
     for stem in ["run-state", "manifest"] {
         let from = dir.join(format!("{stem}.json"));
-        if from.exists() {
-            std::fs::rename(&from, dir.join(format!("{stem}-superseded-{stamp}.json")))?;
+        if std::fs::symlink_metadata(&from).is_err() {
+            continue;
+        }
+        let to = dir.join(format!("{stem}-superseded-{stamp}.json"));
+        // `hard_link` fails if `to` exists; unlike `rename` it never replaces.
+        if let Err(e) = std::fs::hard_link(&from, &to) {
+            for (_, archive) in &done {
+                let _ = std::fs::remove_file(archive);
+            }
+            return Err(e);
+        }
+        done.push((from, to));
+    }
+    // Every archive exists; now remove the sources. If one cannot be removed,
+    // put back what was removed and drop the archives, leaving the night as it was.
+    for (i, (from, _)) in done.iter().enumerate() {
+        if let Err(e) = std::fs::remove_file(from) {
+            for (src, archive) in &done[..i] {
+                let _ = std::fs::hard_link(archive, src);
+            }
+            for (_, archive) in &done {
+                let _ = std::fs::remove_file(archive);
+            }
+            return Err(e);
         }
     }
     Ok(())
@@ -206,9 +475,22 @@ pub fn reset_night(dir: &Path) -> std::io::Result<()> {
 /// A night that already reached `Persisted`/`Complete` is
 /// [`Resume::AlreadyComplete`] whatever `run_id` says (see [`finished_night`]).
 ///
+/// The attempt budget belongs to the **night**, not the run id: a journal for
+/// this night with a different run id (the baseline moved between attempts)
+/// starts a fresh experiment in phase `Initialised` but carries the attempt
+/// count forward, and an exhausted or `Abandoned` night stays abandoned. A
+/// run id that changes on every failure therefore cannot loop forever.
+///
 /// Writes the updated record before returning, so a crash immediately after
 /// this call still leaves the attempt counted — an interrupted run can never
 /// masquerade as a fresh one.
+///
+/// # Errors
+///
+/// Any [`JournalError`]: a journal that is unreadable, corrupt, of an unknown
+/// schema, or that records a different repo/date/night id than the one asked
+/// for. The file is left untouched. Callers should report `BLOCKED-ENV` and
+/// point at `reset-night`; never fall back to a fresh run.
 pub fn begin(
     dir: &Path,
     run_id: &str,
@@ -216,50 +498,87 @@ pub fn begin(
     repo: &str,
     date: &str,
     max_attempts: u32,
-) -> std::io::Result<Resume> {
-    std::fs::create_dir_all(dir)?;
-    if let Some(done) = finished_night(dir, repo, date, night_id) {
+) -> Result<Resume, JournalError> {
+    std::fs::create_dir_all(dir).map_err(|source| JournalError::Io {
+        path: dir.to_path_buf(),
+        source,
+    })?;
+    let prior = load_checked(dir)?;
+    if let Some(p) = &prior {
+        if p.repo != repo || p.date != date || p.night_id != night_id {
+            return Err(JournalError::WrongNight {
+                path: path(dir),
+                repo: p.repo.clone(),
+                date: p.date.clone(),
+                night_id: p.night_id.clone(),
+            });
+        }
+    }
+    if let Some(done) = finished_night(dir, repo, date, night_id)? {
         return Ok(Resume::AlreadyComplete(done));
     }
-    match load(dir) {
-        Some(prior) if prior.run_id == run_id => {
-            if prior.phase == Phase::Abandoned || prior.attempts >= max_attempts {
-                let mut s = prior;
-                s.phase = Phase::Abandoned;
-                s.updated_at = now();
-                save(dir, &s)?;
-                return Ok(Resume::Abandoned(s));
-            }
-            let mut s = prior;
-            s.resumed_from = Some(s.phase);
-            s.attempts += 1;
-            s.updated_at = now();
-            s.last_error = None;
-            save(dir, &s)?;
-            Ok(Resume::Resumed(s))
-        }
-        // No record, or a record for a different experiment (the baseline or
-        // the config moved). Either way this is a fresh run; the manifest
-        // freeze has already archived the superseded document.
-        _ => {
-            let s = RunState {
-                schema: RUNSTATE_SCHEMA,
-                run_id: run_id.into(),
-                night_id: night_id.into(),
-                repo: repo.into(),
-                date: date.into(),
-                phase: Phase::Initialised,
-                attempts: 1,
-                max_attempts,
-                resumed_from: None,
-                first_seen: now(),
-                updated_at: now(),
-                last_error: None,
-                verdict: None,
-            };
-            save(dir, &s)?;
-            Ok(Resume::Fresh(s))
-        }
+    let Some(prior) = prior else {
+        let s = new_state(run_id, night_id, repo, date, 1, max_attempts, None);
+        save_checked(dir, &s)?;
+        return Ok(Resume::Fresh(s));
+    };
+    if prior.phase == Phase::Abandoned || prior.attempts >= max_attempts {
+        let mut s = prior;
+        s.phase = Phase::Abandoned;
+        s.updated_at = now();
+        save_checked(dir, &s)?;
+        return Ok(Resume::Abandoned(s));
+    }
+    if prior.run_id == run_id {
+        let mut s = prior;
+        s.resumed_from = Some(s.phase);
+        s.attempts += 1;
+        s.max_attempts = max_attempts;
+        s.updated_at = now();
+        s.last_error = None;
+        save_checked(dir, &s)?;
+        Ok(Resume::Resumed(s))
+    } else {
+        // A different experiment on the same night (the baseline or the
+        // config moved); the manifest freeze has already archived the
+        // superseded document. The attempt budget is the night's.
+        let s = new_state(
+            run_id,
+            night_id,
+            repo,
+            date,
+            prior.attempts + 1,
+            max_attempts,
+            Some(prior.first_seen),
+        );
+        save_checked(dir, &s)?;
+        Ok(Resume::Fresh(s))
+    }
+}
+
+fn new_state(
+    run_id: &str,
+    night_id: &str,
+    repo: &str,
+    date: &str,
+    attempts: u32,
+    max_attempts: u32,
+    first_seen: Option<String>,
+) -> RunState {
+    RunState {
+        schema: RUNSTATE_SCHEMA,
+        run_id: run_id.into(),
+        night_id: night_id.into(),
+        repo: repo.into(),
+        date: date.into(),
+        phase: Phase::Initialised,
+        attempts,
+        max_attempts,
+        resumed_from: None,
+        first_seen: first_seen.unwrap_or_else(now),
+        updated_at: now(),
+        last_error: None,
+        verdict: None,
     }
 }
 
@@ -385,7 +704,7 @@ mod tests {
     }
 
     #[test]
-    fn a_different_run_id_starts_a_fresh_journal() {
+    fn a_different_run_id_starts_a_fresh_experiment_but_keeps_the_attempt_count() {
         let d = tempfile::tempdir().unwrap();
         let Resume::Fresh(mut s) = begin_default(d.path()) else {
             panic!()
@@ -403,7 +722,8 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(r, Resume::Fresh(_)), "got {r:?}");
-        assert_eq!(r.state().attempts, 1);
+        assert_eq!(r.state().phase, Phase::Initialised);
+        assert_eq!(r.state().attempts, 2, "the attempt budget is the night's");
     }
 
     #[test]
@@ -418,10 +738,222 @@ mod tests {
     }
 
     #[test]
-    fn a_corrupt_journal_does_not_wedge_the_night() {
+    fn a_corrupt_journal_blocks_the_night_instead_of_reopening_it() {
         let d = tempfile::tempdir().unwrap();
         std::fs::write(path(d.path()), "{ this is not json").unwrap();
-        assert!(matches!(begin_default(d.path()), Resume::Fresh(_)));
+        let e = begin(d.path(), RUN, "2026-09-05-alpha", "alpha", "2026-09-05", 2).unwrap_err();
+        assert!(matches!(e, JournalError::Corrupt { .. }), "{e:?}");
+        assert!(load(d.path()).is_none(), "the compatibility wrapper reads it as absent");
+        assert_eq!(
+            std::fs::read_to_string(path(d.path())).unwrap(),
+            "{ this is not json",
+            "never overwritten"
+        );
+    }
+
+    // ---- audit F5 / F8 (written against the old API shape: `.is_err()` and
+    // `.unwrap()` compile either way) ----
+
+    #[test]
+    fn f5_a_damaged_journal_is_an_error_not_a_fresh_night() {
+        let d = tempfile::tempdir().unwrap();
+        let Resume::Fresh(mut s) = begin_default(d.path()) else {
+            panic!()
+        };
+        complete(d.path(), &mut s, "ACCEPT").unwrap();
+        let good = std::fs::read(path(d.path())).unwrap();
+        std::fs::write(path(d.path()), &good[..good.len() / 2]).unwrap(); // truncated
+        let e = begin(d.path(), RUN, "2026-09-05-alpha", "alpha", "2026-09-05", 2).unwrap_err();
+        assert!(matches!(e, JournalError::Corrupt { .. }), "{e:?}");
+        assert!(
+            finished_night(d.path(), "alpha", "2026-09-05", "2026-09-05-alpha").is_err(),
+            "a damaged journal must not read as 'not finished'"
+        );
+        assert_eq!(
+            std::fs::read(path(d.path())).unwrap(),
+            &good[..good.len() / 2],
+            "the damaged file is evidence and is never overwritten"
+        );
+    }
+
+    #[test]
+    fn f5_an_unknown_schema_is_an_error() {
+        let d = tempfile::tempdir().unwrap();
+        let _ = begin_default(d.path());
+        let text = std::fs::read_to_string(path(d.path())).unwrap();
+        std::fs::write(path(d.path()), text.replace("\"schema\": 1", "\"schema\": 99")).unwrap();
+        let e = begin(d.path(), RUN, "2026-09-05-alpha", "alpha", "2026-09-05", 2).unwrap_err();
+        assert!(
+            matches!(e, JournalError::UnknownSchema { found: 99, supported: 1, .. }),
+            "{e:?}"
+        );
+        assert!(matches!(
+            load_checked(d.path()),
+            Err(JournalError::UnknownSchema { .. })
+        ));
+    }
+
+    #[test]
+    fn f5_changing_the_run_id_does_not_reset_the_attempt_budget() {
+        let d = tempfile::tempdir().unwrap();
+        let mut seen = vec![];
+        for run in ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb", "cccccccccccccccc"] {
+            let r = begin(d.path(), run, "2026-09-05-alpha", "alpha", "2026-09-05", 2).unwrap();
+            seen.push((r.should_run(), r.state().attempts));
+        }
+        assert_eq!(seen, vec![(true, 1), (true, 2), (false, 2)], "{seen:?}");
+        assert_eq!(load(d.path()).unwrap().phase, Phase::Abandoned);
+    }
+
+    #[test]
+    fn f5_a_journal_for_another_repo_date_or_night_is_never_resumed() {
+        for (repo, night, date) in [
+            ("beta", "2026-09-05-alpha", "2026-09-05"),
+            ("alpha", "2026-09-05-alpha-x", "2026-09-05"),
+            ("alpha", "2026-09-05-alpha", "2026-09-06"),
+        ] {
+            let d = tempfile::tempdir().unwrap();
+            let _ = begin_default(d.path());
+            assert!(
+                begin(d.path(), RUN, night, repo, date, 2).is_err(),
+                "{repo} {night} {date}"
+            );
+            assert_eq!(load(d.path()).unwrap().attempts, 1, "journal untouched");
+        }
+    }
+
+    #[test]
+    fn f8_rapid_resets_never_overwrite_an_earlier_archive() {
+        let d = tempfile::tempdir().unwrap();
+        for i in 0..40 {
+            std::fs::write(d.path().join("run-state.json"), format!("rs{i}")).unwrap();
+            std::fs::write(d.path().join("manifest.json"), format!("m{i}")).unwrap();
+            reset_night(d.path()).unwrap();
+        }
+        let mut bodies: Vec<String> = std::fs::read_dir(d.path())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.to_string_lossy().contains("superseded"))
+            .map(|p| std::fs::read_to_string(p).unwrap())
+            .collect();
+        bodies.sort();
+        bodies.dedup();
+        assert_eq!(bodies.len(), 80, "an archive was overwritten");
+    }
+
+    #[test]
+    fn f8_a_reset_that_cannot_archive_both_files_archives_neither() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("run-state.json"), "rs").unwrap();
+        // A directory cannot be archived by link; the first file must be rolled back.
+        std::fs::create_dir(d.path().join("manifest.json")).unwrap();
+        assert!(reset_night(d.path()).is_err());
+        assert!(d.path().join("run-state.json").exists(), "first rename not rolled back");
+        let archives = std::fs::read_dir(d.path())
+            .unwrap()
+            .filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().contains("superseded"))
+            .count();
+        assert_eq!(archives, 0);
+    }
+
+    // ---- audit F3: the per-night lock ----
+
+    #[test]
+    fn f3_a_second_acquirer_gets_held_and_the_lock_releases_on_drop() {
+        let d = tempfile::tempdir().unwrap();
+        let first = NightLock::acquire(d.path()).unwrap();
+        assert_eq!(first.path(), d.path().join(".lock"));
+        let second = NightLock::acquire(d.path());
+        assert!(matches!(second, Err(LockError::Held { .. })), "{second:?}");
+        // reset_night refuses while an engine holds the night.
+        let e = reset_night(d.path()).unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::WouldBlock);
+        drop(first);
+        let again = NightLock::acquire_within(d.path(), std::time::Duration::from_secs(5));
+        assert!(again.is_ok(), "{again:?}");
+    }
+
+    #[test]
+    fn f3_nights_lock_independently() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let _la = NightLock::acquire(a.path()).unwrap();
+        assert!(NightLock::acquire(b.path()).is_ok());
+    }
+
+    /// A real second process: the child re-executes this test binary and tries
+    /// the lock the parent holds.
+    #[test]
+    fn f3_a_child_process_is_refused_while_the_parent_holds_the_night() {
+        if let Ok(dir) = std::env::var("DREAM_LOCK_CHILD_DIR") {
+            // Child: report what happened through the exit code.
+            let held = matches!(
+                NightLock::acquire(Path::new(&dir)),
+                Err(LockError::Held { .. })
+            );
+            std::process::exit(if held { 42 } else { 1 });
+        }
+        let d = tempfile::tempdir().unwrap();
+        let me = std::env::current_exe().unwrap();
+        let run_child = || {
+            std::process::Command::new(&me)
+                .args([
+                    "--exact",
+                    "runstate::tests::f3_a_child_process_is_refused_while_the_parent_holds_the_night",
+                    "--nocapture",
+                ])
+                .env("DREAM_LOCK_CHILD_DIR", d.path())
+                .status()
+                .unwrap()
+                .code()
+        };
+        let lock = NightLock::acquire(d.path()).unwrap();
+        assert_eq!(run_child(), Some(42), "child must see the lock as held");
+        drop(lock);
+        // A sibling test thread forking at this instant can briefly duplicate
+        // the released descriptor; a few retries rule that out.
+        let mut code = run_child();
+        for _ in 0..50 {
+            if code == Some(1) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            code = run_child();
+        }
+        assert_eq!(code, Some(1), "child acquires once the parent lets go");
+    }
+
+    // ---- audit F5: journals the previous binary wrote must still load ----
+
+    #[test]
+    fn f5_every_journal_shape_the_old_binary_wrote_still_loads_and_behaves() {
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/journals");
+        let mut seen = 0;
+        for entry in std::fs::read_dir(&fixtures).unwrap() {
+            let f = entry.unwrap().path();
+            let d = tempfile::tempdir().unwrap();
+            std::fs::copy(&f, path(d.path())).unwrap();
+            let loaded = load_checked(d.path()).unwrap().unwrap_or_else(|| panic!("{f:?}"));
+            assert_eq!(loaded.schema, RUNSTATE_SCHEMA);
+            // begin() for the very night the fixture records must not error.
+            let r = begin(
+                d.path(),
+                &loaded.run_id,
+                &loaded.night_id,
+                &loaded.repo,
+                &loaded.date,
+                loaded.max_attempts,
+            )
+            .unwrap_or_else(|e| panic!("{f:?}: {e}"));
+            match loaded.phase {
+                Phase::Complete | Phase::Persisted => {
+                    assert!(matches!(r, Resume::AlreadyComplete(_)), "{f:?}: {r:?}")
+                }
+                _ => assert!(matches!(r, Resume::Resumed(_)), "{f:?}: {r:?}"),
+            }
+            seen += 1;
+        }
+        assert!(seen >= 6, "fixtures missing ({seen})");
     }
 
     const OTHER: &str = "fedcba9876543210";
@@ -477,46 +1009,49 @@ mod tests {
     }
 
     #[test]
-    fn a_different_date_or_deep_slot_is_an_independent_night() {
+    fn a_journal_that_records_another_night_is_refused_not_overwritten() {
         let d = tempfile::tempdir().unwrap();
         let Resume::Fresh(mut s) = begin_default(d.path()) else {
             panic!()
         };
         complete(d.path(), &mut s, "ACCEPT").unwrap();
-        // Same directory, different night identity: not the finished night.
-        let r = begin_as(d.path(), OTHER, "2026-09-06-alpha", "2026-09-06");
-        assert!(matches!(r, Resume::Fresh(_)), "date: {r:?}");
-        let d2 = tempfile::tempdir().unwrap();
-        let Resume::Fresh(mut s) = begin_default(d2.path()) else {
-            panic!()
-        };
-        complete(d2.path(), &mut s, "ACCEPT").unwrap();
-        let r = begin_as(d2.path(), OTHER, "2026-09-05-alpha-deep2", "2026-09-05");
-        assert!(matches!(r, Resume::Fresh(_)), "night id: {r:?}");
+        // finished_night alone still just says "not this night".
+        assert!(finished_night(d.path(), "alpha", "2026-09-06", "2026-09-06-alpha")
+            .unwrap()
+            .is_none());
+        for (night, date) in [
+            ("2026-09-06-alpha", "2026-09-06"),
+            ("2026-09-05-alpha-deep2", "2026-09-05"),
+        ] {
+            let e = begin(d.path(), OTHER, night, "alpha", date, 2).unwrap_err();
+            assert!(matches!(e, JournalError::WrongNight { .. }), "{e:?}");
+        }
+        assert_eq!(load(d.path()).unwrap().phase, Phase::Complete);
     }
 
     #[test]
-    fn an_abandoned_night_with_a_moved_baseline_is_unchanged() {
+    fn an_abandoned_night_stays_abandoned_when_the_baseline_moves() {
         let d = tempfile::tempdir().unwrap();
         let _ = begin_default(d.path());
         let _ = begin_default(d.path());
         assert!(matches!(begin_default(d.path()), Resume::Abandoned(_)));
-        // Different run id: existing behaviour, a fresh run.
+        // The budget is the night's: a new run id does not revive it.
         let r = begin_as(d.path(), OTHER, "2026-09-05-alpha", "2026-09-05");
-        assert!(matches!(r, Resume::Fresh(_)), "got {r:?}");
+        assert!(matches!(r, Resume::Abandoned(_)), "got {r:?}");
     }
 
     #[test]
     fn finished_night_reports_without_touching_an_unfinished_one() {
         let d = tempfile::tempdir().unwrap();
-        assert!(finished_night(d.path(), "alpha", "2026-09-05", "2026-09-05-alpha").is_none());
+        let fin = |d: &Path| finished_night(d, "alpha", "2026-09-05", "2026-09-05-alpha").unwrap();
+        assert!(fin(d.path()).is_none());
         let Resume::Fresh(mut s) = begin_default(d.path()) else {
             panic!()
         };
         advance(d.path(), &mut s, Phase::Gated).unwrap();
-        assert!(finished_night(d.path(), "alpha", "2026-09-05", "2026-09-05-alpha").is_none());
+        assert!(fin(d.path()).is_none());
         complete(d.path(), &mut s, "REJECT").unwrap();
-        let f = finished_night(d.path(), "alpha", "2026-09-05", "2026-09-05-alpha").unwrap();
+        let f = fin(d.path()).unwrap();
         assert_eq!(f.verdict.as_deref(), Some("REJECT"));
     }
 

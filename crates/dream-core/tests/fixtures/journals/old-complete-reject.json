@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "runId": "39eb5b2016a0405d",
+  "nightId": "2026-10-06-alpha",
+  "repo": "alpha",
+  "date": "2026-10-06",
+  "phase": "complete",
+  "attempts": 1,
+  "maxAttempts": 2,
+  "resumedFrom": null,
+  "firstSeen": "2026-10-06T01:02:47.988923589+00:00",
+  "updatedAt": "2026-10-06T01:10:56.777692768+00:00",
+  "lastError": null,
+  "verdict": "REJECT"
+}

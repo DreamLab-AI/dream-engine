@@ -5,7 +5,7 @@
 ### A nightly, evidence-gated loop that lets an agent propose changes to a repository and a gate decide
 
 [![Licence](https://img.shields.io/badge/Licence-MIT%20OR%20Apache--2.0-blue?style=flat-square)](#licence)
-[![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange?style=flat-square)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.89%2B-orange?style=flat-square)](Cargo.toml)
 [![crates.io](https://img.shields.io/crates/v/pairwise-gate?style=flat-square&label=pairwise-gate)](https://crates.io/crates/pairwise-gate)
 [![crates.io](https://img.shields.io/crates/v/failure-fingerprint?style=flat-square&label=failure-fingerprint)](https://crates.io/crates/failure-fingerprint)
 [![Status](https://img.shields.io/badge/status-pre--1.0-yellow?style=flat-square)](docs/adr/README.md)
