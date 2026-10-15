@@ -432,6 +432,7 @@ mod tests {
         std::fs::write(sentinel.path(), "SENTINEL").unwrap();
         let _ = std::fs::remove_file(&old_path);
         std::os::unix::fs::symlink(sentinel.path(), &old_path).unwrap();
+        let before = listing();
 
         let patch =
             "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n one\n+two\n";
@@ -446,7 +447,9 @@ mod tests {
         let still_symlink = std::fs::symlink_metadata(&old_path)
             .map(|m| m.file_type().is_symlink())
             .unwrap_or(false);
+        let after = listing();
         let _ = std::fs::remove_file(&old_path);
+        assert_eq!(before, after, "a patch file appeared in the temp dir");
         assert_eq!(
             std::fs::read_to_string(sentinel.path()).unwrap(),
             "SENTINEL",
