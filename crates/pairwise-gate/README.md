@@ -27,7 +27,7 @@ for i in 0..9 {
     pairings.push(Pairing::new(format!("task-{i}"), Outcome::score(0.4)?, Outcome::score(0.7)?));
 }
 pairings.push(Pairing::new("task-9", Outcome::score(0.7)?, Outcome::score(0.4)?));
-pairings.push(Pairing::new("task-10", Outcome::fault("annexe down"), Outcome::score(0.1)?));
+pairings.push(Pairing::new("task-10", Outcome::fault("runner offline"), Outcome::score(0.1)?));
 
 let decision = SignTest::new(0.05)?.decide(&Evidence::new(&pairings));
 assert_eq!(decision.verdict, Verdict::Select);

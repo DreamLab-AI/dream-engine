@@ -42,8 +42,8 @@
 //!     pairings.push(Pairing::new(format!("task-{i}"), Outcome::score(0.4)?, Outcome::score(0.7)?));
 //! }
 //! pairings.push(Pairing::new("task-9", Outcome::score(0.7)?, Outcome::score(0.4)?));
-//! // An annexe outage is reported, not counted against the candidate.
-//! pairings.push(Pairing::new("task-10", Outcome::fault("annexe down"), Outcome::score(0.1)?));
+//! // A runner outage is reported, not counted against the candidate.
+//! pairings.push(Pairing::new("task-10", Outcome::fault("runner offline"), Outcome::score(0.1)?));
 //!
 //! let policy = SignTest::new(0.05)?;
 //! let decision = policy.decide(&Evidence::new(&pairings));
