@@ -184,6 +184,17 @@ pub(crate) fn vetoes(
     tests: &BTreeMap<String, TestOutcomes>,
     opts: &PairwiseOptions,
 ) -> Vec<Veto> {
+    if tests.is_empty() {
+        return Vec::new();
+    }
+    // Invalid options must never silently drop a policy and let a candidate
+    // through: they are a configuration fault, so the run is blocked.
+    if let Err(e) = build_policies(opts, true) {
+        return vec![Veto::harness(
+            "pairwise-options",
+            format!("invalid pairwise options, per-test evidence cannot be judged: {e}"),
+        )];
+    }
     let mut out = Vec::new();
     for (name, t) in tests {
         if !required.contains(&name.as_str()) {
@@ -284,24 +295,9 @@ fn evaluator_vetoes(name: &str, t: &TestOutcomes, opts: &PairwiseOptions) -> Vec
     if pairings.is_empty() {
         return out;
     }
-    let mut policies: Vec<(&str, Box<dyn Policy>)> = Vec::new();
-    if let Ok(p) = NoRegression::new(opts.pass_threshold) {
-        policies.push(("no-regression", Box::new(p)));
-    }
-    if let Some(Ok(p)) = opts.floor.map(Floor::new) {
-        policies.push(("floor", Box::new(p)));
-    }
-    if statistical {
-        if let Some(m) = opts.min_win_margin {
-            policies.push(("margin", Box::new(Margin::new(m))));
-        }
-        if let Some(Ok(p)) = opts.sign_alpha.map(SignTest::new) {
-            policies.push(("sign-test", Box::new(p)));
-        }
-        if let Some(Ok(p)) = opts.wilson_z.map(WilsonLower::new) {
-            policies.push(("wilson-lower", Box::new(p)));
-        }
-    }
+    let Ok(policies) = build_policies(opts, statistical) else {
+        return out; // already reported once by `vetoes`
+    };
     let evidence = Evidence::new(&pairings);
     for (label, p) in policies {
         let d = p.decide(&evidence);
@@ -310,6 +306,35 @@ fn evaluator_vetoes(name: &str, t: &TestOutcomes, opts: &PairwiseOptions) -> Vec
         }
     }
     out
+}
+
+type NamedPolicy = (&'static str, Box<dyn Policy>);
+
+/// Build the configured policies; any invalid parameter is an error.
+fn build_policies(
+    opts: &PairwiseOptions,
+    statistical: bool,
+) -> Result<Vec<NamedPolicy>, pairwise_gate::Error> {
+    let mut policies: Vec<NamedPolicy> = Vec::new();
+    policies.push((
+        "no-regression",
+        Box::new(NoRegression::new(opts.pass_threshold)?),
+    ));
+    if let Some(f) = opts.floor {
+        policies.push(("floor", Box::new(Floor::new(f)?)));
+    }
+    if statistical {
+        if let Some(m) = opts.min_win_margin {
+            policies.push(("margin", Box::new(Margin::new(m))));
+        }
+        if let Some(a) = opts.sign_alpha {
+            policies.push(("sign-test", Box::new(SignTest::new(a)?)));
+        }
+        if let Some(z) = opts.wilson_z {
+            policies.push(("wilson-lower", Box::new(WilsonLower::new(z)?)));
+        }
+    }
+    Ok(policies)
 }
 
 fn summarise(items: &[String]) -> String {
@@ -324,4 +349,59 @@ fn summarise(items: &[String]) -> String {
         s.push_str(&format!("; … and {} more", items.len() - SHOWN));
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tests_for(name: &str) -> BTreeMap<String, TestOutcomes> {
+        let mut m = BTreeMap::new();
+        m.insert(
+            name.to_string(),
+            TestOutcomes {
+                baseline: vec![TestCase::new("a", TestStatus::Passed)],
+                candidate: vec![TestCase::new("a", TestStatus::Passed)],
+            },
+        );
+        m
+    }
+
+    #[test]
+    fn invalid_options_block_instead_of_silently_dropping_a_policy() {
+        let t = tests_for("e");
+        for bad in [
+            PairwiseOptions {
+                pass_threshold: f64::NAN,
+                ..PairwiseOptions::default()
+            },
+            PairwiseOptions {
+                sign_alpha: Some(1.5),
+                ..PairwiseOptions::default()
+            },
+            PairwiseOptions {
+                wilson_z: Some(f64::INFINITY),
+                ..PairwiseOptions::default()
+            },
+            PairwiseOptions {
+                floor: Some(f64::NAN),
+                ..PairwiseOptions::default()
+            },
+        ] {
+            let v = vetoes(&["e"], &t, &bad);
+            assert_eq!(v.len(), 1, "{bad:?}");
+            assert_eq!(v[0].subject, "pairwise-options");
+            assert_eq!(v[0].class, crate::gate::VetoClass::Harness);
+        }
+        assert!(vetoes(&["e"], &t, &PairwiseOptions::default()).is_empty());
+    }
+
+    #[test]
+    fn no_evidence_means_no_validation_and_no_vetoes() {
+        let bad = PairwiseOptions {
+            pass_threshold: f64::NAN,
+            ..PairwiseOptions::default()
+        };
+        assert!(vetoes(&["e"], &BTreeMap::new(), &bad).is_empty());
+    }
 }

@@ -319,6 +319,10 @@ fn guard_veto(v: &GuardViolation) -> Veto {
 /// receipts are not graded — they come from a tree that should never have been
 /// built.
 ///
+/// The protected-path re-check runs when the model claims ACCEPT (as every
+/// candidate-state check does); when no acceptance is claimed there is nothing
+/// to veto and the model's own verdict passes through.
+///
 /// Per-test evidence in `ctx` can only add vetoes; an evaluator without it is
 /// judged exactly as by the receipts alone.
 pub fn decide(
@@ -1299,6 +1303,22 @@ mod tests {
         let d = run_with(t, opts, 0);
         assert_eq!(d.verdict, "REJECT");
         assert!(d.vetoes[0].reason.contains("floor"), "{:?}", d.vetoes);
+    }
+
+    #[test]
+    fn invalid_pairwise_options_cannot_accept() {
+        let t = TestOutcomes {
+            baseline: vec![pass("a")],
+            candidate: vec![pass("a")],
+        };
+        let opts = PairwiseOptions {
+            sign_alpha: Some(1.5),
+            ..PairwiseOptions::default()
+        };
+        let d = run_with(t, opts, 0);
+        assert!(!d.accepted);
+        assert_eq!(d.verdict, "BLOCKED-ENV");
+        assert_eq!(d.vetoes[0].subject, "pairwise-options");
     }
 
     #[test]

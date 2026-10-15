@@ -148,6 +148,9 @@ pub enum PolicyError {
         /// Digest of the bytes supplied.
         actual: String,
     },
+    /// The digest matched but the bytes are not a valid config document.
+    #[error("frozen config is invalid: {0}")]
+    InvalidConfig(String),
 }
 
 /// The set of protected paths.
@@ -253,18 +256,23 @@ impl ProtectedPolicy {
             .with_evaluator_commands(cmds)
     }
 
-    /// As [`from_config`](Self::from_config), but only if `config_bytes` hash
-    /// to the manifest's frozen `config_digest`.
+    /// Build the policy for a frozen experiment from the **baseline** config
+    /// bytes, refusing any bytes that are not the frozen document.
     ///
-    /// A policy must be derived from the **baseline** configuration the
-    /// experiment was frozen against — never from a candidate's. This is the
-    /// coupling between manifest and config: the manifest holds the digest, the
-    /// config holds the globs, and this constructor refuses to join a policy to
-    /// the wrong document.
+    /// This is the coupling between manifest and config. The manifest holds
+    /// the config's digest and the evaluators' exact command text; the config
+    /// holds the `protected` globs and the ledger path. The bytes are verified
+    /// against `manifest.config_digest` and the policy is then built from
+    /// **those same bytes** (never from a separately parsed value), using the
+    /// manifest's frozen evaluator commands.
+    ///
+    /// `fallback_ledger_path` is protected when the config names no
+    /// `ledgerPath` (this crate has no default of its own); pass the path your
+    /// engine writes its ledger to, or an empty string only if there is none.
     pub fn for_manifest(
         manifest: &ExperimentManifest,
-        cfg: &DreamConfig,
         config_bytes: &[u8],
+        fallback_ledger_path: &str,
     ) -> Result<Self, PolicyError> {
         let actual = digest(config_bytes);
         if actual != manifest.config_digest {
@@ -273,7 +281,17 @@ impl ProtectedPolicy {
                 actual,
             });
         }
-        Ok(Self::from_config(cfg))
+        let cfg = DreamConfig::from_json(config_bytes)
+            .map_err(|e| PolicyError::InvalidConfig(e.to_string()))?;
+        let ledger = if cfg.ledger_path.trim().is_empty() {
+            fallback_ledger_path
+        } else {
+            cfg.ledger_path.as_str()
+        };
+        Ok(Self::default()
+            .with_globs(cfg.protected.iter().cloned())
+            .with_ledger_path(ledger)
+            .with_evaluator_commands(manifest.evaluators.iter().map(|e| e.command.as_str())))
     }
 
     /// Whether a **normalised** repo-relative path is protected. Prefer
@@ -815,6 +833,18 @@ pub fn touched_paths(patch: &str) -> Result<TouchedPaths, GuardViolation> {
 /// deterministic.
 ///
 /// **Call this before applying the patch.** See the [module docs](self).
+///
+/// # Mapping violations to a candidate state
+///
+/// [`GuardViolation::Protected`] should become
+/// [`CandidateState::Protected`](crate::gate::CandidateState::Protected)
+/// (`REJECT`). [`gate::decide`](crate::gate::decide) also maps every *other*
+/// violation (malformed, symlink, binary, escape …) to an evidence veto
+/// (`REJECT`, subject `patch-guard`) when it re-checks an applied patch. A
+/// caller that reports a pre-apply refusal as
+/// [`CandidateState::Refused`](crate::gate::CandidateState::Refused) records
+/// `INCONCLUSIVE` instead; use `Protected` for `Protected` and treat the other
+/// violations as `REJECT`-class refusals for consistent verdicts.
 pub fn check(patch: &str, policy: &ProtectedPolicy) -> Result<TouchedPaths, GuardViolation> {
     let touched = touched_paths(patch)?;
     let protected: Vec<String> = touched
@@ -1230,12 +1260,10 @@ mod tests {
         assert!(!p.is_protected("src/lib.rs"));
     }
 
-    #[test]
-    fn for_manifest_refuses_a_config_that_is_not_the_frozen_one() {
-        let (cfg, bytes) = cfg_and_bytes();
-        let mut m = crate::manifest::build(
-            &cfg,
-            &bytes,
+    fn frozen(cfg: &DreamConfig, bytes: &[u8]) -> ExperimentManifest {
+        crate::manifest::build(
+            cfg,
+            bytes,
             "r",
             "n",
             "2026-01-01",
@@ -1251,15 +1279,52 @@ mod tests {
                 fallback: None,
             },
             "0",
+        )
+    }
+
+    #[test]
+    fn for_manifest_builds_from_the_verified_bytes_and_frozen_commands() {
+        let (cfg, bytes) = cfg_and_bytes();
+        let m = frozen(&cfg, &bytes);
+        let p = ProtectedPolicy::for_manifest(&m, &bytes, "fallback/LEDGER.md").expect("verified");
+        assert!(p.is_protected("docs/ledger.md"), "config ledger path");
+        assert!(
+            !p.is_protected("fallback/LEDGER.md"),
+            "fallback unused when configured"
         );
-        assert!(ProtectedPolicy::for_manifest(&m, &cfg, &bytes).is_ok());
+        assert!(p.is_protected("docs/frozen/x.md"));
+        assert!(
+            p.is_protected("checks/run.sh"),
+            "frozen evaluator command path"
+        );
+    }
+
+    #[test]
+    fn for_manifest_applies_the_explicit_ledger_fallback() {
+        let bytes = br#"{"repo":"o/r","slots":[{"deep":"a","scan":[]}]}"#.to_vec();
+        let cfg = DreamConfig::from_json(&bytes).expect("valid");
+        let m = frozen(&cfg, &bytes);
+        let p = ProtectedPolicy::for_manifest(&m, &bytes, "ledger/LEDGER.md").expect("ok");
+        assert!(p.is_protected("ledger/LEDGER.md"));
+    }
+
+    #[test]
+    fn for_manifest_refuses_a_config_that_is_not_the_frozen_one() {
+        let (cfg, bytes) = cfg_and_bytes();
+        let m = frozen(&cfg, &bytes);
         let mut edited = bytes.clone();
         edited.push(b' ');
         assert!(matches!(
-            ProtectedPolicy::for_manifest(&m, &cfg, &edited),
+            ProtectedPolicy::for_manifest(&m, &edited, ""),
             Err(PolicyError::ConfigDigestMismatch { .. })
         ));
-        m.config_digest = "0".repeat(64);
-        assert!(ProtectedPolicy::for_manifest(&m, &cfg, &bytes).is_err());
+        // Right digest, unusable document.
+        let junk = b"not json".to_vec();
+        let mut m2 = m.clone();
+        m2.config_digest = digest(&junk);
+        assert!(matches!(
+            ProtectedPolicy::for_manifest(&m2, &junk, ""),
+            Err(PolicyError::InvalidConfig(_))
+        ));
     }
 }

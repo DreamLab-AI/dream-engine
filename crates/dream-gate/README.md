@@ -1,9 +1,11 @@
 # dream-gate
 
 A **pure** acceptance gate for model-written patches in an evidence-gated
-self-improvement loop. No network, no subprocess, no async runtime: every
-function is a deterministic function of its inputs, so a verdict can be
-replayed and audited.
+self-improvement loop. No network, no subprocess, no async runtime. The judging
+functions (`guard::check`, `gate::decide`, receipt classification, verdict
+parsing, witnesses) are deterministic, so a verdict can be replayed and
+audited. The only impurities are wall-clock timestamps in a few constructors
+and the manifest/receipt file helpers (`freeze`, `load`, `persist`).
 
 | Module | Role |
 |---|---|

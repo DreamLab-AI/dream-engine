@@ -2,7 +2,13 @@
 //!
 //! `dream-gate` is the part of an evidence-gated self-improvement loop that
 //! must never be argued with. It performs **no network access and spawns no
-//! subprocess**; every function is a deterministic function of its inputs.
+//! subprocess**. The judging functions — [`guard::check`], [`gate::decide`],
+//! [`receipts::classify`], [`verdict`] parsing, [`witness`] — are pure and
+//! deterministic. The only impurities are explicit and small: wall-clock
+//! timestamps stamped by [`manifest::build`], [`receipts::EvaluatorReceipt::missing`]
+//! and [`outcome::ExecOutcome::blocked`], and the filesystem helpers
+//! [`manifest::freeze`], [`manifest::load`], [`receipts::persist`] and
+//! [`receipts::load`].
 //!
 //! * [`manifest`] freezes what an experiment *is* before the model is called.
 //! * [`receipts`] types the raw result of every evaluator run.

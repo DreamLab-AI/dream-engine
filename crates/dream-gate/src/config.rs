@@ -258,6 +258,20 @@ impl DreamConfig {
                     "evaluatorEntrypoints[{name}]: command must not be empty"
                 ));
             }
+            // The `darwin` evolution harness defaults to a `--sandbox real`
+            // mode that is independent of the evolved surfaces: the run goes
+            // green while learning nothing. Only `mock` and `agent` exercise
+            // them, so anything else is refused rather than silently no-opping.
+            let cmd = &spec.cmd;
+            let is_darwin =
+                cmd.contains("@metaharness/darwin") || cmd.contains("metaharness-darwin");
+            if is_darwin && !cmd.contains("--sandbox mock") && !cmd.contains("--sandbox agent") {
+                return bad(format!(
+                    "evaluatorEntrypoints[{name}]: @metaharness/darwin entrypoints must pass \
+                     --sandbox mock or --sandbox agent (the default 'real' sandbox is \
+                     surface-independent and silently no-ops the run)"
+                ));
+            }
             // A `deeps` entry naming no declared slot silently disables the
             // evaluator for every run — the "declared but never runs" failure.
             for d in &spec.deeps {
@@ -383,6 +397,30 @@ mod tests {
                 "{bad:?} must be rejected"
             );
         }
+    }
+
+    fn with_evaluator(cmd: &str) -> Result<DreamConfig, ConfigError> {
+        cfg(serde_json::json!({"evaluatorEntrypoints": {"fitness": cmd}}))
+    }
+
+    #[test]
+    fn rejects_darwin_evaluator_without_sandbox_flag() {
+        assert!(with_evaluator("npx -y @metaharness/darwin@~0.8.0 evolve .").is_err());
+        assert!(with_evaluator("metaharness-darwin evolve . --sandbox real").is_err());
+    }
+
+    #[test]
+    fn accepts_darwin_evaluator_with_mock_or_agent_sandbox() {
+        assert!(with_evaluator("metaharness-darwin evolve . --sandbox mock").is_ok());
+        assert!(
+            with_evaluator("npx -y @metaharness/darwin@~0.8.0 evolve . --sandbox agent").is_ok()
+        );
+    }
+
+    #[test]
+    fn non_darwin_evaluators_unaffected() {
+        assert!(with_evaluator("cargo test --workspace").is_ok());
+        assert!(with_evaluator("node /opt/tool/cli.js evolve .").is_ok());
     }
 
     #[test]
