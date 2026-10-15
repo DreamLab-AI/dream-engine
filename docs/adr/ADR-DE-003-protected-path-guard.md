@@ -3,7 +3,7 @@ id: ADR-DE-003
 title: Protected-path guard and config-digest binding
 date: 2026-10-15
 decision_status: accepted
-implementation_status: planned
+implementation_status: implemented
 activation_status: staged
 supersedes: []
 owner: jjohare

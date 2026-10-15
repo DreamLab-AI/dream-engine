@@ -176,6 +176,7 @@ fn night(dir: &Path) {
         candidate_config_digest: None,
         tests: Default::default(),
         options: PairwiseOptions::default(),
+        policy: Default::default(),
     };
     capture(dir, &n).unwrap();
 }

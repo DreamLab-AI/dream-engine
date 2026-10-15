@@ -46,6 +46,14 @@ The exact binomial and Wilson bounds were checked against reference values
 computed independently in exact arithmetic: 9 wins of 10 gives p = 11/1024,
 and Wilson for 8 of 10 at z = 1.96 gives a lower bound of 0.4902.
 
+## Implementation status
+
+`pairwise-gate` and `failure-fingerprint` are implemented and tested, the gate
+applies `NoRegression`, `Floor`, `Margin`, `SignTest` and `WilsonLower` to
+per-test evidence, and `dream-core::streak` uses fingerprints to detect a stuck
+harness. Status stays **in-progress**: `TrainDev` and held-out dev evaluators
+are not wired into the gate's per-test path, and no consumer supplies them yet.
+
 ## Consequences
 
 A broken testbed shows up as faults and `Inconclusive`, not as a verdict on the

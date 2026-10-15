@@ -3,7 +3,7 @@ id: ADR-DE-005
 title: Seams — Llm, MemorySink, EvaluatorRunner, Notifier, Forge
 date: 2026-10-15
 decision_status: accepted
-implementation_status: planned
+implementation_status: implemented
 activation_status: staged
 supersedes: []
 owner: jjohare
@@ -42,4 +42,19 @@ its own errors.
 
 Product code stays in the consumer. The cost is that each seam is a public
 contract that is versioned. The other four seams are fallible and their errors
-are reported in the run state, not swallowed. The traits are planned.
+are reported in the run state, not swallowed. The traits are implemented in `dream-core::seams` and consumed by a real host
+adapter (one implementation per seam).
+
+Two boundaries are deliberate, and a consumer should not fight them:
+
+- `Notice` carries per-event notices only (`NightSummary`, `LostPr`,
+  `HarnessStuck`, `Accepted`). Publishing a whole night's state (a relay post,
+  a digest, a governance report) is a night-level driver in the host, not a
+  `Notifier`; no `Notice` variant exists for them because no seam consumer
+  needs one.
+- `MemoryRecord` has typed optional `deep`, `night_date`, `witness` and
+  `source` fields, omitted from the serialised form when absent, so a record
+  written before they existed reads back and re-serialises unchanged.
+- `candidate::Attempt` carries a typed `AttemptError`
+  (`PatchDidNotApply { stderr }`, `Provisioning`, `Prepare`) next to the
+  `CandidateState` text, so a host branches on data, not on a string prefix.

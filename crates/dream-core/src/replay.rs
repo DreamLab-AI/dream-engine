@@ -21,7 +21,7 @@
 //! this module is wired in; earlier nights were never recorded in this shape and
 //! this module does not pretend to reconstruct them.
 //!
-//! # Layout of a run directory (schema 1)
+//! # Layout of a run directory (schema 2)
 //!
 //! | file | content |
 //! |---|---|
@@ -30,7 +30,7 @@
 //! | `report.md` | the model's report, verbatim; its digest is in `replay.json` |
 //! | `config.json` | the baseline config bytes (digest-checked against the manifest) |
 //! | `candidate.patch` | the patch the candidate state refers to (the applied text for an applied candidate); absent when there was none |
-//! | `replay.json` | candidate state, per-test evidence, options, report digest |
+//! | `replay.json` | candidate state, per-test evidence, options, report digest, [`PolicyExtras`] |
 //! | `decision.json` | the recorded [`GateDecision`] |
 //!
 //! # Example
@@ -48,7 +48,7 @@
 //!     manifest, report: "nothing to change\nVERDICT: REJECT\n".into(), candidate: CandidateState::NotAttempted,
 //!     extracted_patch: None, baseline_receipts: vec![], candidate_receipts: vec![], config_bytes: config,
 //!     fallback_ledger_path: String::new(), candidate_config_digest: None, tests: Default::default(),
-//!     options: PairwiseOptions::default(),
+//!     options: PairwiseOptions::default(), policy: Default::default(),
 //! };
 //! let dir = tempfile::tempdir()?;
 //! let decision = capture(dir.path(), &night)?;
@@ -69,7 +69,12 @@ use dream_gate::verdict::parse_verdict_strict;
 use serde::{Deserialize, Serialize};
 
 /// Version of the on-disk layout written by [`capture`].
-pub const REPLAY_SCHEMA: u32 = 1;
+///
+/// Schema 2 added [`NightInputs::policy`] (the self-referential flag and extra
+/// protected globs the live night judged under). Schema 1 records are refused:
+/// they cannot say what policy the night used, and guessing would silently
+/// weaken it.
+pub const REPLAY_SCHEMA: u32 = 2;
 
 /// Why capturing or verifying a night failed.
 #[derive(Debug, thiserror::Error)]
@@ -84,7 +89,7 @@ pub enum ReplayError {
     #[error("missing {0} in the run directory")]
     Missing(String),
     /// The record was written by a layout this crate does not read.
-    #[error("unsupported replay schema {0}")]
+    #[error("unsupported replay schema {0}: this build reads schema {current}; a record from an older schema does not say which protected policy the night used, so recapture the night", current = REPLAY_SCHEMA)]
     UnsupportedSchema(u32),
     /// `report.md` no longer hashes to the digest recorded in `replay.json`.
     #[error("report.md does not match the recorded digest")]
@@ -95,6 +100,43 @@ pub enum ReplayError {
     /// The candidate state is not one this schema can record.
     #[error("unsupported candidate state: {0}")]
     UnsupportedState(String),
+}
+
+/// What the night's protected-path policy was built from, beyond the frozen
+/// config: the engine-specific protections a host adds on top of
+/// [`ProtectedPolicy::for_manifest`]. Stored with the night so [`verify`]
+/// judges under the **same** protected set as the live run.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyExtras {
+    /// Whether the target repository carries the judge's own source, which
+    /// protects the gate crates ([`ProtectedPolicy::with_self_referential`]).
+    #[serde(default)]
+    pub self_referential: bool,
+    /// Extra protected globs or paths ([`ProtectedPolicy::with_globs`]), for
+    /// example where a host embeds the engine.
+    #[serde(default)]
+    pub extra_globs: Vec<String>,
+}
+
+/// Build a night's protected-path policy. This is the one builder: a host
+/// passes the result to [`crate::candidate::run`] (the guard before any
+/// patch is applied) and [`decide`]/[`capture`]/[`verify`] rebuild it from the
+/// same arguments, so the live guard, the gate and a later replay cannot
+/// disagree about what is protected.
+///
+/// The config bytes must be the document `manifest.config_digest` froze.
+pub fn night_policy(
+    manifest: &ExperimentManifest,
+    config_bytes: &[u8],
+    fallback_ledger_path: &str,
+    extras: &PolicyExtras,
+) -> Result<ProtectedPolicy, PolicyError> {
+    Ok(
+        ProtectedPolicy::for_manifest(manifest, config_bytes, fallback_ledger_path)?
+            .with_self_referential(extras.self_referential)
+            .with_globs(extras.extra_globs.iter().cloned()),
+    )
 }
 
 /// Everything the gate judged a night on.
@@ -124,6 +166,9 @@ pub struct NightInputs {
     pub tests: BTreeMap<String, TestOutcomes>,
     /// Pairwise policies applied to that evidence.
     pub options: PairwiseOptions,
+    /// What the live night's protected policy added to the frozen config's
+    /// (see [`night_policy`]).
+    pub policy: PolicyExtras,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -192,13 +237,21 @@ struct ReplayRecord {
     candidate_config_digest: Option<String>,
     tests: BTreeMap<String, TestOutcomes>,
     options: PairwiseOptions,
+    policy: PolicyExtras,
+}
+
+/// Just enough of a record to read its version before trusting its shape.
+#[derive(Deserialize)]
+struct SchemaProbe {
+    schema: u32,
 }
 
 fn policy_for(inputs: &NightInputs) -> Result<ProtectedPolicy, ReplayError> {
-    Ok(ProtectedPolicy::for_manifest(
+    Ok(night_policy(
         &inputs.manifest,
         &inputs.config_bytes,
         &inputs.fallback_ledger_path,
+        &inputs.policy,
     )?)
 }
 
@@ -275,6 +328,7 @@ pub fn capture(run_dir: &Path, inputs: &NightInputs) -> Result<GateDecision, Rep
             candidate_config_digest: inputs.candidate_config_digest.clone(),
             tests: inputs.tests.clone(),
             options: inputs.options.clone(),
+            policy: inputs.policy.clone(),
         },
     )?;
     write_json(&run_dir.join("decision.json"), &decision)?;
@@ -293,10 +347,14 @@ fn read(run_dir: &Path, name: &str) -> Result<Vec<u8>, ReplayError> {
 
 /// Read a captured night back: its inputs and the decision recorded for it.
 pub fn load(run_dir: &Path) -> Result<(NightInputs, GateDecision), ReplayError> {
-    let rec: ReplayRecord = serde_json::from_slice(&read(run_dir, "replay.json")?)?;
-    if rec.schema != REPLAY_SCHEMA {
-        return Err(ReplayError::UnsupportedSchema(rec.schema));
+    let raw = read(run_dir, "replay.json")?;
+    // Read the version first: an older record lacks fields this schema
+    // requires, and serde's "missing field" would hide the real reason.
+    let probe: SchemaProbe = serde_json::from_slice(&raw)?;
+    if probe.schema != REPLAY_SCHEMA {
+        return Err(ReplayError::UnsupportedSchema(probe.schema));
     }
+    let rec: ReplayRecord = serde_json::from_slice(&raw)?;
     let manifest =
         manifest::load(run_dir).ok_or_else(|| ReplayError::Missing("manifest.json".into()))?;
     let report = String::from_utf8_lossy(&read(run_dir, "report.md")?).into_owned();
@@ -321,6 +379,7 @@ pub fn load(run_dir: &Path) -> Result<(NightInputs, GateDecision), ReplayError> 
             candidate_config_digest: rec.candidate_config_digest,
             tests: rec.tests,
             options: rec.options,
+            policy: rec.policy,
         },
         decision,
     ))
@@ -532,6 +591,7 @@ mod tests {
             candidate_config_digest: None,
             tests: Default::default(),
             options: PairwiseOptions::default(),
+            policy: PolicyExtras::default(),
         }
     }
 
@@ -740,13 +800,136 @@ mod tests {
                 "candidateConfigDigest",
                 "fallbackLedgerPath",
                 "options",
+                "policy",
                 "reportDigest",
                 "schema",
                 "tests"
             ]
         );
-        assert_eq!(rec["schema"], 1);
+        assert_eq!(rec["schema"], 2);
+        assert_eq!(rec["policy"]["selfReferential"], false);
         assert_eq!(rec["candidate"]["state"], "applied");
+    }
+
+    const OWN_SRC: &str = "diff --git a/services/engine/src/x.rs b/services/engine/src/x.rs\n--- a/services/engine/src/x.rs\n+++ b/services/engine/src/x.rs\n@@ -1 +1 @@\n-a\n+b\n";
+    const GATE_SRC: &str = "diff --git a/crates/dream-gate/src/gate.rs b/crates/dream-gate/src/gate.rs\n--- a/crates/dream-gate/src/gate.rs\n+++ b/crates/dream-gate/src/gate.rs\n@@ -1 +1 @@\n-a\n+b\n";
+
+    fn extras() -> PolicyExtras {
+        PolicyExtras {
+            self_referential: true,
+            extra_globs: vec!["services/engine".into()],
+        }
+    }
+
+    /// A patch to the judge's own source, state `Protected` because the live
+    /// night's policy (self-referential + an extra glob) refused it.
+    fn self_referential_night(patch: &str) -> NightInputs {
+        let mut n = inputs(
+            "analysis\nVERDICT: ACCEPT\n",
+            CandidateState::Protected {
+                paths: vec![patch
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .split(' ')
+                    .nth(2)
+                    .unwrap()
+                    .trim_start_matches("a/")
+                    .into()],
+            },
+            vec![],
+        );
+        n.extracted_patch = Some(patch.into());
+        n.policy = extras();
+        n
+    }
+
+    #[test]
+    fn the_self_referential_policy_survives_capture_and_verify() {
+        for patch in [OWN_SRC, GATE_SRC] {
+            let dir = tempfile::tempdir().unwrap();
+            let n = self_referential_night(patch);
+            let d = capture(dir.path(), &n).unwrap();
+            assert_eq!(d.verdict, "REJECT", "{d:?}");
+            let v = verify(dir.path()).unwrap();
+            assert!(v.matches, "{:?}", v.diffs);
+            assert_eq!(v.guard_agrees, Some(true));
+        }
+    }
+
+    #[test]
+    fn dropping_the_stored_policy_is_a_disagreement_not_a_silent_pass() {
+        let dir = tempfile::tempdir().unwrap();
+        capture(dir.path(), &self_referential_night(OWN_SRC)).unwrap();
+        let p = dir.path().join("replay.json");
+        let mut rec: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
+        rec["policy"] = serde_json::json!({"selfReferential": false, "extraGlobs": []});
+        std::fs::write(&p, serde_json::to_vec(&rec).unwrap()).unwrap();
+        let v = verify(dir.path()).unwrap();
+        assert!(!v.matches, "the weaker policy must not reproduce the night");
+        assert_eq!(v.guard_agrees, Some(false));
+    }
+
+    #[test]
+    fn an_applied_patch_to_the_judge_is_vetoed_by_the_gate_under_the_stored_policy() {
+        let mut n = inputs(
+            "analysis\nVERDICT: ACCEPT\n",
+            CandidateState::Applied {
+                tree_hash: "2".repeat(40),
+                patch: OWN_SRC.into(),
+            },
+            vec![pass(Phase::Candidate)],
+        );
+        let weak = decide(&n).unwrap();
+        assert_eq!(weak.verdict, "ACCEPT", "without the flag it would pass");
+        n.policy = extras();
+        let dir = tempfile::tempdir().unwrap();
+        let d = capture(dir.path(), &n).unwrap();
+        assert_eq!(d.verdict, "REJECT", "{d:?}");
+        // The recomputed verdict reproduces; the guard cross-check (correctly)
+        // flags that a live guard would have stopped this patch before it was
+        // ever applied.
+        let v = verify(dir.path()).unwrap();
+        assert!(v.diffs.is_empty(), "{:?}", v.diffs);
+        assert_eq!(v.guard_agrees, Some(false));
+    }
+
+    #[test]
+    fn a_schema_1_record_is_refused_with_a_message_that_says_why() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, n) = nights().remove(0);
+        capture(dir.path(), &n).unwrap();
+        let p = dir.path().join("replay.json");
+        let mut rec: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
+        rec["schema"] = 1.into();
+        rec.as_object_mut().unwrap().remove("policy");
+        std::fs::write(&p, serde_json::to_vec(&rec).unwrap()).unwrap();
+        let e = verify(dir.path()).unwrap_err();
+        assert!(matches!(e, ReplayError::UnsupportedSchema(1)), "{e:?}");
+        let msg = e.to_string();
+        assert!(
+            msg.contains("schema 1") && msg.contains("reads schema 2"),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn night_policy_is_the_one_builder_the_live_guard_and_replay_share() {
+        let (_, n) = nights().remove(0);
+        let live = night_policy(&n.manifest, &n.config_bytes, "docs/LEDGER.md", &extras()).unwrap();
+        for path in ["services/engine/src/x.rs", "crates/dream-gate/src/gate.rs"] {
+            assert!(live.is_protected(path), "{path}");
+        }
+        let bare = night_policy(
+            &n.manifest,
+            &n.config_bytes,
+            "docs/LEDGER.md",
+            &PolicyExtras::default(),
+        )
+        .unwrap();
+        assert!(!bare.is_protected("services/engine/src/x.rs"));
     }
 
     #[test]

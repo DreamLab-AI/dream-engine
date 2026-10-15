@@ -105,7 +105,12 @@ pub trait Llm: Send + Sync {
 // ---------------------------------------------------------------------------
 
 /// One durable memory entry about a night.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// The four optional fields are typed slots for what a host would otherwise
+/// smuggle through `kind` or `body`. They default to `None` when absent and are
+/// omitted from the serialised form when `None`, so a record written before
+/// they existed reads back and re-serialises unchanged.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryRecord {
     /// Stable key, unique per night and kind.
@@ -120,6 +125,18 @@ pub struct MemoryRecord {
     pub verdict: String,
     /// The entry text.
     pub body: String,
+    /// The research slot (deep) the night investigated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deep: Option<String>,
+    /// The night's calendar date (`YYYY-MM-DD`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub night_date: Option<String>,
+    /// The witness commit the finding is bound to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub witness: Option<String>,
+    /// Where the finding came from (for example the model or pipeline).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Why a [`MemorySink`] write failed.
@@ -150,7 +167,8 @@ impl MemorySink for NullSink {
 /// let dir = tempfile::tempdir().unwrap();
 /// let sink = JsonlSink::new(dir.path().join("memory.jsonl"));
 /// let rec = MemoryRecord { key: "k".into(), kind: "night".into(), repo: "r".into(),
-///     night_id: "n".into(), verdict: "REJECT".into(), body: "b".into() };
+///     night_id: "n".into(), verdict: "REJECT".into(), body: "b".into(),
+///     ..Default::default() };
 /// futures::executor::block_on(sink.record(&rec)).unwrap();
 /// assert_eq!(std::fs::read_to_string(dir.path().join("memory.jsonl")).unwrap().lines().count(), 1);
 /// ```
@@ -528,6 +546,40 @@ mod tests {
     }
 
     #[test]
+    fn a_record_written_before_the_typed_fields_still_reads_and_writes_the_same_shape() {
+        let old =
+            r#"{"key":"k","kind":"night","repo":"r","nightId":"n","verdict":"ACCEPT","body":"b"}"#;
+        let rec: MemoryRecord = serde_json::from_str(old).unwrap();
+        assert_eq!(rec.deep, None);
+        assert_eq!(rec.night_date, None);
+        assert_eq!(rec.witness, None);
+        assert_eq!(rec.source, None);
+        assert_eq!(serde_json::to_string(&rec).unwrap(), old);
+    }
+
+    #[test]
+    fn the_typed_fields_round_trip_and_use_camel_case_keys() {
+        let rec = MemoryRecord {
+            key: "k".into(),
+            kind: "finding".into(),
+            repo: "r".into(),
+            night_id: "n".into(),
+            verdict: "REJECT".into(),
+            body: "b".into(),
+            deep: Some("hooks".into()),
+            night_date: Some("2026-10-01".into()),
+            witness: Some("abcd1234".into()),
+            source: Some("nightly".into()),
+        };
+        let v = serde_json::to_value(&rec).unwrap();
+        assert_eq!(v["deep"], "hooks");
+        assert_eq!(v["nightDate"], "2026-10-01");
+        assert_eq!(v["witness"], "abcd1234");
+        assert_eq!(v["source"], "nightly");
+        assert_eq!(serde_json::from_value::<MemoryRecord>(v).unwrap(), rec);
+    }
+
+    #[test]
     fn jsonl_sink_appends_one_line_per_record() {
         let d = tempfile::tempdir().unwrap();
         let sink = JsonlSink::new(d.path().join("a/b.jsonl"));
@@ -538,6 +590,7 @@ mod tests {
             night_id: "n".into(),
             verdict: "ACCEPT".into(),
             body: "line\nbreak".into(),
+            ..Default::default()
         };
         block_on(sink.record(&rec)).unwrap();
         block_on(sink.record(&rec)).unwrap();
@@ -556,6 +609,7 @@ mod tests {
             night_id: "n".into(),
             verdict: "REJECT".into(),
             body: String::new(),
+            ..Default::default()
         };
         assert!(block_on(NullSink.record(&rec)).is_ok());
         block_on(StderrNotifier.notify(&Notice::HarnessStuck {

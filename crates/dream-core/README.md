@@ -43,12 +43,29 @@ declare a format only where the full output reaches the parser.
 ## Replay
 
 `replay::capture(run_dir, &night)` judges a night and persists manifest,
-receipts, report, config, patch, per-test evidence and decision in a stable
-schema; `replay::verify(run_dir)` recomputes the verdict from those files and
-reports any difference, including a receipt whose typed outcome contradicts its
-own exit status. It shows that the stored inputs and decision agree, not that
-they are untampered: only the report and the config are digest-bound. There is no historical corpus: only nights captured after the
-host adopts this module are replayable.
+receipts, report, config, patch, per-test evidence, the policy additions and the
+decision in a stable schema (schema 2); `replay::verify(run_dir)` recomputes the
+verdict from those files and reports any difference, including a receipt whose
+typed outcome contradicts its own exit status.
+
+The protected set is rebuilt the way the live night built it: build the
+policy with `replay::night_policy(manifest, config_bytes, fallback_ledger,
+&PolicyExtras { self_referential, extra_globs })`, give that value to
+`candidate::run`, and put the same `PolicyExtras` in `NightInputs::policy`.
+`verify` then judges under the same protected set, including the
+self-referential flag. A schema 1 record does not say which policy the night
+used and is refused with an error saying so; recapture it.
+
+It shows that the stored inputs and decision agree, not that they are
+untampered: only the report and the config are digest-bound. There is no
+historical corpus: only nights captured after a host adopts this module are
+replayable.
+
+`candidate::run` returns an `Attempt` whose `error` is a typed `AttemptError`
+(`PatchDidNotApply { stderr }`, `Provisioning`, `Prepare`), and
+`seams::MemoryRecord` has optional `deep`, `night_date`, `witness` and `source`
+fields. Both additions are source-breaking for code that builds those structs
+with a literal (use `..Default::default()` for the record).
 
 ## Licence
 

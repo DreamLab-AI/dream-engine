@@ -147,6 +147,33 @@ pub struct AttemptInput<'a> {
     pub required: &'a [&'a EvaluatorIdentity],
 }
 
+/// Why [`run`] could not build a candidate, as data rather than text. The
+/// matching [`CandidateState`] still carries the human-readable detail the gate
+/// and ledger use; this is what a host branches on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AttemptError {
+    /// Git refused the diff itself (every apply strategy failed). `stderr` is
+    /// the last attempt's git output, without the `patch did not apply: ` prefix
+    /// the state's detail adds — feed it to an apply-repair pass.
+    PatchDidNotApply {
+        /// Git's refusal text.
+        stderr: String,
+    },
+    /// The tree was built but the host's [`Relocate`] callback could not place
+    /// it where the evaluators run.
+    Provisioning {
+        /// The callback's error.
+        detail: String,
+    },
+    /// A git or filesystem failure while preparing the tree (not a refusal of
+    /// the diff).
+    Prepare {
+        /// What failed, as text.
+        detail: String,
+    },
+}
+
 /// What [`run`] produced; feed `state` and `receipts` to
 /// [`dream_gate::gate::decide`].
 #[derive(Debug)]
@@ -160,6 +187,10 @@ pub struct Attempt {
     pub receipts: Vec<EvaluatorReceipt>,
     /// The candidate build step's outcome, when one ran.
     pub build: Option<ExecOutcome>,
+    /// Why no candidate was built, when that was an apply or provisioning
+    /// failure. `None` for an applied candidate and for guard refusals, which
+    /// are fully described by `state`.
+    pub error: Option<AttemptError>,
 }
 
 /// Where the candidate tree should be evaluated, when not in its own
@@ -201,6 +232,7 @@ pub fn run(
         prepared: None,
         receipts: Vec::new(),
         build: None,
+        error: None,
     };
     if dream_gate::patch::deletes_binary(input.patch) {
         warn!("candidate patch deletes a binary file — refused before applying");
@@ -227,9 +259,19 @@ pub fn run(
         // prepare re-checks the normalised text it actually applies.
         Err(PersistError::Guard(v)) => return none(refusal(v)),
         Err(e) => {
-            return none(CandidateState::DidNotApply {
+            let error = match &e {
+                PersistError::PatchDidNotApply(stderr) => AttemptError::PatchDidNotApply {
+                    stderr: stderr.clone(),
+                },
+                other => AttemptError::Prepare {
+                    detail: other.to_string(),
+                },
+            };
+            let mut a = none(CandidateState::DidNotApply {
                 detail: e.to_string(),
-            })
+            });
+            a.error = Some(error);
+            return a;
         }
     };
     let work_dir = match relocate {
@@ -244,6 +286,7 @@ pub fn run(
                     prepared: Some(prepared),
                     receipts: Vec::new(),
                     build: None,
+                    error: Some(AttemptError::Provisioning { detail: e }),
                 };
             }
         },
@@ -263,6 +306,7 @@ pub fn run(
         prepared: Some(prepared),
         receipts,
         build,
+        error: None,
     }
 }
 
@@ -658,6 +702,73 @@ mod tests {
         );
         assert!(a.prepared.is_some());
         assert!(rec.calls().is_empty());
+        discard(&repo, a.prepared.as_ref().unwrap());
+    }
+
+    #[test]
+    fn a_non_applying_patch_carries_a_typed_error_with_git_stderr() {
+        let (_d, repo) = scratch_repo();
+        let patch = "diff --git a/value.txt b/value.txt\n--- a/value.txt\n+++ b/value.txt\n@@ -1 +1 @@\n-nope\n+x\n";
+        let pol = policy();
+        let m = manifest("value");
+        let required = m.required();
+        let rec = Recording::new();
+        let a = run(&input(&repo, patch, &pol, None, &required), &rec, None);
+        let Some(AttemptError::PatchDidNotApply { stderr }) = &a.error else {
+            panic!("{:?}", a.error)
+        };
+        assert!(!stderr.is_empty());
+        // The state text is unchanged, so ledger rows and digests still read it.
+        assert_eq!(
+            a.state,
+            CandidateState::DidNotApply {
+                detail: format!("patch did not apply: {stderr}")
+            }
+        );
+        assert!(rec.calls().is_empty());
+    }
+
+    #[test]
+    fn provisioning_failure_is_typed_and_distinct_from_a_git_refusal() {
+        let (_d, repo) = scratch_repo();
+        let patch = "diff --git a/README.md b/README.md\nnew file mode 100644\n--- /dev/null\n+++ b/README.md\n@@ -0,0 +1 @@\n+notes\n";
+        let pol = policy();
+        let m = manifest("value");
+        let required = m.required();
+        let fail = |_: &PreparedCandidate| Err("no route".to_string());
+        let a = run(
+            &input(&repo, patch, &pol, None, &required),
+            &Recording::new(),
+            Some(&fail),
+        );
+        assert_eq!(
+            a.error,
+            Some(AttemptError::Provisioning {
+                detail: "no route".into()
+            })
+        );
+        discard(&repo, a.prepared.as_ref().unwrap());
+    }
+
+    #[test]
+    fn guard_refusals_and_applied_candidates_carry_no_error() {
+        let (_d, repo) = scratch_repo();
+        let pol = policy();
+        let m = manifest("value");
+        let required = m.required();
+        let a = run(
+            &input(&repo, "not a diff\n", &pol, None, &required),
+            &Recording::new(),
+            None,
+        );
+        assert!(a.error.is_none(), "{:?}", a.error);
+        let ok = "diff --git a/README.md b/README.md\nnew file mode 100644\n--- /dev/null\n+++ b/README.md\n@@ -0,0 +1 @@\n+notes\n";
+        let a = run(
+            &input(&repo, ok, &pol, None, &required),
+            &Recording::new(),
+            None,
+        );
+        assert!(a.error.is_none());
         discard(&repo, a.prepared.as_ref().unwrap());
     }
 }
