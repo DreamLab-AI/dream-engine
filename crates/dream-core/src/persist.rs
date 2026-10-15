@@ -292,7 +292,8 @@ pub struct Published {
 ///
 /// The default path (flag off, which is the default) never queries branch
 /// protection and never merges: the result is a draft a human merges.
-/// `base_branch` is the branch the PR targets. The pull request is draft-clean
+/// `base_branch` is the branch whose protection is relied on; the forge is
+/// asked which branch the PR really targets and a mismatch is a refusal. The pull request is draft-clean
 /// when the branch was pushed and a URL came back.
 pub fn publish(
     forge: &dyn Forge,
@@ -307,10 +308,20 @@ pub fn publish(
         repo_slug: pr.repo_slug.clone(),
         protects_gate_crates: automerge::protects_gate_crates(cfg),
         contains_gate_crates: automerge::contains_gate_crates(&pr.repo_dir),
-        required_checks: if cfg.auto_merge && draft_clean {
-            forge.required_status_checks(&pr.repo_slug, base_branch)
-        } else {
-            Err(ForgeError::Unsupported)
+        required_checks: match (&outcome.pr_url, cfg.auto_merge && draft_clean) {
+            (Some(url), true) => {
+                // Protection must be that of the branch the PR really targets.
+                match forge.pr_base_branch(&pr.repo_slug, url) {
+                    Ok(actual) if actual == base_branch => {
+                        forge.required_status_checks(&pr.repo_slug, base_branch)
+                    }
+                    Ok(actual) => Err(ForgeError::Failed(format!(
+                        "PR targets {actual:?}, not {base_branch:?}"
+                    ))),
+                    Err(e) => Err(e),
+                }
+            }
+            _ => Err(ForgeError::Unsupported),
         },
         verdict,
         draft_clean,
@@ -618,6 +629,7 @@ mod tests {
         pr_url: Option<String>,
         checks: Result<Vec<String>, ForgeError>,
         enable: Result<(), ForgeError>,
+        base: Result<String, ForgeError>,
         calls: Mutex<Vec<&'static str>>,
     }
     impl Fake {
@@ -626,6 +638,7 @@ mod tests {
                 pr_url: Some("https://x/pr/1".into()),
                 checks,
                 enable: Ok(()),
+                base: Ok("main".into()),
                 calls: Mutex::new(vec![]),
             }
         }
@@ -645,6 +658,10 @@ mod tests {
         fn required_status_checks(&self, _: &str, _: &str) -> Result<Vec<String>, ForgeError> {
             self.calls.lock().unwrap().push("checks");
             self.checks.clone()
+        }
+        fn pr_base_branch(&self, _: &str, _: &str) -> Result<String, ForgeError> {
+            self.calls.lock().unwrap().push("base");
+            self.base.clone()
         }
         fn enable_automerge(&self, _: &str, _: &str) -> Result<(), ForgeError> {
             self.calls.lock().unwrap().push("enable");
@@ -689,7 +706,7 @@ mod tests {
         let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
         assert_eq!(r.automerge, AutomergeDecision::Allowed);
         assert!(r.automerge_enabled);
-        assert_eq!(f.calls(), vec!["publish", "checks", "enable"]);
+        assert_eq!(f.calls(), vec!["publish", "base", "checks", "enable"]);
     }
 
     #[test]
@@ -760,5 +777,65 @@ mod tests {
             Verdict::Accept,
         );
         assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+    }
+
+    #[test]
+    fn a_pr_whose_real_base_differs_from_the_checked_branch_never_merges() {
+        let mut f = Fake::new(Ok(vec!["ci".into()]));
+        f.base = Ok("scratch".into());
+        let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+        assert!(!f.calls().contains(&"enable"));
+        assert!(
+            !f.calls().contains(&"checks"),
+            "protection of the wrong branch must not be consulted"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_pr_base_never_merges() {
+        let mut f = Fake::new(Ok(vec!["ci".into()]));
+        f.base = Err(ForgeError::Failed("gh down".into()));
+        let r = publish(&f, &pcfg(true, "o/r"), &dpr("o/r"), "main", Verdict::Accept);
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+        assert!(!f.calls().contains(&"enable"));
+    }
+
+    #[test]
+    fn a_forge_that_cannot_report_the_base_is_refused_by_default() {
+        struct NoBase;
+        impl Forge for NoBase {
+            fn publish_draft(&self, pr: &DraftPr) -> PrOutcome {
+                PrOutcome {
+                    branch: pr.branch.clone(),
+                    pr_url: Some("u".into()),
+                    pushed: true,
+                }
+            }
+            fn required_status_checks(&self, _: &str, _: &str) -> Result<Vec<String>, ForgeError> {
+                Ok(vec!["ci".into()])
+            }
+        }
+        let r = publish(
+            &NoBase,
+            &pcfg(true, "o/r"),
+            &dpr("o/r"),
+            "main",
+            Verdict::Accept,
+        );
+        assert!(matches!(r.automerge, AutomergeDecision::Refused(_)));
+    }
+
+    #[test]
+    fn flag_off_on_a_self_referential_repo_is_disabled_not_refused() {
+        let f = Fake::new(Ok(vec!["ci".into()]));
+        let r = publish(
+            &f,
+            &pcfg(false, "o/r"),
+            &dpr("DreamLab-AI/dream-engine"),
+            "main",
+            Verdict::Accept,
+        );
+        assert_eq!(r.automerge, AutomergeDecision::Disabled);
     }
 }

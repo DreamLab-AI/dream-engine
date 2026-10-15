@@ -830,6 +830,22 @@ trace line 2</error></testcase>
     }
 
     #[test]
+    fn junit_entities_in_attributes_and_text_bodies_are_resolved() {
+        // quick-xml 0.41 delivers references as their own events.
+        let xml = r#"<testsuite>
+  <testcase classname="c" name="attr"><failure message="a &lt; b &amp; c &#33;">ignored</failure></testcase>
+  <testcase classname="c" name="body"><failure>x &lt;1&gt; &amp; y&#33; &quot;q&quot;
+second</failure></testcase>
+</testsuite>"#;
+        let c = parse_junit(xml).unwrap();
+        assert_eq!(get(&c, "c::attr").status, TestStatus::failed("a < b & c !"));
+        assert_eq!(
+            get(&c, "c::body").status,
+            TestStatus::failed("x <1> & y! \"q\"")
+        );
+    }
+
+    #[test]
     fn junit_malformed_and_empty_are_errors_and_entities_are_not_expanded() {
         assert!(matches!(
             parse_junit("<testsuite><testcase name='a'>"),

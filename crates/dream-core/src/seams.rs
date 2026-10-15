@@ -361,8 +361,19 @@ pub trait Forge: Send + Sync {
         Err(ForgeError::Unsupported)
     }
 
+    /// The branch the PR at `pr_url` actually targets.
+    ///
+    /// The automerge policy checks branch protection on *this* branch, so the
+    /// protection it reads is the protection that governs the merge. The
+    /// default is [`ForgeError::Unsupported`], which is a refusal.
+    fn pr_base_branch(&self, repo: &str, pr_url: &str) -> Result<String, ForgeError> {
+        let _ = (repo, pr_url);
+        Err(ForgeError::Unsupported)
+    }
+
     /// Ask the forge to squash-merge the PR at `pr_url` once its required
-    /// checks pass. Only called after the automerge policy said
+    /// checks pass. Implementations must first take the PR out of draft,
+    /// since a draft cannot be merged. Only called after the automerge policy said
     /// [`Allowed`](crate::automerge::AutomergeDecision::Allowed).
     ///
     /// The default is [`ForgeError::Unsupported`].
@@ -412,7 +423,42 @@ impl Forge for GhForge {
         crate::automerge::parse_protection(&body)
     }
 
+    fn pr_base_branch(&self, repo: &str, pr_url: &str) -> Result<String, ForgeError> {
+        let out = Command::new("gh")
+            .args([
+                "pr",
+                "view",
+                pr_url,
+                "--repo",
+                repo,
+                "--json",
+                "baseRefName",
+                "--jq",
+                ".baseRefName",
+            ])
+            .output()
+            .map_err(|e| ForgeError::Failed(format!("cannot run gh: {e}")))?;
+        let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if out.status.success() && !name.is_empty() {
+            Ok(name)
+        } else {
+            Err(ForgeError::Failed(
+                String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            ))
+        }
+    }
+
     fn enable_automerge(&self, repo: &str, pr_url: &str) -> Result<(), ForgeError> {
+        // A draft cannot be merged: take it out of draft first.
+        let ready = Command::new("gh")
+            .args(["pr", "ready", pr_url, "--repo", repo])
+            .output()
+            .map_err(|e| ForgeError::Failed(format!("cannot run gh: {e}")))?;
+        if !ready.status.success() {
+            return Err(ForgeError::Failed(
+                String::from_utf8_lossy(&ready.stderr).trim().to_string(),
+            ));
+        }
         let out = Command::new("gh")
             .args(["pr", "merge", pr_url, "--repo", repo, "--auto", "--squash"])
             .output()
