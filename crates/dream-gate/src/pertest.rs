@@ -127,7 +127,7 @@ pub struct TestOutcomes {
 }
 
 /// Which pairwise policies apply, and their parameters.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PairwiseOptions {
     /// Score at or above which a case counts as passed (cases score 1.0 / 0.0).
     pub pass_threshold: f64,

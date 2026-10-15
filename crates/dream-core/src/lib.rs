@@ -17,3 +17,4 @@ pub mod persist;
 pub mod candidate;
 pub mod testfmt;
 pub mod streak;
+pub mod replay;
