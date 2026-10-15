@@ -1,0 +1,20 @@
+{
+  "enabledMcpjsonServers": [
+    "claude-flow",
+    "browser-gpu",
+    "perplexity",
+    "email-gateway",
+    "harness-bridge",
+    "ruvnet-brain",
+    "aci-shell",
+    "code-interpreter",
+    "codebase-memory",
+    "consultant-codex",
+    "consultant-perplexity",
+    "web-researcher",
+    "consultant-deepseek",
+    "consultant-antigravity",
+    "colloquy",
+    "consultant-zai"
+  ]
+}

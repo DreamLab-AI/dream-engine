@@ -1,0 +1,20 @@
+[package]
+name = "failure-fingerprint"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Stable identity for failure modes across steps of a self-improvement loop: new vs persisting vs fixed."
+license.workspace = true
+repository = "https://github.com/DreamLab-AI/failure-fingerprint"
+readme = "README.md"
+keywords = ["fingerprint", "failure", "triage", "dedup", "self-improvement"]
+categories = ["development-tools", "text-processing"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+proptest = "1"
+

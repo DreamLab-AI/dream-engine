@@ -1,0 +1,26 @@
+[package]
+name = "pairwise-gate"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Evidence-gated selection policies for comparing a candidate against a baseline on paired tasks, with infrastructure faults kept out of the tally."
+license.workspace = true
+repository = "https://github.com/DreamLab-AI/pairwise-gate"
+homepage = "https://github.com/DreamLab-AI/pairwise-gate"
+documentation = "https://docs.rs/pairwise-gate"
+readme = "README.md"
+keywords = ["sign-test", "wilson-interval", "selection", "evaluation", "benchmark"]
+categories = ["algorithms", "mathematics", "development-tools::testing"]
+authors = ["DreamLab AI"]
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+proptest = { version = "1", default-features = false, features = ["std"] }
+serde_json = "1"
+
