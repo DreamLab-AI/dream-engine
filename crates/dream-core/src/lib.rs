@@ -1,0 +1,7 @@
+//! The nightly evidence-gated evolution loop around [`dream_gate`].
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
+pub(crate) mod git;
+pub mod runner;
+pub mod seams;

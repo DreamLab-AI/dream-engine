@@ -1,0 +1,26 @@
+[package]
+name = "dream-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "The nightly evidence-gated evolution loop around dream-gate: evaluator runners, ledger, candidate worktrees, source reading, prompts, replay and the seams (LLM, memory, notifier, forge) a host plugs into."
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["self-improvement", "ledger", "evaluation", "worktree", "gate"]
+categories = ["development-tools", "development-tools::testing"]
+authors.workspace = true
+
+[dependencies]
+dream-gate = { path = "../dream-gate", version = "0.1.0" }
+failure-fingerprint = { path = "../failure-fingerprint", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+thiserror = "2"
+tracing = "0.1"
+quick-xml = "0.37"
+
+[dev-dependencies]
+tempfile = "3"
+futures = "0.3"
