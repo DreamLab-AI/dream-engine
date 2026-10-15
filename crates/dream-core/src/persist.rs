@@ -164,21 +164,16 @@ pub fn build_branch_worktree(
         let _ = git::run(repo, &["branch", "-D", branch]);
     };
 
-    let patch_file =
-        std::env::temp_dir().join(format!("dream-{tag}-{}.patch", branch.replace('/', "_")));
-    if let Err(e) = std::fs::write(&patch_file, patch) {
-        cleanup(repo, &wt);
-        return Err(e.into());
-    }
     // Apply against the worktree, strategy by strategy (see apply_attempts).
-    let patch_arg = patch_file.display().to_string();
+    // The verified bytes go to `git apply` on stdin: there is no patch file
+    // between the guard and git for anything else to replace or redirect.
     let mut last_err = String::new();
     let mut applied_via: Option<String> = None;
     let mut applied_patch = patch.to_string();
     for attempt in apply_attempts(patch) {
         let mut args: Vec<&str> = attempt.clone();
-        args.push(patch_arg.as_str());
-        match git::run(&wt, &args) {
+        args.push("-");
+        match git::run_stdin(&wt, &args, patch.as_bytes()) {
             Ok(_) => {
                 applied_via = Some(attempt.join(" "));
                 break;
@@ -199,20 +194,19 @@ pub fn build_branch_worktree(
         if !notes.is_empty() {
             // The normalised text is what would be applied: guard it too.
             if let Err(v) = guard::check(&normalised, policy) {
-                let _ = std::fs::remove_file(&patch_file);
                 cleanup(repo, &wt);
                 return Err(PersistError::Guard(v));
             }
         }
-        if !notes.is_empty() && std::fs::write(&patch_file, &normalised).is_ok() {
+        if !notes.is_empty() {
             let as_written = last_err.clone();
             for attempt in [
                 vec!["apply", "--recount"],
                 vec!["apply", "--recount", "--ignore-whitespace"],
             ] {
                 let mut args: Vec<&str> = attempt.clone();
-                args.push(patch_arg.as_str());
-                match git::run(&wt, &args) {
+                args.push("-");
+                match git::run_stdin(&wt, &args, normalised.as_bytes()) {
                     Ok(_) => {
                         applied_via = Some(format!(
                             "normalised({}): {}",
@@ -238,7 +232,6 @@ pub fn build_branch_worktree(
             }
         }
     }
-    let _ = std::fs::remove_file(&patch_file);
     let Some(applied_via) = applied_via else {
         cleanup(repo, &wt);
         return Err(PersistError::PatchDidNotApply(last_err.trim().to_string()));
@@ -412,6 +405,39 @@ mod tests {
             std::fs::read_to_string(dir.join("dirty.txt")).unwrap(),
             "operator wip\n"
         );
+        remove_worktree(&dir, &b.worktree);
+    }
+
+    /// Audit F4: the verified patch bytes go to `git apply` on stdin. A
+    /// pre-created symlink at the old predictable temp path is never followed
+    /// and no patch file appears in the temp dir.
+    #[cfg(unix)]
+    #[test]
+    fn f4_the_patch_never_touches_a_predictable_temp_file() {
+        let (_g, dir) = scratch("one\n");
+        let branch = "dream/f4-2026-10-14";
+        let tag = &dream_gate::manifest::digest(dir.display().to_string().as_bytes())[..8];
+        let old_path = std::env::temp_dir().join(format!("dream-{tag}-dream_f4-2026-10-14.patch"));
+        let sentinel = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(sentinel.path(), "SENTINEL").unwrap();
+        let _ = std::fs::remove_file(&old_path);
+        std::os::unix::fs::symlink(sentinel.path(), &old_path).unwrap();
+
+        let patch =
+            "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n one\n+two\n";
+        let b = build_branch_worktree(&dir, branch, patch, "m", "HEAD", &ProtectedPolicy::default());
+        let still_symlink = std::fs::symlink_metadata(&old_path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false);
+        let _ = std::fs::remove_file(&old_path);
+        assert_eq!(
+            std::fs::read_to_string(sentinel.path()).unwrap(),
+            "SENTINEL",
+            "the symlink target was written through"
+        );
+        assert!(still_symlink, "the old path must be left alone");
+        let b = b.unwrap();
+        assert_eq!(show(&b.worktree, "HEAD:f.txt"), "one\ntwo\n");
         remove_worktree(&dir, &b.worktree);
     }
 
