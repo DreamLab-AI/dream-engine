@@ -22,7 +22,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{LedgerRow, CONTRACT_ENFORCE_FROM, LEDGER_VERDICTS};
+use super::{LedgerRow, LEDGER_VERDICTS};
 
 /// Evaluated-column vocabulary. `n/a` belongs to rows that are not nights.
 pub const LEDGER_EVALUATED: [&str; 4] = ["yes", "no", "blocked", "n/a"];
