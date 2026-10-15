@@ -10,3 +10,4 @@ pub mod readiness;
 pub mod roster;
 pub mod runstate;
 pub mod sweep;
+pub mod compile;
