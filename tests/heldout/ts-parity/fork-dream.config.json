@@ -1,0 +1,77 @@
+{
+  "repo": "DreamLab-AI/dream-engine",
+  "cron": "0 9 * * *",
+  "slots": [
+    {
+      "deep": "compiler-parity",
+      "scan": [
+        "config-schema",
+        "golden-snapshots"
+      ]
+    },
+    {
+      "deep": "ledger-signals",
+      "scan": [
+        "witness",
+        "verify"
+      ]
+    },
+    {
+      "deep": "evaluation-adapters",
+      "scan": [
+        "flywheel",
+        "darwin"
+      ]
+    },
+    {
+      "deep": "security-adversarial",
+      "scan": [
+        "redblue",
+        "supply-chain"
+      ]
+    },
+    {
+      "deep": "developer-experience",
+      "scan": [
+        "cli",
+        "tui"
+      ]
+    }
+  ],
+  "bonusModuli": {
+    "25": "ui-management-console",
+    "75": "self-hosting-review"
+  },
+  "controlPlaneProbes": [
+    "node packages/cli/dist/bin.js version || true",
+    "set -o pipefail; npm test --silent 2>&1 | tail -5"
+  ],
+  "buildStep": {
+    "cmd": "npm ci && npm run build",
+    "degradeOnWasmFailure": true
+  },
+  "evaluatorEntrypoints": {
+    "bench": "npm test",
+    "darwin": "RUVLLM_TIMEOUT_MS=180000 ./scripts/darwin-entrypoint.sh npx @metaharness/darwin@0.10.2 evolve . --sandbox mock --mutator ruvllm --ruvllm-url http://127.0.0.1:8084 --ruvllm-model qwen3.8-27B"
+  },
+  "adrConvention": "4-digit",
+  "competitors": [
+    "Sakana AI Scientist",
+    "OpenHands",
+    "DSPy/GEPA",
+    "SWE-agent",
+    "AutoGPT lineage"
+  ],
+  "extraDisciplines": [
+    "evaluation-is-not-promotion",
+    "witness-every-quantitative-claim",
+    "pinned-evaluator-entrypoints: darwin is pinned to @metaharness/darwin@0.10.2 (the version npm resolved on 2026-09-07) because an unpinned npx runs whatever resolves that night, leaving a bound breach unattributable to a harness build; bump deliberately and record the version in the receipt"
+  ],
+  "ledgerPath": "docs/dream-cycle/LEDGER.md",
+  "branchPrefix": "dream/",
+  "labels": [
+    "dream-cycle",
+    "research"
+  ],
+  "autoMerge": false
+}
