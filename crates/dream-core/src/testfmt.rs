@@ -342,7 +342,11 @@ fn attr(e: &quick_xml::events::BytesStart<'_>, key: &str) -> String {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == key.as_bytes())
-        .and_then(|a| a.unescape_value().ok().map(|v| v.into_owned()))
+        .and_then(|a| {
+            a.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                .ok()
+                .map(|v| v.into_owned())
+        })
         .unwrap_or_default()
 }
 
@@ -420,7 +424,21 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
             },
             Event::Text(t) => {
                 if let Some((_, buf)) = in_fail.as_mut() {
-                    buf.push_str(&t.unescape().map_err(|e| bad(&e))?);
+                    buf.push_str(&t.decode().map_err(|e| bad(&e))?);
+                }
+            }
+            Event::GeneralRef(r) => {
+                // quick-xml 0.41 delivers `&amp;` / `&#10;` as separate events.
+                if let Some((_, buf)) = in_fail.as_mut() {
+                    if let Some(c) = r.resolve_char_ref().map_err(|e| bad(&e))? {
+                        buf.push(c);
+                    } else if let Some(t) = r
+                        .decode()
+                        .ok()
+                        .and_then(|n| quick_xml::escape::resolve_predefined_entity(&n))
+                    {
+                        buf.push_str(t);
+                    }
                 }
             }
             Event::CData(t) => {

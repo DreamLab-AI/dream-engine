@@ -1,0 +1,12 @@
+# Everything needs the owner's review; the protected set is listed explicitly
+# so the intent survives a future edit to the default pattern.
+*                           @jjohare
+/.github/                   @jjohare
+/deny.toml                  @jjohare
+/dream.config.json          @jjohare
+/Cargo.toml                 @jjohare
+/Cargo.lock                 @jjohare
+/tests/heldout/             @jjohare
+/crates/dream-gate/         @jjohare
+/crates/pairwise-gate/      @jjohare
+/crates/failure-fingerprint/ @jjohare
