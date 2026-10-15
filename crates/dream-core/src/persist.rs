@@ -418,6 +418,16 @@ mod tests {
         let branch = "dream/f4-2026-10-14";
         let tag = &dream_gate::manifest::digest(dir.display().to_string().as_bytes())[..8];
         let old_path = std::env::temp_dir().join(format!("dream-{tag}-dream_f4-2026-10-14.patch"));
+        let listing = || {
+            let mut v: Vec<String> = std::fs::read_dir(std::env::temp_dir())
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n.starts_with(&format!("dream-{tag}")) && n.ends_with(".patch"))
+                .collect();
+            v.sort();
+            v
+        };
         let sentinel = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(sentinel.path(), "SENTINEL").unwrap();
         let _ = std::fs::remove_file(&old_path);
