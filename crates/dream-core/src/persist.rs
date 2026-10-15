@@ -425,7 +425,14 @@ mod tests {
 
         let patch =
             "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n one\n+two\n";
-        let b = build_branch_worktree(&dir, branch, patch, "m", "HEAD", &ProtectedPolicy::default());
+        let b = build_branch_worktree(
+            &dir,
+            branch,
+            patch,
+            "m",
+            "HEAD",
+            &ProtectedPolicy::default(),
+        );
         let still_symlink = std::fs::symlink_metadata(&old_path)
             .map(|m| m.file_type().is_symlink())
             .unwrap_or(false);

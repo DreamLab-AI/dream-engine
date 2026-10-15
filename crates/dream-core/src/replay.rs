@@ -147,15 +147,12 @@ impl PolicyExtras {
         baseline_files: &[String],
     ) -> Result<Self, PolicyError> {
         for e in &manifest.evaluators {
-            let paths = guard::try_evaluator_command_paths(
-                &e.command,
-                Some(repo_root),
-                baseline_files,
-            )
-            .map_err(|reason| PolicyError::UnsupportedCommand {
-                name: e.name.clone(),
-                reason,
-            })?;
+            let paths =
+                guard::try_evaluator_command_paths(&e.command, Some(repo_root), baseline_files)
+                    .map_err(|reason| PolicyError::UnsupportedCommand {
+                        name: e.name.clone(),
+                        reason,
+                    })?;
             for p in paths {
                 if !self.protected_paths.contains(&p) {
                     self.protected_paths.push(p);
@@ -997,7 +994,9 @@ mod tests {
         let ex = PolicyExtras::default()
             .resolving(&n.manifest, "/work/repo", &files)
             .unwrap();
-        assert!(ex.protected_paths.contains(&"scripts/run it.sh".to_string()));
+        assert!(ex
+            .protected_paths
+            .contains(&"scripts/run it.sh".to_string()));
         assert!(ex.protected_paths.contains(&"verify".to_string()));
         assert!(!ex.protected_paths.contains(&"src/lib.rs".to_string()));
         // The recorded extras alone rebuild the same policy (no repo needed).

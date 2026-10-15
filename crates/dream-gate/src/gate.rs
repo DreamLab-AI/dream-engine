@@ -223,9 +223,10 @@ pub fn validated_receipts(
             }
             _ => None,
         };
-        out.push(accepted.unwrap_or_else(|| {
-            EvaluatorReceipt::missing(&id.name, &id.command, phase, true)
-        }));
+        out.push(
+            accepted
+                .unwrap_or_else(|| EvaluatorReceipt::missing(&id.name, &id.command, phase, true)),
+        );
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out

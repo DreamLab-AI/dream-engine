@@ -616,10 +616,10 @@ fn word_path(
     };
     // A glob protects the directory it starts in.
     let rel = match rel.find(['*', '?', '[']) {
-        Some(at) => match rel[..at].rfind('/') {
-            Some(slash) => rel[..slash].to_string(),
-            None => return None,
-        },
+        Some(at) => {
+            let slash = rel[..at].rfind('/')?;
+            rel[..slash].to_string()
+        }
         None => rel,
     };
     let has_ext = rel
@@ -892,7 +892,7 @@ fn git_line_paths(rest: &str, line: usize) -> Result<Vec<String>, GuardViolation
         return Ok(Vec::new());
     }
     let n = rest.len();
-    if n >= 5 && (n - 5) % 2 == 0 {
+    if n >= 5 && (n - 5) & 1 == 0 {
         let i = 2 + (n - 5) / 2;
         let b = rest.as_bytes();
         if b[i] == b' ' && &b[i + 1..i + 3] == b"b/" && b[2..i] == b[i + 3..] {
@@ -1541,10 +1541,8 @@ mod tests {
 
     #[test]
     fn f1_single_quoted_and_escaped_spaces_are_protected_whole() {
-        let p = pol().with_evaluator_commands([
-            "bash 'tools/my check.sh'",
-            r"bash tools/other\ check.sh",
-        ]);
+        let p = pol()
+            .with_evaluator_commands(["bash 'tools/my check.sh'", r"bash tools/other\ check.sh"]);
         assert!(p.is_protected("tools/my check.sh"));
         assert!(p.is_protected("tools/other check.sh"));
     }
@@ -1579,7 +1577,10 @@ mod tests {
         let t = std::time::Instant::now();
         let _ = check(&patch, &pol().with_limits(big));
         let took = t.elapsed();
-        assert!(took < std::time::Duration::from_millis(250), "took {took:?}");
+        assert!(
+            took < std::time::Duration::from_millis(250),
+            "took {took:?}"
+        );
     }
 
     #[test]
@@ -1594,7 +1595,9 @@ mod tests {
             check(&too_big, &pol()),
             Err(GuardViolation::TooLarge { .. })
         ));
-        let many: String = (0..2001).map(|i| file_patch(&format!("f{i}.txt"))).collect();
+        let many: String = (0..2001)
+            .map(|i| file_patch(&format!("f{i}.txt")))
+            .collect();
         assert!(matches!(
             check(&many, &pol()),
             Err(GuardViolation::TooLarge { ref what, .. }) if what == "files"
@@ -1607,7 +1610,9 @@ mod tests {
             })),
             Err(GuardViolation::TooLarge { ref what, .. }) if what == "header line bytes"
         ));
-        let ok: String = (0..2000).map(|i| file_patch(&format!("f{i}.txt"))).collect();
+        let ok: String = (0..2000)
+            .map(|i| file_patch(&format!("f{i}.txt")))
+            .collect();
         assert_eq!(check(&ok, &pol()).unwrap().len(), 2000);
     }
 
@@ -1617,7 +1622,9 @@ mod tests {
         assert!(check(&patch, &pol()).unwrap().contains("dir b/x/file.rs"));
         // multi-byte names must not trip the byte-arithmetic split
         let patch = file_patch("répertoire/日本語.rs");
-        assert!(check(&patch, &pol()).unwrap().contains("répertoire/日本語.rs"));
+        assert!(check(&patch, &pol())
+            .unwrap()
+            .contains("répertoire/日本語.rs"));
         let _ = check("diff --git a/é b/ééé\n", &pol());
     }
 
@@ -1656,7 +1663,10 @@ mod tests {
         let got = try_evaluator_command_paths("make test && ./run-tests", None, &files).unwrap();
         assert_eq!(got, vec!["run-tests".to_string()]);
         let none = try_evaluator_command_paths("make test && ./run-tests", None, &[]).unwrap();
-        assert!(none.contains(&"run-tests".to_string()), "./ makes it a path");
+        assert!(
+            none.contains(&"run-tests".to_string()),
+            "./ makes it a path"
+        );
         let bare = try_evaluator_command_paths("make Makefile", None, &files).unwrap();
         assert_eq!(bare, vec!["Makefile".to_string()]);
     }
@@ -1676,13 +1686,11 @@ mod tests {
         )
         .unwrap()
         .is_empty());
-        assert!(try_evaluator_command_paths(
-            "cd services/dream-engine && cargo test",
-            None,
-            &[]
-        )
-        .unwrap()
-        .contains(&"services/dream-engine".to_string()));
+        assert!(
+            try_evaluator_command_paths("cd services/dream-engine && cargo test", None, &[])
+                .unwrap()
+                .contains(&"services/dream-engine".to_string())
+        );
     }
 
     #[test]

@@ -16,6 +16,23 @@
 //! moves, so it cannot recognise a finished night after the fact. The terminal
 //! rule is therefore night-level: once a night is `Persisted` or `Complete` it
 //! is over regardless of run id, and only [`reset_night`] reopens it.
+//!
+//! # Delivery guarantee: at-most-once
+//!
+//! [`persist`] journals [`Phase::Persisted`] *before* the forge request and the
+//! ledger commit, and nothing records their outcomes. A crash after `Persisted`
+//! can therefore **lose** a publish (before the pull request exists, or after
+//! it exists but before its URL or ledger row is recorded) and never repeats
+//! one; the restart finalises the night to `Complete` without reconciling
+//! against the forge. This is a deliberate trade-off, not an oversight.
+//! Recovery is [`reset_night`]; the idempotency key for any future
+//! reconciliation is the night key `(repo, date, night_id)`.
+//!
+//! # Exclusion and damage
+//!
+//! Hold a [`NightLock`] across the whole night, taken before the first
+//! journal read. A journal that exists but cannot be trusted is a
+//! [`JournalError`], never a fresh start.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -743,7 +760,10 @@ mod tests {
         std::fs::write(path(d.path()), "{ this is not json").unwrap();
         let e = begin(d.path(), RUN, "2026-09-05-alpha", "alpha", "2026-09-05", 2).unwrap_err();
         assert!(matches!(e, JournalError::Corrupt { .. }), "{e:?}");
-        assert!(load(d.path()).is_none(), "the compatibility wrapper reads it as absent");
+        assert!(
+            load(d.path()).is_none(),
+            "the compatibility wrapper reads it as absent"
+        );
         assert_eq!(
             std::fs::read_to_string(path(d.path())).unwrap(),
             "{ this is not json",
@@ -781,10 +801,21 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let _ = begin_default(d.path());
         let text = std::fs::read_to_string(path(d.path())).unwrap();
-        std::fs::write(path(d.path()), text.replace("\"schema\": 1", "\"schema\": 99")).unwrap();
+        std::fs::write(
+            path(d.path()),
+            text.replace("\"schema\": 1", "\"schema\": 99"),
+        )
+        .unwrap();
         let e = begin(d.path(), RUN, "2026-09-05-alpha", "alpha", "2026-09-05", 2).unwrap_err();
         assert!(
-            matches!(e, JournalError::UnknownSchema { found: 99, supported: 1, .. }),
+            matches!(
+                e,
+                JournalError::UnknownSchema {
+                    found: 99,
+                    supported: 1,
+                    ..
+                }
+            ),
             "{e:?}"
         );
         assert!(matches!(
@@ -848,10 +879,19 @@ mod tests {
         // A directory cannot be archived by link; the first file must be rolled back.
         std::fs::create_dir(d.path().join("manifest.json")).unwrap();
         assert!(reset_night(d.path()).is_err());
-        assert!(d.path().join("run-state.json").exists(), "first rename not rolled back");
+        assert!(
+            d.path().join("run-state.json").exists(),
+            "first rename not rolled back"
+        );
         let archives = std::fs::read_dir(d.path())
             .unwrap()
-            .filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().contains("superseded"))
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("superseded")
+            })
             .count();
         assert_eq!(archives, 0);
     }
@@ -933,7 +973,9 @@ mod tests {
             let f = entry.unwrap().path();
             let d = tempfile::tempdir().unwrap();
             std::fs::copy(&f, path(d.path())).unwrap();
-            let loaded = load_checked(d.path()).unwrap().unwrap_or_else(|| panic!("{f:?}"));
+            let loaded = load_checked(d.path())
+                .unwrap()
+                .unwrap_or_else(|| panic!("{f:?}"));
             assert_eq!(loaded.schema, RUNSTATE_SCHEMA);
             // begin() for the very night the fixture records must not error.
             let r = begin(
@@ -1016,9 +1058,11 @@ mod tests {
         };
         complete(d.path(), &mut s, "ACCEPT").unwrap();
         // finished_night alone still just says "not this night".
-        assert!(finished_night(d.path(), "alpha", "2026-09-06", "2026-09-06-alpha")
-            .unwrap()
-            .is_none());
+        assert!(
+            finished_night(d.path(), "alpha", "2026-09-06", "2026-09-06-alpha")
+                .unwrap()
+                .is_none()
+        );
         for (night, date) in [
             ("2026-09-06-alpha", "2026-09-06"),
             ("2026-09-05-alpha-deep2", "2026-09-05"),
