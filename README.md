@@ -66,7 +66,9 @@ What is not here yet: the nightly driver itself (a host supplies it by
 implementing the seams), `TrainDev` with held-out dev evaluators wired into the
 nightly path, and post-publish recheck with ledger-driven rollback. The forge
 step of automerge is unit-tested against a stub but has not been exercised
-against real GitHub.
+against real GitHub, and `dream_core::persist::publish` is the only entry point
+that applies the automerge policy: a host that opens its pull requests through
+`Forge::publish_draft` directly never merges anything, whatever `autoMerge` says.
 
 ## Quickstart
 

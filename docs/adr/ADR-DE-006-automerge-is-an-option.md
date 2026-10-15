@@ -40,3 +40,10 @@ the field and its checks are implemented in `dream_core::automerge` and
 `dream_core::persist::publish` and unit-tested against a stub forge. The `gh`
 calls have not yet been exercised against real GitHub, so keep the option off
 until they have.
+
+The policy applies only on the `persist::publish` path. A host that publishes
+through `Forge::publish_draft` directly gets draft pull requests and no merging,
+whatever the field says. The first consuming host does exactly that, so the
+option is inert there until the host is switched to `persist::publish`; that is
+a deliberate, separate step, taken only after the `gh` calls have been
+exercised.
