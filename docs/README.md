@@ -10,3 +10,5 @@
 
 See also [CONTRIBUTING.md](../CONTRIBUTING.md) and [SECURITY.md](../SECURITY.md).
 Items marked "planned" are designed but not yet in the repository.
+
+Diagram corpus (citation-verified, with a register of tensions and debt): [diagrams/](diagrams/README.md).

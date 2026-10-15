@@ -105,3 +105,5 @@ source text from that project is copied. Its MIT licence is reproduced in
 private forum and Nostr deployment is AGPL-3.0-only, lives in the product that
 consumes the engine, and is not part of this repository
 ([ADR-DE-002](docs/adr/ADR-DE-002-licence-and-provenance.md)).
+
+Diagram corpus (citation-verified, with a register of tensions and debt): [docs/diagrams](docs/diagrams/README.md).
