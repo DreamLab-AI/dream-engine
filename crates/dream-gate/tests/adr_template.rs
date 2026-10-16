@@ -37,3 +37,18 @@ fn named_forms_are_unchanged() {
     assert_eq!(parse("\"3-digit\"").unwrap(), AdrConvention::ThreeDigit);
     assert_eq!(parse("\"4-digit\"").unwrap(), AdrConvention::FourDigit);
 }
+
+#[test]
+fn example_keeps_the_template_prefix() {
+    assert_eq!(parse("\"ADR-OM-NNN\"").unwrap().example(6), "ADR-OM-006");
+    assert_eq!(parse("\"ADR-NNNNN\"").unwrap().example(1), "ADR-00001");
+    assert_eq!(parse("\"N-ADR-NNNN\"").unwrap().example(12), "N-ADR-0012");
+    assert_eq!(parse("\"ADR-NN-NNN\"").unwrap().example(2), "ADR-NN-002");
+}
+
+#[test]
+fn example_for_named_forms_is_plain_adr() {
+    assert_eq!(parse("\"3-digit\"").unwrap().example(1), "ADR-001");
+    assert_eq!(parse("\"4-digit\"").unwrap().example(1), "ADR-0001");
+    assert_eq!(AdrConvention::Unset.example(7), "ADR-0007");
+}

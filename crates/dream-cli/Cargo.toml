@@ -21,8 +21,8 @@ name = "dream_cli"
 path = "src/lib.rs"
 
 [dependencies]
-dream-gate = { path = "../dream-gate", version = "0.1.0" }
-dream-core = { path = "../dream-core", version = "0.1.0" }
+dream-gate = { path = "../dream-gate", version = "0.1.1" }
+dream-core = { path = "../dream-core", version = "0.1.1" }
 clap = { version = "4", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
