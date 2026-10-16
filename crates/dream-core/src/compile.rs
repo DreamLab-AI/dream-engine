@@ -211,7 +211,7 @@ pub fn compile(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let adr_example = format!("ADR-{:0>width$}", 1, width = cfg.adr_convention.pad());
+    let adr_example = cfg.adr_convention.example(1);
     let labels = if cfg.labels.is_empty() {
         "none".to_string()
     } else {

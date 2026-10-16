@@ -111,6 +111,25 @@ pub enum AdrConvention {
     },
 }
 
+/// Byte offset and length of the first longest run of `N` in a template.
+fn longest_n_run(t: &str) -> Option<(usize, usize)> {
+    let (mut best, mut run_start, mut run) = (None::<(usize, usize)>, 0usize, 0usize);
+    for (i, c) in t.char_indices() {
+        if c == 'N' {
+            if run == 0 {
+                run_start = i;
+            }
+            run += 1;
+            if best.is_none_or(|(_, l)| run > l) {
+                best = Some((run_start, run));
+            }
+        } else {
+            run = 0;
+        }
+    }
+    best
+}
+
 /// Width of the longest run of `N` in a numbering template, or `None` when the
 /// text has no `N` at all and so is not a template.
 fn template_pad(t: &str) -> Option<usize> {
@@ -140,6 +159,30 @@ impl AdrConvention {
             AdrConvention::Template(t) => template_pad(t).unwrap_or(4),
             AdrConvention::Custom { pad, .. } => *pad as usize,
             AdrConvention::Unset | AdrConvention::FourDigit => 4,
+        }
+    }
+
+    /// The identifier for ADR number `n` under this convention.
+    ///
+    /// A free-form template keeps everything around its numbering run, so
+    /// `ADR-OM-NNN` gives `ADR-OM-006` for 6; the other forms give `ADR-` plus
+    /// the zero-padded number.
+    ///
+    /// ```
+    /// use dream_gate::config::AdrConvention;
+    /// let t: AdrConvention = serde_json::from_str("\"ADR-OM-NNN\"").unwrap();
+    /// assert_eq!(t.example(6), "ADR-OM-006");
+    /// assert_eq!(AdrConvention::ThreeDigit.example(1), "ADR-001");
+    /// ```
+    pub fn example(&self, n: u32) -> String {
+        let width = self.pad();
+        let number = format!("{n:0>width$}");
+        match self {
+            AdrConvention::Template(t) => match longest_n_run(t) {
+                Some((start, len)) => format!("{}{number}{}", &t[..start], &t[start + len..]),
+                None => format!("ADR-{number}"),
+            },
+            _ => format!("ADR-{number}"),
         }
     }
 
