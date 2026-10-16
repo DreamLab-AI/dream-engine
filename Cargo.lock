@@ -279,7 +279,7 @@ dependencies = [
 
 [[package]]
 name = "dream-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "dream-core",
@@ -291,7 +291,7 @@ dependencies = [
 
 [[package]]
 name = "dream-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "dream-gate",
@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "dream-gate"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "failure-fingerprint",
