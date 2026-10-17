@@ -14,7 +14,7 @@ categories = ["development-tools", "development-tools::testing"]
 authors.workspace = true
 
 [dependencies]
-dream-gate = { path = "../dream-gate", version = "0.1.1" }
+dream-gate = { path = "../dream-gate", version = "0.2.0" }
 failure-fingerprint = { path = "../failure-fingerprint", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

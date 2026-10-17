@@ -377,6 +377,34 @@ pub struct SourceRequest {
     pub lines: Option<LineRange>,
 }
 
+impl SourceRequest {
+    /// Parse `path`, `path:10-80` or `path:42` as written in a report's
+    /// "Sources wanted next night" list. A trailing `:a-b` that parses as a
+    /// [`LineRange`] becomes the range; anything else stays part of the path.
+    /// `None` for an empty token.
+    pub fn parse(token: &str) -> Option<Self> {
+        let t = token.trim().trim_matches('`').trim();
+        let t = t.strip_prefix("./").unwrap_or(t);
+        if t.is_empty() {
+            return None;
+        }
+        if let Some((head, tail)) = t.rsplit_once(':') {
+            if let Some(range) = LineRange::parse(tail) {
+                if !head.is_empty() {
+                    return Some(Self {
+                        path: head.to_string(),
+                        lines: Some(range),
+                    });
+                }
+            }
+        }
+        Some(Self {
+            path: t.to_string(),
+            lines: None,
+        })
+    }
+}
+
 /// Parse the source planner's reply. Accepts `{"files":[{"path":..,
 /// "lines":"a-b"}]}` or `{"files":["path", ..]}`, tolerating fences and prose
 /// around the JSON object.
@@ -442,9 +470,24 @@ pub fn mentioned_paths(text: &str, tracked: &HashSet<&str>, deny: &Denylist) -> 
     out
 }
 
-/// Merge planner picks (first) with evidence-mentioned paths, validating each
-/// and stopping at `max_files`. Returns the kept requests and the rejections.
+/// How many of `max_files` slots requested paths may take: half, at least one.
+pub fn requested_slots(max_files: usize) -> usize {
+    (max_files / 2).max(1).min(max_files)
+}
+
+/// Merge requested paths (first, capped at [`requested_slots`]), planner
+/// picks, then evidence-mentioned paths, validating each and stopping at
+/// `max_files`. Returns the kept requests and the rejections.
+///
+/// Requested paths come from the previous night's own "Sources wanted next
+/// night" list (or an operator), so they are honoured ahead of the planner —
+/// a model asked to pick files cannot be held to a list, and that is how
+/// the same file came to be asked for three nights running. The cap keeps a
+/// stale request from starving the planner of the files tonight's evidence
+/// actually points at. Every requested path still passes the same tree and
+/// denylist checks as a planner pick: the report proposes, the tree decides.
 pub fn select(
+    requested: &[SourceRequest],
     planned: &[SourceRequest],
     mentioned: &[String],
     tracked: &HashSet<&str>,
@@ -453,9 +496,12 @@ pub fn select(
 ) -> (Vec<SourceRequest>, Vec<(String, PathRejection)>) {
     let mut kept: Vec<SourceRequest> = Vec::new();
     let mut rejected = Vec::new();
-    let candidates = planned
+    let reserve = requested_slots(max_files);
+    let candidates = requested
         .iter()
+        .take(reserve)
         .cloned()
+        .chain(planned.iter().cloned())
         .chain(mentioned.iter().map(|p| SourceRequest {
             path: p.clone(),
             lines: None,
@@ -527,7 +573,23 @@ pub fn source_plan_prompt(
     evidence: &str,
     index: &str,
     max_files: usize,
+    supplied: &[SourceRequest],
 ) -> String {
+    let supplied_note = if supplied.is_empty() {
+        String::new()
+    } else {
+        let list = supplied
+            .iter()
+            .map(|r| match r.lines {
+                Some(l) => format!("- `{}` lines {}-{}", r.path, l.start, l.end),
+                None => format!("- `{}`", r.path),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "\nAlready being read tonight at the previous night's request (do not name these again; spend your picks on what else the change must stay consistent with):\n{list}\n"
+        )
+    };
     let cmds = if commands.is_empty() {
         "(none)".to_string()
     } else {
@@ -550,6 +612,7 @@ Tonight's evidence (tail):
 
 Tracked files at the commit under test:
 {index}
+{supplied_note}
 Name at most {max_files} files whose exact current text you need in order to write a correct unified diff (the files you would change, plus anything a change must stay consistent with — the evaluator scripts, the test that fails, the config it reads). Prefer a line range for large files.
 
 Respond with ONLY a JSON object, no prose:
@@ -630,6 +693,9 @@ pub struct FileRecord {
     pub lines: Option<LineRange>,
     /// `inlined` | `unreadable` | `over-budget`.
     pub status: String,
+    /// Whether the previous night (or the operator) asked for this file.
+    #[serde(default)]
+    pub requested: bool,
 }
 
 /// Receipt of tonight's tree read, persisted as `source.json`.
@@ -645,6 +711,13 @@ pub struct SourceRecord {
     pub rejected: Vec<(String, String)>,
     /// Size of the rendered section.
     pub section_bytes: usize,
+    /// Requested paths that were inlined tonight (`path` or `path:a-b`).
+    #[serde(default)]
+    pub requested_honoured: Vec<String>,
+    /// Requested paths that were not inlined, with the reason
+    /// (`not-in-tree`, `denied`, `over-cap`, `over-budget`, `unreadable`…).
+    #[serde(default)]
+    pub requested_refused: Vec<(String, String)>,
 }
 
 /// A file fetched from the tree, ready to render.
@@ -656,6 +729,16 @@ pub struct FetchedFile {
     pub lines: Option<LineRange>,
     /// The file text; `None` when unreadable.
     pub text: Option<String>,
+    /// Whether this file was requested rather than planned or mentioned.
+    pub requested: bool,
+}
+
+/// `path` or `path:a-b` for a request, as the engine writes it in records.
+pub fn request_key(path: &str, lines: Option<LineRange>) -> String {
+    match lines {
+        Some(l) => format!("{path}:{}-{}", l.start, l.end),
+        None => path.to_string(),
+    }
 }
 
 /// Whether `text` carries key material that must never reach a provider.
@@ -709,6 +792,12 @@ pub fn render_section(
     );
     let mut records = Vec::new();
     let mut spent = 0usize;
+    // Requested files share at most half the byte budget between them, so a
+    // stale or over-broad request cannot crowd out what tonight's planner
+    // chose; a requested file beyond that is clipped (head + tail, marked),
+    // never silently dropped.
+    let requested_ceiling = cfg.budget_bytes / 2;
+    let mut spent_requested = 0usize;
     for f in files {
         let Some(text) = &f.text else {
             records.push(FileRecord {
@@ -717,6 +806,7 @@ pub fn render_section(
                 clipped: false,
                 lines: f.lines,
                 status: "unreadable".into(),
+                requested: f.requested,
             });
             continue;
         };
@@ -727,16 +817,18 @@ pub fn render_section(
                 clipped: false,
                 lines: f.lines,
                 status: "withheld-key-material".into(),
+                requested: f.requested,
             });
             continue;
         }
-        if spent >= cfg.budget_bytes {
+        if spent >= cfg.budget_bytes || (f.requested && spent_requested >= requested_ceiling) {
             records.push(FileRecord {
                 path: f.path.clone(),
                 bytes: 0,
                 clipped: false,
                 lines: f.lines,
                 status: "over-budget".into(),
+                requested: f.requested,
             });
             continue;
         }
@@ -751,13 +843,24 @@ pub fn render_section(
                 format!("{} lines, {} bytes", text.lines().count(), text.len()),
             ),
         };
-        let cap = cfg.file_cap_bytes.min(cfg.budget_bytes - spent);
+        let mut cap = cfg.file_cap_bytes.min(cfg.budget_bytes - spent);
+        if f.requested {
+            cap = cap.min(requested_ceiling - spent_requested);
+        }
         let (body, clipped) = clip_file(&body, cap);
         let body = redact(&body);
         spent += body.len();
+        if f.requested {
+            spent_requested += body.len();
+        }
+        let tag = if f.requested {
+            " — requested by the previous night"
+        } else {
+            ""
+        };
         out.push_str(&format!(
-            "### `{}` ({})\n```\n{}\n```\n\n",
-            f.path, header, body
+            "### `{}` ({}{})\n```\n{}\n```\n\n",
+            f.path, header, tag, body
         ));
         records.push(FileRecord {
             path: f.path.clone(),
@@ -765,6 +868,7 @@ pub fn render_section(
             clipped,
             lines: f.lines,
             status: "inlined".into(),
+            requested: f.requested,
         });
     }
     let omitted: Vec<&str> = records
@@ -781,8 +885,65 @@ pub fn render_section(
     (out, records)
 }
 
-/// Everything [`gather`] needs besides the model.
+/// Tracked, readable files under `prefix` (with or without a trailing `/`),
+/// shallowest first then by name. Empty when `prefix` is itself a tracked
+/// file or matches nothing, so a plain file request is left alone.
+pub fn expand_directory(prefix: &str, files: &[TrackedFile], deny: &Denylist) -> Vec<String> {
+    let p = prefix.trim().trim_matches('`').trim();
+    let p = p.strip_prefix("./").unwrap_or(p).trim_end_matches('/');
+    if p.is_empty() || p.split('/').any(|c| c == "..") || files.iter().any(|f| f.path == p) {
+        return Vec::new();
+    }
+    let want = format!("{p}/");
+    let mut under: Vec<&TrackedFile> = files
+        .iter()
+        .filter(|f| {
+            f.path.starts_with(&want)
+                && f.size <= MAX_READABLE_BYTES
+                && !deny.denies(&f.path)
+                && !is_binary_ext(&f.path)
+        })
+        .collect();
+    under.sort_by(|a, b| {
+        a.path
+            .matches('/')
+            .count()
+            .cmp(&b.path.matches('/').count())
+            .then(a.path.cmp(&b.path))
+    });
+    under.into_iter().map(|f| f.path.clone()).collect()
+}
+
+/// The closing line of the section when anything was requested: which
+/// requests were honoured and which were not, so the model does not ask the
+/// operator for a file the engine has already read or already refused.
+pub fn requested_note(honoured: &[String], refused: &[(String, String)]) -> String {
+    let mut out = String::from("\nRequested by the previous night: ");
+    if honoured.is_empty() {
+        out.push_str("none honoured");
+    } else {
+        out.push_str(&format!("honoured {}", honoured.join(", ")));
+    }
+    if !refused.is_empty() {
+        let list = refused
+            .iter()
+            .map(|(p, why)| format!("{p} ({why})"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!("; not inlined {list}"));
+    }
+    out.push_str(
+        ". Do not ask the operator for source files: list what you still need under \
+         **Sources wanted next night** and the engine reads it next time.\n",
+    );
+    out
+}
+
+/// Everything [`gather`] needs besides the model. Build it with
+/// [`GatherInput::new`] and [`GatherInput::with_requested`]; the struct is
+/// `non_exhaustive` so a later field is not a breaking change.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct GatherInput<'a> {
     /// The checkout to read from.
     pub repo: &'a Path,
@@ -800,6 +961,42 @@ pub struct GatherInput<'a> {
     pub cfg: &'a SourceConfig,
     /// Extra denied paths.
     pub deny: &'a Denylist,
+    /// Paths the previous night (or the operator) asked to see tonight.
+    /// Honoured first, capped at [`requested_slots`] and half the byte budget.
+    pub requested: &'a [SourceRequest],
+}
+
+impl<'a> GatherInput<'a> {
+    /// A gather input with no requested paths.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        repo: &'a Path,
+        commit: &'a str,
+        deep: &'a str,
+        scans: &'a str,
+        commands: &'a [String],
+        evidence: &'a str,
+        cfg: &'a SourceConfig,
+        deny: &'a Denylist,
+    ) -> Self {
+        Self {
+            repo,
+            commit,
+            deep,
+            scans,
+            commands,
+            evidence,
+            cfg,
+            deny,
+            requested: &[],
+        }
+    }
+
+    /// The same input, honouring `requested` first.
+    pub fn with_requested(mut self, requested: &'a [SourceRequest]) -> Self {
+        self.requested = requested;
+        self
+    }
 }
 
 /// One completion with an explicit token budget.
@@ -855,6 +1052,7 @@ pub async fn gather(
         evidence,
         cfg,
         deny,
+        requested,
     } = *input;
     if !cfg.enabled {
         return None;
@@ -867,6 +1065,49 @@ pub async fn gather(
         .map(|f| f.path.as_str())
         .collect();
 
+    // Requested paths are validated before the planner runs, so the planner
+    // is told exactly which of them it need not spend picks on.
+    let reserve = requested_slots(cfg.max_files);
+    let mut honoured_requests: Vec<SourceRequest> = Vec::new();
+    let mut requested_refused: Vec<(String, String)> = Vec::new();
+    // A request for a directory (`crates/x/` or any tracked prefix) stands
+    // for its files, shallowest first, within the same reservation.
+    let expanded: Vec<SourceRequest> = requested
+        .iter()
+        .flat_map(|r| {
+            let under = expand_directory(&r.path, &files, deny);
+            if under.is_empty() {
+                vec![r.clone()]
+            } else {
+                under
+                    .into_iter()
+                    .map(|path| SourceRequest { path, lines: None })
+                    .collect()
+            }
+        })
+        .collect();
+    for (i, r) in expanded.iter().enumerate() {
+        let key = request_key(&r.path, r.lines);
+        if i >= reserve {
+            requested_refused.push((key, "over-cap".into()));
+            continue;
+        }
+        match validate_path_with(&r.path, &tracked, deny) {
+            Ok(path) if oversize.contains(path.as_str()) => {
+                requested_refused.push((key, "oversize".into()))
+            }
+            Ok(path) if is_binary_ext(&path) => requested_refused.push((key, "denied".into())),
+            Ok(path) => {
+                if !honoured_requests.iter().any(|h| h.path == path) {
+                    honoured_requests.push(SourceRequest {
+                        path,
+                        lines: r.lines,
+                    });
+                }
+            }
+            Err(why) => requested_refused.push((key, format!("{why:?}").to_lowercase())),
+        }
+    }
     let evidence_tail = tail_chars(evidence, PLANNER_EVIDENCE_CHARS);
     let prompt = source_plan_prompt(
         deep,
@@ -875,6 +1116,7 @@ pub async fn gather(
         &redact(evidence_tail),
         &index_listing(&files, cfg.index_cap_chars, deny),
         cfg.max_files,
+        &honoured_requests,
     );
     let (planned, planner_status) = plan_with(llm, fallback, &prompt).await;
     if planned.is_empty() {
@@ -888,7 +1130,14 @@ pub async fn gather(
     .into_iter()
     .filter(|p| !oversize.contains(p.as_str()))
     .collect();
-    let (selected, rejected) = select(&planned, &mentioned, &tracked, cfg.max_files, deny);
+    let (selected, rejected) = select(
+        &honoured_requests,
+        &planned,
+        &mentioned,
+        &tracked,
+        cfg.max_files,
+        deny,
+    );
     if selected.is_empty() {
         info!("tree-read selected no files — prompt carries no source section");
         return None;
@@ -903,15 +1152,31 @@ pub async fn gather(
             } else {
                 read_blob(repo, commit, &r.path)
             },
+            requested: honoured_requests.iter().any(|h| h.path == r.path),
         })
         .collect();
-    let (section, records) = render_section(commit, &fetched, cfg, redact);
+    let (mut section, records) = render_section(commit, &fetched, cfg, redact);
     let inlined = records.iter().filter(|r| r.status == "inlined").count();
+    // Every requested path ends in exactly one of the two lists.
+    let mut requested_honoured: Vec<String> = Vec::new();
+    for rec in records.iter().filter(|r| r.requested) {
+        let key = request_key(&rec.path, rec.lines);
+        if rec.status == "inlined" {
+            requested_honoured.push(key);
+        } else {
+            requested_refused.push((key, rec.status.clone()));
+        }
+    }
+    if !requested.is_empty() {
+        section.push_str(&requested_note(&requested_honoured, &requested_refused));
+    }
     info!(
         planner = %planner_status,
         selected = selected.len(),
         inlined,
         rejected = rejected.len(),
+        requested = requested.len(),
+        requested_honoured = requested_honoured.len(),
         bytes = section.len(),
         "tree-read source section built"
     );
@@ -927,6 +1192,8 @@ pub async fn gather(
             .map(|(p, r)| (p, format!("{r:?}")))
             .collect(),
         section_bytes: section.len(),
+        requested_honoured,
+        requested_refused,
     };
     Some((section, record))
 }
@@ -1175,11 +1442,13 @@ mod tests {
                 path: "a.rs".into(),
                 lines: None,
                 text: Some("fn a() {}".into()),
+                requested: false,
             },
             FetchedFile {
                 path: "fixture.rs".into(),
                 lines: None,
                 text: Some(format!("const K: &str = \"{nsec}\";")),
+                requested: false,
             },
         ];
         let (section, records) =
@@ -1365,7 +1634,7 @@ mod tests {
             },
         ];
         let mentioned = vec!["b.rs".to_string(), "a.rs".into(), "c.rs".into()];
-        let (kept, rejected) = select(&planned, &mentioned, &t, 2, &Denylist::default());
+        let (kept, rejected) = select(&[], &planned, &mentioned, &t, 2, &Denylist::default());
         assert_eq!(
             kept.iter().map(|k| k.path.as_str()).collect::<Vec<_>>(),
             vec!["b.rs", "a.rs"]
@@ -1445,26 +1714,31 @@ mod tests {
                 path: "a.rs".into(),
                 lines: None,
                 text: Some("fn a() {}\n".into()),
+                requested: false,
             },
             FetchedFile {
                 path: "gone.rs".into(),
                 lines: None,
                 text: None,
+                requested: false,
             },
             FetchedFile {
                 path: "b.rs".into(),
                 lines: Some(LineRange { start: 2, end: 2 }),
                 text: Some("x\ny\nz".into()),
+                requested: false,
             },
             FetchedFile {
                 path: "c.rs".into(),
                 lines: None,
                 text: Some("c".repeat(100)),
+                requested: false,
             },
             FetchedFile {
                 path: "d.rs".into(),
                 lines: None,
                 text: Some("d".into()),
+                requested: false,
             },
         ];
         let redact = |s: &str| s.replace("fn", "FN");
@@ -1694,16 +1968,8 @@ mod tests {
         )]);
         let deny = Denylist::new(["session-key.txt"]);
         let cmds: Vec<String> = vec![];
-        let input = GatherInput {
-            repo: d.path(),
-            commit: &rev,
-            deep: "d",
-            scans: "s",
-            commands: &cmds,
-            evidence: "",
-            cfg: &SourceConfig::default(),
-            deny: &deny,
-        };
+        let cfg = SourceConfig::default();
+        let input = GatherInput::new(d.path(), &rev, "d", "s", &cmds, "", &cfg, &deny);
         let (section, rec) =
             futures::executor::block_on(gather(&fake, None, &input, &|s: &str| s.to_string()))
                 .expect("a section");
@@ -1720,16 +1986,18 @@ mod tests {
         let primary = Fake::new(vec![Err(LlmError::Empty)]);
         let fb = Fake::new(vec![Ok(r#"{"files":["src/b.rs"]}"#.into())]);
         let cmds: Vec<String> = vec![];
-        let input = GatherInput {
-            repo: d.path(),
-            commit: &rev,
-            deep: "d",
-            scans: "s",
-            commands: &cmds,
-            evidence: "error at src/a.rs:3",
-            cfg: &SourceConfig::default(),
-            deny: &Denylist::default(),
-        };
+        let deny = Denylist::default();
+        let cfg = SourceConfig::default();
+        let input = GatherInput::new(
+            d.path(),
+            &rev,
+            "d",
+            "s",
+            &cmds,
+            "error at src/a.rs:3",
+            &cfg,
+            &deny,
+        );
         let (section, rec) =
             futures::executor::block_on(gather(&primary, Some(&fb), &input, &|s: &str| {
                 s.to_string()
@@ -1750,7 +2018,8 @@ mod tests {
             ..SourceConfig::default()
         };
         let silent = Fake::new(vec![]);
-        let input = GatherInput { cfg: &off, ..input };
+        let mut input = input;
+        input.cfg = &off;
         assert!(futures::executor::block_on(
             gather(&silent, None, &input, &|s: &str| s.to_string())
         )
@@ -1774,5 +2043,182 @@ mod tests {
         let rec = futures::executor::block_on(apply_repair(&ap, None, "old", "p".into()));
         assert_eq!(rec.outcome, RepairOutcome::NoPatch("cannot".into()));
         assert!(rec.repairs("old") && !rec.repairs("other"));
+    }
+
+    #[test]
+    fn source_request_parse_splits_a_trailing_line_range() {
+        assert_eq!(
+            SourceRequest::parse("`src/a.rs:10-80`"),
+            Some(SourceRequest {
+                path: "src/a.rs".into(),
+                lines: Some(LineRange { start: 10, end: 80 }),
+            })
+        );
+        assert_eq!(
+            SourceRequest::parse("./conf/x:y.toml"),
+            Some(SourceRequest {
+                path: "conf/x:y.toml".into(),
+                lines: None,
+            })
+        );
+        assert_eq!(SourceRequest::parse("  "), None);
+    }
+
+    #[test]
+    fn select_honours_requested_first_but_reserves_only_half_the_slots() {
+        let t = tracked(&["r1.rs", "r2.rs", "r3.rs", "p1.rs", "m1.rs"]);
+        let req = |p: &str| SourceRequest {
+            path: p.into(),
+            lines: None,
+        };
+        let requested = vec![req("r1.rs"), req("r2.rs"), req("r3.rs")];
+        let planned = vec![req("p1.rs")];
+        let mentioned = vec!["m1.rs".to_string()];
+        let (kept, _) = select(
+            &requested,
+            &planned,
+            &mentioned,
+            &t,
+            4,
+            &Denylist::default(),
+        );
+        let paths: Vec<&str> = kept.iter().map(|k| k.path.as_str()).collect();
+        // Two requested (half of four), then the planner, then the mention; r3 waits.
+        assert_eq!(paths, vec!["r1.rs", "r2.rs", "p1.rs", "m1.rs"]);
+        assert_eq!(requested_slots(1), 1);
+        assert_eq!(requested_slots(12), 6);
+    }
+
+    #[test]
+    fn render_caps_requested_files_at_half_the_byte_budget() {
+        let cfg = SourceConfig {
+            budget_bytes: 2_000,
+            file_cap_bytes: 2_000,
+            ..SourceConfig::default()
+        };
+        let files = vec![
+            FetchedFile {
+                path: "req.rs".into(),
+                lines: None,
+                text: Some("x".repeat(1_800)),
+                requested: true,
+            },
+            FetchedFile {
+                path: "plan.rs".into(),
+                lines: None,
+                text: Some("y".repeat(400)),
+                requested: false,
+            },
+        ];
+        let (section, records) = render_section("c", &files, &cfg, &|s: &str| s.to_string());
+        assert!(records[0].clipped, "requested file is clipped to its half");
+        // At most half the budget of the file's own text survives; the rest is
+        // the elision marker, which counts against the budget like any text.
+        let body = section.split("```").nth(1).unwrap_or("");
+        let kept_x = body.matches("xxxx").count() * 4;
+        assert!(kept_x <= 1_000, "{kept_x}");
+        assert_eq!(records[1].status, "inlined");
+        assert!(!records[1].requested && records[0].requested);
+        assert!(section.contains("requested by the previous night"));
+    }
+
+    #[test]
+    fn planner_prompt_lists_already_supplied_requests() {
+        let supplied = vec![SourceRequest {
+            path: "src/a.rs".into(),
+            lines: Some(LineRange { start: 1, end: 9 }),
+        }];
+        let p = source_plan_prompt("d", "s", &[], "", "", 12, &supplied);
+        assert!(p.contains("Already being read tonight"));
+        assert!(p.contains("`src/a.rs` lines 1-9"));
+        let p0 = source_plan_prompt("d", "s", &[], "", "", 12, &[]);
+        assert!(!p0.contains("Already being read tonight"));
+    }
+
+    #[test]
+    fn gather_honours_requested_paths_and_records_refusals() {
+        let (d, rev) = repo_with(&[("src/a.rs", "fn a() {}\n"), ("src/b.rs", "fn b() {}\n")]);
+        // The planner names nothing: without requests the night has no section.
+        let fake = Fake::new(vec![Ok(r#"{"files":[]}"#.into())]);
+        let cmds: Vec<String> = vec![];
+        let cfg = SourceConfig::default();
+        let deny = Denylist::default();
+        let requested = vec![
+            SourceRequest {
+                path: "src/b.rs".into(),
+                lines: None,
+            },
+            SourceRequest {
+                path: "nowhere.rs".into(),
+                lines: None,
+            },
+            SourceRequest {
+                path: "../etc/passwd".into(),
+                lines: None,
+            },
+        ];
+        let input = GatherInput::new(d.path(), &rev, "d", "s", &cmds, "", &cfg, &deny)
+            .with_requested(&requested);
+        let (section, rec) =
+            futures::executor::block_on(gather(&fake, None, &input, &|s: &str| s.to_string()))
+                .expect("a section from the request alone");
+        assert!(section.contains("fn b()") && !section.contains("fn a()"));
+        assert!(section.contains("Requested by the previous night: honoured src/b.rs"));
+        assert!(section.contains("Sources wanted next night"));
+        assert_eq!(rec.requested_honoured, vec!["src/b.rs".to_string()]);
+        assert_eq!(
+            rec.requested_refused.len(),
+            2,
+            "{:?}",
+            rec.requested_refused
+        );
+        assert!(rec.files[0].requested);
+        // The planner was told what it need not pick.
+        assert!(fake.seen.lock().unwrap()[0].0.contains("`src/b.rs`"));
+    }
+
+    #[test]
+    fn a_directory_request_expands_to_its_files_shallowest_first() {
+        let files = vec![
+            TrackedFile {
+                path: "crates/x/src/deep/z.rs".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/x/Cargo.toml".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/x/src/lib.rs".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/x/logo.png".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/xy/src/lib.rs".into(),
+                size: 10,
+            },
+        ];
+        let d = Denylist::default();
+        assert_eq!(
+            expand_directory("crates/x/", &files, &d),
+            vec![
+                "crates/x/Cargo.toml".to_string(),
+                "crates/x/src/lib.rs".into(),
+                "crates/x/src/deep/z.rs".into()
+            ]
+        );
+        assert_eq!(
+            expand_directory("crates/x", &files, &d).len(),
+            3,
+            "no trailing slash"
+        );
+        assert!(
+            expand_directory("crates/x/Cargo.toml", &files, &d).is_empty(),
+            "a file is not expanded"
+        );
+        assert!(expand_directory("nowhere/", &files, &d).is_empty());
     }
 }
