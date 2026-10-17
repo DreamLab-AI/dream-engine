@@ -885,6 +885,35 @@ pub fn render_section(
     (out, records)
 }
 
+/// Tracked, readable files under `prefix` (with or without a trailing `/`),
+/// shallowest first then by name. Empty when `prefix` is itself a tracked
+/// file or matches nothing, so a plain file request is left alone.
+pub fn expand_directory(prefix: &str, files: &[TrackedFile], deny: &Denylist) -> Vec<String> {
+    let p = prefix.trim().trim_matches('`').trim();
+    let p = p.strip_prefix("./").unwrap_or(p).trim_end_matches('/');
+    if p.is_empty() || p.split('/').any(|c| c == "..") || files.iter().any(|f| f.path == p) {
+        return Vec::new();
+    }
+    let want = format!("{p}/");
+    let mut under: Vec<&TrackedFile> = files
+        .iter()
+        .filter(|f| {
+            f.path.starts_with(&want)
+                && f.size <= MAX_READABLE_BYTES
+                && !deny.denies(&f.path)
+                && !is_binary_ext(&f.path)
+        })
+        .collect();
+    under.sort_by(|a, b| {
+        a.path
+            .matches('/')
+            .count()
+            .cmp(&b.path.matches('/').count())
+            .then(a.path.cmp(&b.path))
+    });
+    under.into_iter().map(|f| f.path.clone()).collect()
+}
+
 /// The closing line of the section when anything was requested: which
 /// requests were honoured and which were not, so the model does not ask the
 /// operator for a file the engine has already read or already refused.
@@ -1041,7 +1070,23 @@ pub async fn gather(
     let reserve = requested_slots(cfg.max_files);
     let mut honoured_requests: Vec<SourceRequest> = Vec::new();
     let mut requested_refused: Vec<(String, String)> = Vec::new();
-    for (i, r) in requested.iter().enumerate() {
+    // A request for a directory (`crates/x/` or any tracked prefix) stands
+    // for its files, shallowest first, within the same reservation.
+    let expanded: Vec<SourceRequest> = requested
+        .iter()
+        .flat_map(|r| {
+            let under = expand_directory(&r.path, &files, deny);
+            if under.is_empty() {
+                vec![r.clone()]
+            } else {
+                under
+                    .into_iter()
+                    .map(|path| SourceRequest { path, lines: None })
+                    .collect()
+            }
+        })
+        .collect();
+    for (i, r) in expanded.iter().enumerate() {
         let key = request_key(&r.path, r.lines);
         if i >= reserve {
             requested_refused.push((key, "over-cap".into()));
@@ -2130,5 +2175,50 @@ mod tests {
         assert!(rec.files[0].requested);
         // The planner was told what it need not pick.
         assert!(fake.seen.lock().unwrap()[0].0.contains("`src/b.rs`"));
+    }
+
+    #[test]
+    fn a_directory_request_expands_to_its_files_shallowest_first() {
+        let files = vec![
+            TrackedFile {
+                path: "crates/x/src/deep/z.rs".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/x/Cargo.toml".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/x/src/lib.rs".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/x/logo.png".into(),
+                size: 10,
+            },
+            TrackedFile {
+                path: "crates/xy/src/lib.rs".into(),
+                size: 10,
+            },
+        ];
+        let d = Denylist::default();
+        assert_eq!(
+            expand_directory("crates/x/", &files, &d),
+            vec![
+                "crates/x/Cargo.toml".to_string(),
+                "crates/x/src/lib.rs".into(),
+                "crates/x/src/deep/z.rs".into()
+            ]
+        );
+        assert_eq!(
+            expand_directory("crates/x", &files, &d).len(),
+            3,
+            "no trailing slash"
+        );
+        assert!(
+            expand_directory("crates/x/Cargo.toml", &files, &d).is_empty(),
+            "a file is not expanded"
+        );
+        assert!(expand_directory("nowhere/", &files, &d).is_empty());
     }
 }
