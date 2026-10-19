@@ -10,8 +10,8 @@
   "evaluatorEntrypoints": {
     "tests": "cargo test --workspace --locked",
     "clippy": "cargo clippy --workspace --all-targets -- -D warnings",
-    "fmt": "cargo fmt --all --check && echo 'fmt: all files formatted'",
-    "doc": "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace",
+    "fmt": "cargo fmt --all --check && echo fmt: all files formatted",
+    "doc": "RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps --workspace",
     "deny": "cargo deny check",
     "parity": { "cmd": "cargo test -p dream-core --test ts_parity --locked", "required": true, "timeoutSecs": 900, "testFormat": "libtest" }
   },
