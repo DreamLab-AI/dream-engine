@@ -418,4 +418,16 @@ mod tests {
             assert_eq!(next_dry_streak(2, v), 2, "{v}");
         }
     }
+
+    #[test]
+    fn a_corrupt_manifest_starts_afresh_rather_than_wedging_the_night() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(failures_path(d.path(), "alpha"), b"not a manifest").unwrap();
+        let vetoes = [harness("tests", "boom")];
+        let u = record_night(d.path(), "alpha", "BLOCKED-ENV", &vetoes).unwrap();
+        assert!(!u.stuck, "the first sighting on a fresh manifest is new");
+        assert_eq!(u.manifest.step, 1, "one recorded night from scratch");
+        assert_eq!(u.manifest.records.len(), 1);
+        assert_eq!(u.classification.new.len(), 1);
+    }
 }
