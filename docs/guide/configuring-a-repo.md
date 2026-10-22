@@ -52,7 +52,12 @@ Rust repositories.
   `timeoutSecs` and `testFormat` (`libtest`, `junit` or `vitest-json`). An
   evaluator with no `testFormat` counts as one case in the gate, so it gets pass
   or fail but no sign test or Wilson bound. Do not pipe a declared-format
-  evaluator through `| tail`; the parser needs the full output.
+  evaluator through `| tail`; the parser needs the full output. An evaluator may
+  also name a `fixer` (today only `"rustfmt"`): a built-in the engine runs on the
+  files the candidate touched before the gate judges it, so a formatting gate
+  never vetoes a night for the model's line-wrapping (ADR-DE-009). It is a name,
+  never a command; the layout lands as a second commit and anything that would
+  reach a file the candidate did not touch is discarded.
 - `protected` is additive. It extends the built-in protected set (the config
   file itself, the evaluator paths and the ledger) and can never remove from
   it; a `!` negation is a validation error.

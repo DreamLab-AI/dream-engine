@@ -268,6 +268,32 @@ pub struct EvaluatorSpec {
     /// (the default) counts the evaluator as one case.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_format: Option<TestFormat>,
+    /// A built-in way to bring a candidate into the state this evaluator
+    /// checks for, run on the candidate's own files before the gate judges
+    /// it (ADR-DE-009). `None` (the default): the candidate is judged as the
+    /// model wrote it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixer: Option<Fixer>,
+}
+
+/// A named, built-in fixer the engine knows how to run on a candidate's
+/// touched files (ADR-DE-009). It is a name and never a command: the control
+/// plane executes nothing a repository's configuration spells out, and a
+/// fixer only ever rewrites the files the candidate itself touched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Fixer {
+    /// `rustfmt --edition <crate edition>` on the touched `.rs` files.
+    Rustfmt,
+}
+
+impl Fixer {
+    /// The name as written in `dream.config.json`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Fixer::Rustfmt => "rustfmt",
+        }
+    }
 }
 
 impl EvaluatorSpec {
@@ -279,6 +305,7 @@ impl EvaluatorSpec {
             deeps: Vec::new(),
             timeout_secs: DEFAULT_EVALUATOR_TIMEOUT_SECS,
             test_format: None,
+            fixer: None,
         }
     }
 
@@ -310,6 +337,8 @@ impl<'de> Deserialize<'de> for EvaluatorSpec {
             timeout_secs: u64,
             #[serde(default)]
             test_format: Option<TestFormat>,
+            #[serde(default)]
+            fixer: Option<Fixer>,
         }
         #[derive(Deserialize)]
         #[serde(untagged)]
@@ -325,6 +354,7 @@ impl<'de> Deserialize<'de> for EvaluatorSpec {
                 deeps: x.deeps,
                 timeout_secs: x.timeout_secs,
                 test_format: x.test_format,
+                fixer: x.fixer,
             },
         })
     }
