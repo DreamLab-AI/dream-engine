@@ -17,9 +17,12 @@
 
 use std::path::{Path, PathBuf};
 
+use dream_gate::config::Fixer;
 use dream_gate::gate::CandidateState;
 use dream_gate::guard::{self, GuardViolation, ProtectedPolicy};
 use dream_gate::manifest::{digest, EvaluatorIdentity};
+pub use dream_gate::manifest::{Formatting, FormattingOutcome};
+use dream_gate::outcome::shell_quote;
 use dream_gate::outcome::ExecOutcome;
 use dream_gate::receipts::{EvaluatorReceipt, Phase};
 use tracing::{info, warn};
@@ -45,8 +48,248 @@ pub struct PreparedCandidate {
     pub applied_via: String,
     /// The exact diff text that was applied (see
     /// [`persist::BuiltBranch::applied_patch`]); this is what the gate's
-    /// re-check must see.
+    /// re-check must see. After a fixer ran ([`Formatting`]) it is the diff
+    /// from the base to the formatted tree, so base + `applied_patch` still
+    /// reproduces `tree_hash`.
     pub applied_patch: String,
+    /// What a fixer did to the candidate's layout before the gate, if one was
+    /// configured (ADR-DE-009).
+    pub formatting: Option<Formatting>,
+}
+
+/// Wall-clock budget for a fixer, which only rewrites a handful of files.
+const FIXER_TIMEOUT_SECS: u64 = 300;
+
+/// Run the first configured fixer among `required` on the prepared candidate
+/// (ADR-DE-009), in the worktree on the control plane. On success the
+/// candidate gains a second commit holding the layout and `prepared` is
+/// updated to the formatted tree; on any other outcome the worktree is reset
+/// to the model's commit. Returns `None` when no evaluator names a fixer.
+///
+/// `base` is the commit the candidate was built on, so the re-guarded
+/// `applied_patch` is `git diff --binary <base> HEAD`.
+pub fn format_candidate(
+    prepared: &mut PreparedCandidate,
+    base: &str,
+    policy: &ProtectedPolicy,
+    required: &[&EvaluatorIdentity],
+) -> Option<Formatting> {
+    let (evaluator, fixer) = required
+        .iter()
+        .find_map(|e| e.fixer.map(|f| (e.name.clone(), f)))?;
+    let wt = prepared.worktree.clone();
+    let touched = match guard::check(&prepared.applied_patch, policy) {
+        Ok(t) => t,
+        Err(v) => {
+            return Some(Formatting {
+                fixer,
+                evaluator,
+                files: vec![],
+                outcome: FormattingOutcome::Skipped {
+                    reason: format!("the applied patch no longer passes the guard: {v}"),
+                },
+            })
+        }
+    };
+    let files: Vec<String> = touched
+        .iter()
+        .filter(|p| fixer_handles(fixer, p) && wt.join(p).is_file())
+        .map(str::to_string)
+        .collect();
+    let mut rec = Formatting {
+        fixer,
+        evaluator,
+        files: files.clone(),
+        outcome: FormattingOutcome::Unchanged,
+    };
+    if files.is_empty() {
+        rec.outcome = FormattingOutcome::Skipped {
+            reason: format!("no file the {} fixer handles was touched", fixer.name()),
+        };
+        return Some(rec);
+    }
+    // rustfmt follows `#[path = "…"] mod x;` wherever it points, including
+    // out of the worktree; a model-written declaration is not trusted.
+    if let Some(f) = files.iter().find(|f| {
+        std::fs::read_to_string(wt.join(f))
+            .map(|s| s.contains("#[path"))
+            .unwrap_or(false)
+    }) {
+        rec.outcome = FormattingOutcome::Skipped {
+            reason: format!(
+                "{f} declares #[path] modules; the fixer could reach outside the worktree"
+            ),
+        };
+        return Some(rec);
+    }
+    let discard = |wt: &Path| {
+        let _ = crate::git::run(wt, &["reset", "--hard", "-q"]);
+        let _ = crate::git::run(wt, &["clean", "-fdq"]);
+    };
+    let command = fixer_command(fixer, &wt, &files);
+    let out =
+        crate::runner::LocalRunner.run(&wt.display().to_string(), &command, FIXER_TIMEOUT_SECS);
+    if out.timed_out || out.transport_error.is_some() || out.exit_code != Some(0) {
+        discard(&wt);
+        let why = out
+            .transport_error
+            .clone()
+            .unwrap_or_else(|| tail(&format!("{}{}", out.stdout, out.stderr), 600));
+        rec.outcome = FormattingOutcome::Failed {
+            reason: if out.timed_out {
+                format!("timed out after {FIXER_TIMEOUT_SECS}s")
+            } else {
+                format!("exit {:?}: {}", out.exit_code, why.trim())
+            },
+        };
+        return Some(rec);
+    }
+    let changed = match changed_paths(&wt) {
+        Ok(c) => c,
+        Err(e) => {
+            discard(&wt);
+            rec.outcome = FormattingOutcome::Failed {
+                reason: format!("git status: {e}"),
+            };
+            return Some(rec);
+        }
+    };
+    if changed.is_empty() {
+        return Some(rec);
+    }
+    let widened: Vec<&String> = changed.iter().filter(|p| !touched.contains(p)).collect();
+    if !widened.is_empty() {
+        discard(&wt);
+        rec.outcome = FormattingOutcome::Reverted {
+            reason: format!(
+                "the fixer changed files the candidate did not touch: {}",
+                widened
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        };
+        return Some(rec);
+    }
+    let before = prepared.tree_hash.clone();
+    let committed = crate::git::run(&wt, &["add", "-A"]).and_then(|_| {
+        crate::git::run(
+            &wt,
+            &["commit", "-q", "-m", &format!("dream: {}", fixer.name())],
+        )
+    });
+    if let Err(e) = committed {
+        discard(&wt);
+        rec.outcome = FormattingOutcome::Failed {
+            reason: format!("git commit: {e}"),
+        };
+        return Some(rec);
+    }
+    let undo = |wt: &Path| {
+        let _ = crate::git::run(wt, &["reset", "--hard", "-q", "HEAD~1"]);
+    };
+    let (tree, diff) = match (
+        crate::git::run(&wt, &["rev-parse", "HEAD^{tree}"]),
+        crate::git::run(&wt, &["diff", "--binary", base, "HEAD"]),
+    ) {
+        (Ok(t), Ok(d)) => (t.trim().to_string(), d),
+        (t, d) => {
+            undo(&wt);
+            rec.outcome = FormattingOutcome::Failed {
+                reason: format!("reading the formatted tree: {:?} {:?}", t.err(), d.err()),
+            };
+            return Some(rec);
+        }
+    };
+    // The gate re-guards `applied_patch`; it must have seen these exact bytes.
+    if let Err(v) = guard::check(&diff, policy) {
+        undo(&wt);
+        rec.outcome = FormattingOutcome::Reverted {
+            reason: format!("the formatted diff was refused by the guard: {v}"),
+        };
+        return Some(rec);
+    }
+    prepared.tree_hash = tree;
+    prepared.applied_patch = diff;
+    info!(
+        fixer = fixer.name(),
+        files = files.len(),
+        "candidate formatted"
+    );
+    rec.outcome = FormattingOutcome::Applied {
+        tree_hash_before: before,
+    };
+    Some(rec)
+}
+
+/// Whether `fixer` has anything to do with `path`.
+fn fixer_handles(fixer: Fixer, path: &str) -> bool {
+    match fixer {
+        Fixer::Rustfmt => path.ends_with(".rs"),
+    }
+}
+
+/// The fixer's command line for `files`, every path quoted.
+fn fixer_command(fixer: Fixer, wt: &Path, files: &[String]) -> String {
+    match fixer {
+        Fixer::Rustfmt => {
+            let edition = crate_edition(wt, &files[0]);
+            let quoted: Vec<String> = files.iter().map(|f| shell_quote(f)).collect();
+            format!("rustfmt --edition {edition} -- {}", quoted.join(" "))
+        }
+    }
+}
+
+/// The Rust edition of the crate `file` belongs to: the nearest `Cargo.toml`
+/// above it in the worktree with an `edition = "…"` line, else `2021`.
+fn crate_edition(wt: &Path, file: &str) -> String {
+    let mut dir = Path::new(file).parent();
+    while let Some(d) = dir {
+        if let Ok(toml) = std::fs::read_to_string(wt.join(d).join("Cargo.toml")) {
+            if let Some(e) = toml.lines().map(str::trim).find_map(|l| {
+                l.strip_prefix("edition").map(|r| {
+                    r.trim_start_matches([' ', '='])
+                        .trim()
+                        .trim_matches('"')
+                        .to_string()
+                })
+            }) {
+                if !e.is_empty() && e.chars().all(|c| c.is_ascii_digit()) {
+                    return e;
+                }
+            }
+        }
+        dir = d.parent();
+    }
+    "2021".into()
+}
+
+/// Paths changed or untracked in the worktree (`git status --porcelain -z
+/// --untracked-files=all`, so a new directory lists its files, not itself).
+fn changed_paths(wt: &Path) -> Result<Vec<String>, String> {
+    let raw = crate::git::run(
+        wt,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(raw
+        .split('\0')
+        .filter(|e| e.len() > 3)
+        .map(|e| e[3..].to_string())
+        .collect())
+}
+
+fn tail(s: &str, n: usize) -> String {
+    if s.len() <= n {
+        s.to_string()
+    } else {
+        let mut start = s.len() - n;
+        while !s.is_char_boundary(start) {
+            start += 1;
+        }
+        s[start..].to_string()
+    }
 }
 
 /// Build the candidate tree: a worktree at `base`, on `branch`, with `patch`
@@ -75,6 +318,7 @@ pub fn prepare(
         patch_bytes: patch.len(),
         applied_via: built.applied_via,
         applied_patch: built.applied_patch,
+        formatting: None,
     })
 }
 
@@ -247,7 +491,7 @@ pub fn run(
     }
     // A stale branch from an interrupted attempt would block the worktree.
     persist::delete_branch(input.repo, input.branch);
-    let prepared = match prepare(
+    let mut prepared = match prepare(
         input.repo,
         input.branch,
         input.patch,
@@ -274,6 +518,13 @@ pub fn run(
             return a;
         }
     };
+    // ADR-DE-009: a configured fixer brings the layout to what its evaluator
+    // checks for, before the tree is hashed for shipping and judged. It runs
+    // here, on the control plane, where the worktree is.
+    let base_sha = crate::git::run(&prepared.worktree, &["rev-parse", "HEAD~1"])
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| input.base.to_string());
+    prepared.formatting = format_candidate(&mut prepared, &base_sha, input.policy, input.required);
     let work_dir = match relocate {
         Some(f) => match f(&prepared) {
             Ok(d) => d,
@@ -372,6 +623,7 @@ mod tests {
                 deeps: vec![],
                 timeout_secs: 60,
                 test_format: None,
+                fixer: None,
             }],
             model: ModelIdentity {
                 provider: "test".into(),
@@ -770,5 +1022,247 @@ mod tests {
         );
         assert!(a.error.is_none());
         discard(&repo, a.prepared.as_ref().unwrap());
+    }
+
+    // ---- ADR-DE-009: a configured fixer formats the candidate before the gate.
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let o = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            o.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+        String::from_utf8_lossy(&o.stdout).into_owned()
+    }
+
+    /// `scratch_repo` plus a formatting check that names no source path (the
+    /// policy protects paths an evaluator command names), committed.
+    fn rust_scratch_repo() -> (tempfile::TempDir, PathBuf) {
+        let (d, repo) = scratch_repo();
+        std::fs::write(
+            repo.join("scripts/fmtcheck.sh"),
+            "#!/bin/bash\nrustfmt --edition 2021 --check $(git ls-files '*.rs') && echo 'fmt: all files formatted'\n",
+        )
+        .unwrap();
+        git(&repo, &["add", "-A"]);
+        git(&repo, &["commit", "-q", "-m", "fmt check"]);
+        (d, repo)
+    }
+
+    fn commit_file(repo: &Path, path: &str, content: &str) {
+        let full = repo.join(path);
+        std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+        std::fs::write(full, content).unwrap();
+        git(repo, &["add", "-A"]);
+        git(repo, &["commit", "-q", "-m", &format!("add {path}")]);
+    }
+
+    fn fmt_evaluator() -> EvaluatorIdentity {
+        EvaluatorIdentity {
+            name: "fmt".into(),
+            command: "bash scripts/fmtcheck.sh".into(),
+            command_digest: digest(b"bash scripts/fmtcheck.sh"),
+            required: true,
+            deeps: vec![],
+            timeout_secs: 60,
+            test_format: None,
+            fixer: Some(Fixer::Rustfmt),
+        }
+    }
+
+    fn rust_policy() -> ProtectedPolicy {
+        ProtectedPolicy::default().with_evaluator_commands(["bash scripts/fmtcheck.sh"])
+    }
+
+    /// A unified diff creating `path` with `content`.
+    fn new_file_patch(path: &str, content: &str) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        let body: String = lines.iter().map(|l| format!("+{l}\n")).collect();
+        format!(
+            "diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{} @@\n{body}",
+            lines.len()
+        )
+    }
+
+    /// The tree `patch` yields when applied to the repository's HEAD.
+    fn tree_of_patch(repo: &Path, patch: &str) -> String {
+        let wt = repo.parent().unwrap().join("replay-wt");
+        git(
+            repo,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                wt.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        let mut child = Command::new("git")
+            .arg("-C")
+            .arg(&wt)
+            .args(["apply", "--binary", "-"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        std::io::Write::write_all(child.stdin.as_mut().unwrap(), patch.as_bytes()).unwrap();
+        assert!(child.wait().unwrap().success());
+        git(&wt, &["add", "-A"]);
+        let tree = git(&wt, &["write-tree"]).trim().to_string();
+        git(
+            repo,
+            &["worktree", "remove", "--force", wt.to_str().unwrap()],
+        );
+        tree
+    }
+
+    fn run_with_fixer(
+        repo: &Path,
+        branch: &str,
+        patch: &str,
+        required: &[EvaluatorIdentity],
+    ) -> Attempt {
+        let req: Vec<&EvaluatorIdentity> = required.iter().collect();
+        let pol = rust_policy();
+        run(
+            &AttemptInput {
+                repo,
+                branch,
+                patch,
+                commit_msg: "dream: add",
+                base: "HEAD",
+                policy: &pol,
+                build: None,
+                required: &req,
+            },
+            &LocalRunner,
+            None,
+        )
+    }
+
+    #[test]
+    fn a_fixer_formats_the_candidate_and_the_recorded_patch_reproduces_the_tree() {
+        let (_d, repo) = rust_scratch_repo();
+        let patch = new_file_patch("src/lib.rs", "pub fn add(a:i32,b:i32)->i32{a+b}\n");
+        let a = run_with_fixer(&repo, "dream/fmt-applied", &patch, &[fmt_evaluator()]);
+        let c = a.prepared.as_ref().unwrap();
+        let f = c.formatting.as_ref().expect("a fixer was configured");
+        let FormattingOutcome::Applied { tree_hash_before } = &f.outcome else {
+            panic!("{f:?}");
+        };
+        assert_ne!(tree_hash_before, &c.tree_hash);
+        assert_eq!(f.files, vec!["src/lib.rs".to_string()]);
+        assert!(a.receipts[0].outcome.is_pass(), "{:?}", a.receipts[0]);
+        assert_eq!(
+            std::fs::read_to_string(c.worktree.join("src/lib.rs")).unwrap(),
+            "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
+        );
+        // the model's commit, then the fixer's, on top of the base
+        assert_eq!(
+            git(&c.worktree, &["log", "--format=%s", "-n", "2"]).trim(),
+            "dream: rustfmt\ndream: add"
+        );
+        // base + applied_patch reproduces the judged tree; the model's digest is kept
+        assert_eq!(tree_of_patch(&repo, &c.applied_patch), c.tree_hash);
+        assert_eq!(c.patch_digest, digest(patch.as_bytes()));
+        assert!(
+            matches!(&a.state, CandidateState::Applied { tree_hash, patch } if tree_hash == &c.tree_hash && patch == &c.applied_patch)
+        );
+        discard(&repo, c);
+    }
+
+    #[test]
+    fn a_fixer_that_reaches_a_file_the_candidate_did_not_touch_is_reverted() {
+        let (_d, repo) = rust_scratch_repo();
+        commit_file(&repo, "src/child.rs", "pub fn c(a:i32)->i32{a}\n");
+        commit_file(&repo, "src/lib.rs", "mod child;\npub fn a() {}\n");
+        let patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,2 +1,3 @@\n mod child;\n pub fn a() {}\n+pub fn b() {}\n";
+        let a = run_with_fixer(&repo, "dream/fmt-widened", patch, &[fmt_evaluator()]);
+        let c = a.prepared.as_ref().unwrap();
+        let f = c.formatting.as_ref().unwrap();
+        let FormattingOutcome::Reverted { reason } = &f.outcome else {
+            panic!("{f:?}");
+        };
+        assert!(reason.contains("src/child.rs"), "{reason}");
+        // the candidate is exactly as the model wrote it: one commit, clean tree, child untouched
+        assert_eq!(
+            git(&c.worktree, &["log", "--format=%s", "-n", "2"]).trim(),
+            "dream: add\nadd src/lib.rs"
+        );
+        assert_eq!(git(&c.worktree, &["status", "--porcelain"]).trim(), "");
+        assert_eq!(
+            std::fs::read_to_string(c.worktree.join("src/child.rs")).unwrap(),
+            "pub fn c(a:i32)->i32{a}\n"
+        );
+        assert_eq!(c.applied_patch, patch);
+        discard(&repo, c);
+    }
+
+    #[test]
+    fn a_fixer_that_fails_leaves_the_tree_as_the_model_wrote_it() {
+        let (_d, repo) = rust_scratch_repo();
+        let patch = new_file_patch("src/lib.rs", "pub fn (broken\n");
+        let a = run_with_fixer(&repo, "dream/fmt-failed", &patch, &[fmt_evaluator()]);
+        let c = a.prepared.as_ref().unwrap();
+        let f = c.formatting.as_ref().unwrap();
+        assert!(
+            matches!(f.outcome, FormattingOutcome::Failed { .. }),
+            "{f:?}"
+        );
+        assert_eq!(git(&c.worktree, &["status", "--porcelain"]).trim(), "");
+        assert_eq!(
+            std::fs::read_to_string(c.worktree.join("src/lib.rs")).unwrap(),
+            "pub fn (broken\n"
+        );
+        assert!(
+            !a.receipts[0].outcome.is_pass(),
+            "the gate still judges the unformatted tree"
+        );
+        discard(&repo, c);
+    }
+
+    #[test]
+    fn a_touched_file_declaring_path_modules_is_not_formatted() {
+        let (_d, repo) = rust_scratch_repo();
+        let patch = new_file_patch("src/lib.rs", "#[path = \"../value.txt\"]\nmod m;\n");
+        let a = run_with_fixer(&repo, "dream/fmt-path", &patch, &[fmt_evaluator()]);
+        let c = a.prepared.as_ref().unwrap();
+        let f = c.formatting.as_ref().unwrap();
+        let FormattingOutcome::Skipped { reason } = &f.outcome else {
+            panic!("{f:?}");
+        };
+        assert!(reason.contains("#[path]"), "{reason}");
+        assert_eq!(
+            git(&c.worktree, &["log", "--format=%s", "-n", "1"]).trim(),
+            "dream: add"
+        );
+        discard(&repo, c);
+    }
+
+    #[test]
+    fn without_a_fixer_the_candidate_is_untouched() {
+        let (_d, repo) = rust_scratch_repo();
+        let patch = new_file_patch("src/lib.rs", "pub fn add(a:i32,b:i32)->i32{a+b}\n");
+        let mut plain = fmt_evaluator();
+        plain.fixer = None;
+        let a = run_with_fixer(&repo, "dream/fmt-none", &patch, &[plain]);
+        let c = a.prepared.as_ref().unwrap();
+        assert!(c.formatting.is_none());
+        assert_eq!(c.applied_patch, patch);
+        assert_eq!(
+            std::fs::read_to_string(c.worktree.join("src/lib.rs")).unwrap(),
+            "pub fn add(a:i32,b:i32)->i32{a+b}\n"
+        );
+        assert!(
+            !a.receipts[0].outcome.is_pass(),
+            "unformatted as written: the check fails as before"
+        );
+        discard(&repo, c);
     }
 }
