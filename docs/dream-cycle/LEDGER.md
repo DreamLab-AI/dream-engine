@@ -6,3 +6,4 @@
 | 2026-10-20 | ledger-signals | Added passing test witnessing record_night starts afresh on a corrupt manifest | NONE | https://github.com/DreamLab-AI/dream-engine/pull/8 | yes | ACCEPT |  | cb8acb6a96c6 |  |  |  |
 | 2026-10-21 | evaluator-adapters | VETOED: Witness test: tail-truncated libtest candidate parses under bare names | NONE | VETOED | yes | REJECT |  | 66ab75240ea3 |  |  |  |
 | 2026-10-22 | source-and-context | VETOED: Witnessed clip_middle keeps head/tail verbatim and reports exact elided… | NONE | VETOED | yes | REJECT |  | 2996ef1af620 |  |  |  |
+| 2026-10-23 | developer-experience | Docs now state validate exits 1 (not 2) on unreadable config; matches the test | NONE | https://github.com/DreamLab-AI/dream-engine/pull/10 | yes | ACCEPT |  | 07b8bd31049d |  |  |  |
