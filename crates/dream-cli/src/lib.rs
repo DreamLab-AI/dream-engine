@@ -15,6 +15,9 @@
 //! * `2`: the check could not run (a file that cannot be read, a malformed
 //!   commit hash).
 //!
+//! `dream validate` is the one exception: an unreadable config exits `1`,
+//! not `2`, since either way the engine could not use it.
+//!
 //! # Example
 //!
 //! ```
