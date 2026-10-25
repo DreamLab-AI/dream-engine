@@ -144,6 +144,36 @@ A finished night is terminal, but publishing is not an exactly-once distributed 
 
 This is an independent Rust implementation. The former TypeScript tracking fork is historical lineage; it is not this workspace's implementation or release identity.
 
+## Jev option (opt-in hypothesis screening)
+
+`dream_core::screen` lets a host spend a limited measurement budget on the candidate
+hypotheses most likely to matter. A typed-decision service (System One: a `score` for
+evidence fit and a `noul` for "does the change address the stated problem", per hypothesis)
+can **order** candidates and **defer** the ones that are both poorly supported and off-target.
+Status: *proposed research candidate; no measured uplift*; the wiring and fallback tests do
+not show uplift.
+
+- **Authority:** unchanged. The pairwise gate, fault treatment, protected-path guard,
+  evaluator receipts and promotion rules still decide every candidate that runs. A deferred
+  hypothesis is held with a reason, never rejected, and the result is always a partition of
+  the input ids (checked by `Screening::is_partition_of`; a service that invents, drops or
+  repeats an id is ignored).
+- **Off by default:** the default screen `NotScreened` builds no request and yields
+  `plan_unscreened`: the input order, cut at the budget. That is also the result on every
+  failure: no endpoint, timeout, transport error, non-2xx (`http-<code>`), malformed body or
+  missing answer, low confidence, or a broken invariant. The reason is a log token
+  (`flag-off`, `no-endpoint`, `timeout`, `transport`, `http-<code>`, `malformed`,
+  `low-confidence`, `invariant-broken`), never request content.
+- **Accept nothing automatically:** `ScreenPolicy::default()` records verdicts as annotations
+  and changes neither order nor deferral. Set `min_confidence` (and `defer_fit_below` for
+  deferral) from labelled data before relying on it.
+- **What leaves, and where to:** nothing, from this workspace. It links no HTTP client; a host
+  implements `HypothesisScreen` or passes a transport closure to `JsonScreen`. A request
+  carries at most 16 hypotheses (statement, problem evidence and proposed-change text, 1,200
+  chars each) and up to 12 evaluator descriptions, to whatever endpoint the host selects. No
+  HTTP implementation ships here: this repo has no multi-candidate caller, and the agentbox
+  adapter (AB-23) is where one belongs. Question set `dream-engine.de-01-s1-01.v1`.
+
 ## Documentation
 
 [docs/README.md](docs/README.md) is the index. The decisions are in
