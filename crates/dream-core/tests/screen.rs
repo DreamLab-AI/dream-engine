@@ -44,6 +44,7 @@ fn response(n: usize, fit: &dyn Fn(usize) -> f64, conf: f64, addr: &dyn Fn(usize
             format!("addresses_{i}"),
             json!({"type":"noul","noul":addr(i)}),
         );
+        a.insert(format!("violates_{i}"), json!({"type":"noul","noul":0.0}));
     }
     json!({"model":"jev-test","usage":{"input_tokens":1,"output_tokens":1},"answers":a})
 }
@@ -74,7 +75,7 @@ fn every_failure_mode_equals_the_unscreened_plan() {
 
         // Off.
         assert_eq!(
-            screen_candidates(&NotScreened, &h, &evaluators(), budget, &acting()),
+            screen_candidates(&NotScreened, &h, &evaluators(), &[], budget, &acting()),
             want
         );
 
@@ -88,7 +89,7 @@ fn every_failure_mode_equals_the_unscreened_plan() {
         ] {
             let r = reason.clone();
             let s = JsonScreen::new("m", move |_| Err(r.clone()));
-            let got = screen_candidates(&s, &h, &evaluators(), budget, &acting());
+            let got = screen_candidates(&s, &h, &evaluators(), &[], budget, &acting());
             assert_eq!(got.fallback.as_ref(), Some(&reason));
             assert_eq!(
                 (&got.run_order, &got.deferred),
@@ -121,7 +122,7 @@ fn every_failure_mode_equals_the_unscreened_plan() {
         ];
         for body in bad {
             let s = JsonScreen::new("m", move |_| Ok(body.clone()));
-            let got = screen_candidates(&s, &h, &evaluators(), budget, &acting());
+            let got = screen_candidates(&s, &h, &evaluators(), &[], budget, &acting());
             assert_eq!(got.fallback, Some(FallbackReason::Malformed));
             assert_eq!(
                 (&got.run_order, &got.deferred),
@@ -133,7 +134,7 @@ fn every_failure_mode_equals_the_unscreened_plan() {
         let s = JsonScreen::new("m", |_| {
             Ok(response(5, &|i| 3.0 - i as f64 * 0.5, 0.2, &|_| 0.9))
         });
-        let got = screen_candidates(&s, &h, &evaluators(), budget, &acting());
+        let got = screen_candidates(&s, &h, &evaluators(), &[], budget, &acting());
         assert_eq!(got.fallback, Some(FallbackReason::LowConfidence));
         assert_eq!(
             (&got.run_order, &got.deferred),
@@ -155,7 +156,7 @@ fn the_default_policy_accepts_nothing_automatically() {
             }
         }))
     });
-    let got = screen_candidates(&s, &h, &[], Some(2), &ScreenPolicy::default());
+    let got = screen_candidates(&s, &h, &[], &[], Some(2), &ScreenPolicy::default());
     let want = plan_unscreened(&h, Some(2));
     // ...changes neither order nor deferral, but is recorded.
     assert_eq!(
@@ -181,7 +182,7 @@ fn off_builds_no_request() {
     let c = Cell::new(0);
     let h = hyps(3);
     assert_eq!(
-        screen_candidates(&Spy(&c), &h, &[], Some(1), &acting()),
+        screen_candidates(&Spy(&c), &h, &[], &[], Some(1), &acting()),
         plan_unscreened(&h, Some(1))
     );
     assert_eq!(c.get(), 0);
@@ -206,6 +207,7 @@ fn a_misbehaving_service_cannot_break_the_partition() {
         fit: 3.0,
         confidence: 1.0,
         addresses: 1.0,
+        violates: 0.0,
     };
     for verdicts in [
         vec![v("h0"), v("h1")],                // dropped one
@@ -213,7 +215,7 @@ fn a_misbehaving_service_cannot_break_the_partition() {
         vec![v("h0"), v("h1"), v("invented")], // new id
         vec![v("h2"), v("h1"), v("h0")],       // reordered ids (must echo request order)
     ] {
-        let got = screen_candidates(&Liar(verdicts), &h, &[], Some(2), &acting());
+        let got = screen_candidates(&Liar(verdicts), &h, &[], &[], Some(2), &acting());
         assert_eq!(got.fallback, Some(FallbackReason::Malformed));
         assert_eq!(got.run_order, plan_unscreened(&h, Some(2)).run_order);
         assert!(got.is_partition_of(&h));
@@ -225,7 +227,7 @@ fn a_misbehaving_service_cannot_break_the_partition() {
         calls.set(calls.get() + 1);
         Ok(json!({}))
     });
-    let got = screen_candidates(&s, &dup, &[], None, &acting());
+    let got = screen_candidates(&s, &dup, &[], &[], None, &acting());
     assert_eq!(got.fallback, Some(FallbackReason::InvariantBroken));
     assert_eq!(calls.get(), 0);
 }
@@ -235,7 +237,7 @@ fn a_misbehaving_service_cannot_break_the_partition() {
 #[test]
 fn request_matches_the_system_one_contract() {
     let h = hyps(2);
-    let body = ScreenRequest::new(&h, &evaluators()).to_system_one("jev-latest");
+    let body = ScreenRequest::new(&h, &evaluators(), &[]).to_system_one("jev-latest");
     assert_eq!(
         body.as_object()
             .unwrap()
@@ -249,7 +251,7 @@ fn request_matches_the_system_one_contract() {
     );
     assert_eq!(body["model"], "jev-latest");
     let qs = body["questions"].as_object().unwrap();
-    assert_eq!(qs.len(), 4);
+    assert_eq!(qs.len(), 6);
     for i in 0..2 {
         let f = &qs[&format!("fit_{i}")];
         assert_eq!(f["type"], "score");
@@ -289,6 +291,7 @@ fn requests_are_bounded() {
             };
             50
         ],
+        &vec![big.clone(); 40],
     )
     .to_system_one("m");
     assert_eq!(
@@ -304,7 +307,8 @@ fn requests_are_bounded() {
         1200
     );
     assert_eq!(b["state"]["evaluators"].as_array().unwrap().len(), 12);
-    assert_eq!(b["questions"].as_object().unwrap().len(), MAX_SCREENED * 2);
+    assert_eq!(b["state"]["disciplines"].as_array().unwrap().len(), 16);
+    assert_eq!(b["questions"].as_object().unwrap().len(), MAX_SCREENED * 3);
 }
 
 // --- accept path -------------------------------------------------------------
@@ -317,7 +321,7 @@ fn confident_scores_order_the_budget_and_defer_off_target_ones() {
     let fit = |i: usize| [0.2, 2.5, 1.8, 2.9, 0.4][i];
     let addr = |i: usize| if i == 0 { 0.05 } else { 0.9 };
     let s = JsonScreen::new("m", move |_| Ok(response(5, &fit, 0.9, &addr)));
-    let got = screen_candidates(&s, &h, &evaluators(), Some(3), &acting());
+    let got = screen_candidates(&s, &h, &evaluators(), &[], Some(3), &acting());
     assert_eq!(got.fallback, None);
     assert_eq!(
         got.run_order,
@@ -350,7 +354,7 @@ fn confident_scores_order_the_budget_and_defer_off_target_ones() {
 fn ties_keep_input_order_and_unscreened_tail_stays_in_place() {
     let h = hyps(MAX_SCREENED + 3);
     let s = JsonScreen::new("m", |_| Ok(response(MAX_SCREENED, &|_| 2.0, 0.9, &|_| 0.9)));
-    let got = screen_candidates(&s, &h, &[], None, &acting());
+    let got = screen_candidates(&s, &h, &[], &[], None, &acting());
     assert_eq!(
         got.run_order,
         plan_unscreened(&h, None).run_order,
@@ -363,7 +367,7 @@ fn ties_keep_input_order_and_unscreened_tail_stays_in_place() {
     let one = hyps(1);
     let s = JsonScreen::new("m", |_| panic!("must not be called"));
     assert_eq!(
-        screen_candidates(&s, &one, &[], Some(1), &acting()),
+        screen_candidates(&s, &one, &[], &[], Some(1), &acting()),
         plan_unscreened(&one, Some(1))
     );
 }
@@ -375,7 +379,7 @@ fn deferral_needs_both_weak_fit_and_off_target() {
     let fit = |i: usize| [0.1, 2.9, 0.1][i];
     let addr = |i: usize| [0.9, 0.1, 0.1][i];
     let s = JsonScreen::new("m", move |_| Ok(response(3, &fit, 0.9, &addr)));
-    let got = screen_candidates(&s, &h, &[], None, &acting());
+    let got = screen_candidates(&s, &h, &[], &[], None, &acting());
     assert_eq!(
         got.deferred
             .iter()
@@ -388,4 +392,97 @@ fn deferral_needs_both_weak_fit_and_off_target() {
         ["h0", "h1"],
         "on-target first, then off-target by fit"
     );
+}
+
+// --- VF-04-S1-01: the host's declared disciplines ----------------------------
+
+#[test]
+fn declared_disciplines_come_from_a_dream_config_fixture() {
+    use dream_core::screen::{declared_disciplines, BUILTIN_DISCIPLINES};
+    let cfg = dream_gate::config::DreamConfig::load(std::path::Path::new(
+        "tests/fixtures/dream.config.visionflow-style.json",
+    ))
+    .expect("fixture loads");
+    let d = declared_disciplines(&cfg);
+    assert_eq!(
+        d.len(),
+        BUILTIN_DISCIPLINES.len() + 6,
+        "built-ins then the six extras"
+    );
+    assert_eq!(d[0], "evaluation-is-not-promotion");
+    assert!(d.iter().any(|x| x.starts_with("orphan-assets-are-kept")));
+
+    // They travel in the request state, and a violation question is asked per hypothesis.
+    let h = hyps(2);
+    let body = ScreenRequest::new(&h, &[], &d).to_system_one("m");
+    assert_eq!(
+        body["state"]["disciplines"].as_array().unwrap().len(),
+        d.len()
+    );
+    assert_eq!(body["questions"]["violates_1"]["type"], "noul");
+    assert!(body["questions"]["violates_0"]["instructions"]
+        .as_str()
+        .unwrap()
+        .contains("`disciplines`"));
+
+    // Off ⇒ identical to today's order, whatever disciplines are declared.
+    assert_eq!(
+        screen_candidates(&NotScreened, &h, &[], &d, Some(1), &ScreenPolicy::default()),
+        plan_unscreened(&h, Some(1))
+    );
+}
+
+#[test]
+fn a_discipline_violation_orders_behind_and_defers_only_when_configured() {
+    let h = hyps(3);
+    // h0 contradicts a discipline (propose pruning orphan assets) despite strong fit.
+    let body = |violates0: f64| {
+        let mut v = response(3, &|_| 2.8, 0.9, &|_| 0.9);
+        v["answers"]["violates_0"]["noul"] = json!(violates0);
+        v
+    };
+    let s = JsonScreen::new("m", move |_| Ok(body(0.95)));
+    let order_only = ScreenPolicy {
+        min_confidence: Some(0.5),
+        ..ScreenPolicy::default()
+    };
+    let got = screen_candidates(
+        &s,
+        &h,
+        &[],
+        &["orphan-assets-are-kept".to_string()],
+        None,
+        &order_only,
+    );
+    assert_eq!(
+        got.run_order,
+        ["h1", "h2", "h0"],
+        "violator last, nothing deferred"
+    );
+    assert!(got.deferred.is_empty());
+
+    let defer = ScreenPolicy {
+        defer_violation_at: Some(0.9),
+        ..order_only
+    };
+    let got = screen_candidates(
+        &s,
+        &h,
+        &[],
+        &["orphan-assets-are-kept".to_string()],
+        None,
+        &defer,
+    );
+    assert_eq!(got.run_order, ["h1", "h2"]);
+    assert_eq!(got.deferred.len(), 1);
+    assert_eq!(
+        (got.deferred[0].id.as_str(), &got.deferred[0].reason),
+        ("h0", &DeferReason::Screened)
+    );
+    assert!(got.is_partition_of(&h));
+
+    // Below the violation threshold: not deferred.
+    let s2 = JsonScreen::new("m", move |_| Ok(body(0.6)));
+    let got = screen_candidates(&s2, &h, &[], &[], None, &defer);
+    assert!(got.deferred.is_empty());
 }

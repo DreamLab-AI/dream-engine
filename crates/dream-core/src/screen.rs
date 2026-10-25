@@ -53,7 +53,7 @@
 //!     Hypothesis::new("h1", "Given slow parsing, cache the parse tree.", "profile: parse 80%", "add parse cache"),
 //!     Hypothesis::new("h2", "Given flaky CI, rename a variable.", "ci: 3 timeouts", "rename var"),
 //! ];
-//! let off = screen_candidates(&NotScreened, &hyps, &[], Some(1), &ScreenPolicy::default());
+//! let off = screen_candidates(&NotScreened, &hyps, &[], &[], Some(1), &ScreenPolicy::default());
 //! assert_eq!(off, plan_unscreened(&hyps, Some(1)));
 //! assert_eq!(off.run_order, ["h1"]);
 //! assert_eq!(off.deferred[0].id, "h2");
@@ -74,6 +74,33 @@ pub const MAX_SCREENED: usize = 16;
 pub const MAX_FIELD_CHARS: usize = 1200;
 /// Evaluator descriptions listed in a request.
 pub const MAX_EVALUATORS: usize = 12;
+/// Discipline names listed in a request.
+pub const MAX_DISCIPLINES: usize = 16;
+
+/// The disciplines every dream config carries, as compiled into the prompt by
+/// [`crate::compile`]. A repo adds its own via `extraDisciplines`.
+pub const BUILTIN_DISCIPLINES: [&str; 2] = [
+    "evaluation-is-not-promotion",
+    "witness-every-quantitative-claim",
+];
+
+/// The disciplines a host declares: the built-ins followed by the repo's
+/// `extraDisciplines`, in that order, without duplicates. Pass the result to
+/// [`screen_candidates`] so one screening serves any repo's declared rules.
+#[must_use]
+pub fn declared_disciplines(cfg: &dream_gate::config::DreamConfig) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for d in BUILTIN_DISCIPLINES
+        .iter()
+        .map(|d| (*d).to_string())
+        .chain(cfg.extra_disciplines.iter().cloned())
+    {
+        if !out.contains(&d) {
+            out.push(d);
+        }
+    }
+    out
+}
 
 /// Why a screen produced nothing. Every variant means "use the unscreened
 /// plan"; [`FallbackReason::as_str`] is the only thing to log.
@@ -177,6 +204,8 @@ pub struct HypothesisVerdict {
     pub confidence: f64,
     /// Probability that the proposed change addresses the stated problem.
     pub addresses: f64,
+    /// Probability that the proposed change violates a declared discipline.
+    pub violates: f64,
 }
 
 /// A built request over the screened head of the candidates.
@@ -184,15 +213,21 @@ pub struct HypothesisVerdict {
 pub struct ScreenRequest {
     head: Vec<Hypothesis>,
     evaluators: Vec<EvaluatorBrief>,
+    disciplines: Vec<String>,
 }
 
 impl ScreenRequest {
     /// Build a request from the first [`MAX_SCREENED`] hypotheses.
     #[must_use]
-    pub fn new(hypotheses: &[Hypothesis], evaluators: &[EvaluatorBrief]) -> Self {
+    pub fn new(
+        hypotheses: &[Hypothesis],
+        evaluators: &[EvaluatorBrief],
+        disciplines: &[String],
+    ) -> Self {
         Self {
             head: hypotheses.iter().take(MAX_SCREENED).cloned().collect(),
             evaluators: evaluators.iter().take(MAX_EVALUATORS).cloned().collect(),
+            disciplines: disciplines.iter().take(MAX_DISCIPLINES).cloned().collect(),
         }
     }
 
@@ -245,11 +280,25 @@ impl ScreenRequest {
                     }
                 }),
             );
+            questions.insert(
+                format!("violates_{i}"),
+                json!({
+                    "type": "noul",
+                    "instructions": format!(
+                        "The change described in `hypotheses.h{i}.proposed_change` goes against the intent of at least one rule listed in `disciplines`, for example by removing something deliberately kept, bypassing a required check, or asserting an unmeasured claim as fact."
+                    ),
+                    "criteria": {
+                        "true": "A named discipline is plainly contradicted by the change.",
+                        "false": "The change is consistent with every listed discipline, or none applies."
+                    }
+                }),
+            );
         }
         json!({
             "model": model,
             "state": {
                 "hypotheses": Value::Object(hyps),
+                "disciplines": self.disciplines.iter().map(|d| clip(d, 300)).collect::<Vec<_>>(),
                 "evaluators": self.evaluators.iter().map(|e| json!({
                     "name": clip(&e.name, 80),
                     "description": clip(&e.description, 300),
@@ -286,6 +335,12 @@ impl ScreenRequest {
                 let a = answers
                     .get(&format!("addresses_{i}"))
                     .ok_or(FallbackReason::Malformed)?;
+                let v = answers
+                    .get(&format!("violates_{i}"))
+                    .ok_or(FallbackReason::Malformed)?;
+                if v.get("type").and_then(Value::as_str) != Some("noul") {
+                    return Err(FallbackReason::Malformed);
+                }
                 if f.get("type").and_then(Value::as_str) != Some("score")
                     || a.get("type").and_then(Value::as_str) != Some("noul")
                 {
@@ -296,6 +351,7 @@ impl ScreenRequest {
                     fit: num(f, "score", 0.0, 3.0)?,
                     confidence: num(f, "confidence", 0.0, 1.0)?,
                     addresses: num(a, "noul", 0.0, 1.0)?,
+                    violates: num(v, "noul", 0.0, 1.0)?,
                 })
             })
             .collect()
@@ -375,6 +431,12 @@ pub struct ScreenPolicy {
     /// Defer a hypothesis only when `fit` is below this **and** `addresses`
     /// is below `addresses_floor`. `None` (default): never defer on judgement.
     pub defer_fit_below: Option<f64>,
+    /// A hypothesis whose `violates` probability is at or above this is ranked
+    /// behind every one that is below it.
+    pub violation_ceiling: f64,
+    /// Defer a hypothesis whose `violates` probability is at or above this
+    /// (a declared discipline is contradicted). `None` (default): never.
+    pub defer_violation_at: Option<f64>,
 }
 
 impl Default for ScreenPolicy {
@@ -383,6 +445,8 @@ impl Default for ScreenPolicy {
             min_confidence: None,
             addresses_floor: 0.5,
             defer_fit_below: None,
+            violation_ceiling: 0.5,
+            defer_violation_at: None,
         }
     }
 }
@@ -492,6 +556,7 @@ pub fn screen_candidates(
     screen: &dyn HypothesisScreen,
     hypotheses: &[Hypothesis],
     evaluators: &[EvaluatorBrief],
+    disciplines: &[String],
     budget: Option<usize>,
     policy: &ScreenPolicy,
 ) -> Screening {
@@ -508,7 +573,7 @@ pub fn screen_candidates(
         return fail(FallbackReason::InvariantBroken);
     }
 
-    let request = ScreenRequest::new(hypotheses, evaluators);
+    let request = ScreenRequest::new(hypotheses, evaluators, disciplines);
     let verdicts = match screen.screen(&request) {
         Ok(v) => v,
         Err(r) => return fail(r),
@@ -539,10 +604,10 @@ pub fn screen_candidates(
     // stable, so ties keep input order. The unscreened tail stays in place.
     let mut head: Vec<&HypothesisVerdict> = verdicts.iter().collect();
     head.sort_by(|a, b| {
-        let (ao, bo) = (
-            a.addresses >= policy.addresses_floor,
-            b.addresses >= policy.addresses_floor,
-        );
+        let ok = |v: &HypothesisVerdict| {
+            v.addresses >= policy.addresses_floor && v.violates < policy.violation_ceiling
+        };
+        let (ao, bo) = (ok(a), ok(b));
         bo.cmp(&ao).then(
             b.fit
                 .partial_cmp(&a.fit)
@@ -553,7 +618,8 @@ pub fn screen_candidates(
     let mut screened_out = Vec::new();
     for v in head {
         let off_target = v.addresses < policy.addresses_floor;
-        if policy.defer_fit_below.is_some_and(|t| v.fit < t) && off_target {
+        let violating = policy.defer_violation_at.is_some_and(|t| v.violates >= t);
+        if violating || (policy.defer_fit_below.is_some_and(|t| v.fit < t) && off_target) {
             screened_out.push(v.id.clone());
         } else {
             order.push(v.id.clone());
