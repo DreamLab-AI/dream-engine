@@ -128,6 +128,11 @@ not show uplift.
 - **Accept nothing automatically:** `ScreenPolicy::default()` records verdicts as annotations
   and changes neither order nor deferral. Set `min_confidence` (and `defer_fit_below` for
   deferral) from labelled data before relying on it.
+- **Repo disciplines (VF-04-S1-01):** `screen_candidates` takes the host's declared disciplines;
+  `declared_disciplines(&DreamConfig)` returns the two built-ins plus the repo's
+  `extraDisciplines`. Each hypothesis also gets a `violates` Noul against them. A violator is
+  ranked behind the rest, and deferred only if `defer_violation_at` is set. Existing
+  evaluators and the human landing gate are unchanged.
 - **What leaves, and where to:** nothing, from this workspace. It links no HTTP client; a host
   implements `HypothesisScreen` or passes a transport closure to `JsonScreen`. A request
   carries at most 16 hypotheses (statement, problem evidence and proposed-change text, 1,200
