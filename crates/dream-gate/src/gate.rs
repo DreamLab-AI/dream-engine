@@ -556,6 +556,7 @@ mod tests {
             deeps: vec![],
             timeout_secs: 900,
             test_format: None,
+            fixer: None,
         }
     }
 
