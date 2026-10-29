@@ -51,7 +51,7 @@ stamp and are recorded as resolved in CRT-01 and GAT-01. Governing documents:
 ## Checking and re-stamping
 
 ```bash
-# structure, citations at the stamped revision, mmdc grammar and the 4500px limit
+# structure, citations at the stamped revision, Pele grammar (vendored, no browser) and the 4500px limit
 node docs/diagrams/tools/diagram-index-gen.cjs docs/diagrams --check --cite-check --render
 # regenerate README index, COVERAGE.md and REGISTER.md
 node docs/diagrams/tools/diagram-index-gen.cjs docs/diagrams
