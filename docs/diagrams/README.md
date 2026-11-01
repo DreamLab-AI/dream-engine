@@ -7,23 +7,11 @@ product), around Mermaid diagrams whose every mechanism claim cites
 play and proposes no fixes; [REGISTER.md](REGISTER.md) is the input to later
 work, not a plan.
 
-**Stamped revision:** `0f6a66913c072603b6e29a80bdc67350737b9b21` (every topic's
-`verified_commit`). This is the revision of the **code** that was read. The
-commit that carries this re-stamp sits on top of it and changes only
-`docs/diagrams/`, so its own sha is deliberately not the stamp; check citations
-against the stamped sha, not against the tip of `main`. The corpus was first
-stamped at `4f5ac5324637b5e92eeceb00eab4bee2b94ae7eb` and re-verified at the
-stamp above after the audit hardening: the guard's resource bounds and
-shell-word evaluator reader, receipts validated against the frozen manifest,
-the `NightLock`, typed `JournalError`s, the night-level attempt budget, the
-collision-free `reset_night`, and the stdin `git apply`. The topics those
-touched (NIT-01, NIT-02, NIT-03, GAT-01, CRT-01, CRT-02) were re-read and
-rewritten against the new code, not just re-numbered; SEL-01 and SEL-02 cite
-files that did not change and were re-stamped mechanically. The three README and
-ADR drift items in the earlier register are resolved in the code at the new
-stamp and are recorded as resolved in CRT-01 and GAT-01. Governing documents:
-[`docs/concepts.md`](../concepts.md) and the records in
-[`docs/adr/`](../adr/README.md).
+**Stamped revision:** `815f963b1cbd6999e78144ce5475005ae1dd1d8e`, the source revision assessed on 1 November 2026. All eight topics and 24 panels were reviewed, including the unchanged selection sources. The carrying documentation commit is deliberately not the source pin. The previous pin was `0f6a66913c072603b6e29a80bdc67350737b9b21`.
+
+This pass adds the formatter stage, corrects gate branching and automerge refusal, and qualifies execution, recovery and receipt guarantees. It also records fingerprint aliases, normalisation limits and repeated-call streak behaviour. The register contains implementation findings, not completed fixes. Local fixtures demonstrate the fingerprint and streak findings; prior candidate, recovery and forge probes inform their corresponding topics. The dated estate report and retained evidence live in VisionFlow's `docs/estate-review/2026-11-01-dream-diagram-corpus.md`.
+
+Governing documents: [`docs/concepts.md`](../concepts.md) and [`docs/adr/`](../adr/README.md). Coverage is the eight-topic map, not every module or runtime integration in the engine.
 
 ## Doors
 
@@ -39,7 +27,7 @@ stamp and are recorded as resolved in CRT-01 and GAT-01. Governing documents:
 
 | Area | Topic | Subject |
 |---|---|---|
-| nightly | NIT-01 | the nightly loop, the run-state machine, the night-level terminal rule, journal errors, the night lock and the collision-free reset |
+| nightly | NIT-01 | the nightly loop, the run-state machine, the night-level terminal rule, journal errors, the night lock and the reset archive |
 | nightly | NIT-02 | replay capture and verify |
 | nightly | NIT-03 | the automerge decision tree |
 | gate | GAT-01 | verdict classes, `decide`, receipts validated against the manifest, guard-before-apply, guard resource bounds and evaluator-command paths, config-digest binding |
@@ -68,8 +56,7 @@ sed -i "s/^verified_commit: .*/verified_commit: $(git rev-parse HEAD)/" docs/dia
   && node docs/diagrams/tools/diagram-index-gen.cjs docs/diagrams --check --cite-check --render
 ```
 
-Do not run it blind: a topic whose cited files did not change may be re-stamped
-mechanically, but one whose files did change must be re-read first. The
+Do not run it blind: unchanged sources can still have incorrect diagrams or unsupported claims, so every panel needs semantic assessment before a new stamp. The
 generator is the copy shipped with the `diagrams-as-code` skill, unmodified.
 `rendered/` is gitignored and regenerable.
 
@@ -92,7 +79,7 @@ _8 topic files, 24 diagrams. Regenerate with_ `node docs/diagrams/tools/diagram-
 
 | ID | Topic | Diagrams | Kinds | Governing | ADRs |
 |----|-------|----------|-------|-----------|------|
-| GAT-01 | [Verdict classes and the decide flow](gate/01-verdict-classes-and-the-decide-flow.md) | 5 | flowchart, sequenceDiagram | [concepts.md](../../docs/concepts.md), [ADR-DE-003-protected-path-guard.md](../../docs/adr/ADR-DE-003-protected-path-guard.md) | ADR-DE-003 |
+| GAT-01 | [Verdict classes and the decide flow](gate/01-verdict-classes-and-the-decide-flow.md) | 5 | flowchart, sequenceDiagram | [concepts.md](../../docs/concepts.md), [ADR-DE-003-protected-path-guard.md](../../docs/adr/ADR-DE-003-protected-path-guard.md) | ADR-DE-003, ADR-DE-009 |
 
 ### crates
 
@@ -106,5 +93,5 @@ _8 topic files, 24 diagrams. Regenerate with_ `node docs/diagrams/tools/diagram-
 | ID | Topic | Diagrams | Kinds | Governing | ADRs |
 |----|-------|----------|-------|-----------|------|
 | SEL-01 | [Pairwise selection policies and the fault mapping](selection/01-pairwise-policies-and-the-fault-mapping.md) | 3 | flowchart | [ADR-DE-004-pairwise-selection-and-fingerprints.md](../../docs/adr/ADR-DE-004-pairwise-selection-and-fingerprints.md) | ADR-DE-004 |
-| SEL-02 | [The failure-fingerprint lifecycle](selection/02-failure-fingerprint-lifecycle.md) | 4 | flowchart, stateDiagram-v2, sequenceDiagram | [ADR-DE-004-pairwise-selection-and-fingerprints.md](../../docs/adr/ADR-DE-004-pairwise-selection-and-fingerprints.md) | ADR-DE-004 |
+| SEL-02 | [The failure-fingerprint lifecycle](selection/02-failure-fingerprint-lifecycle.md) | 4 | flowchart, sequenceDiagram | [ADR-DE-004-pairwise-selection-and-fingerprints.md](../../docs/adr/ADR-DE-004-pairwise-selection-and-fingerprints.md) | ADR-DE-004 |
 <!-- END GENERATED DIAGRAM INDEX -->

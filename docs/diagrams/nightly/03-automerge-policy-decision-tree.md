@@ -10,7 +10,7 @@ sources:
   - crates/dream-core/src/runstate.rs
   - crates/dream-core/src/seams.rs
   - docs/adr/ADR-DE-006-automerge-is-an-option.md
-verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
+verified_commit: 815f963b1cbd6999e78144ce5475005ae1dd1d8e
 ---
 ## For developers
 
@@ -24,12 +24,7 @@ automerge (`crates/dream-core/src/persist.rs:291`).
 
 ## For the business
 
-Out of the box, nothing merges itself: each morning there is a draft change
-waiting for a person. A repository can opt in to unattended merges, but only
-if it already has branch protection with required checks, only for ordinary
-changes (never to the engine itself) and only if a clean draft was opened. If
-the engine cannot read the protection rules for any reason, it treats that as
-no, not as yes.
+Automerge defaults off. A host may publish a draft and opt in to requesting automerge when the policy accepts its supplied facts. The policy refuses unknown or empty required-check lists and recognised engine repositories. It does not establish that checks passed, the PR head matches the evaluated tree, or every renamed engine fork is recognised.
 
 ## NIT-03.1 The decision tree
 
@@ -54,7 +49,7 @@ flowchart TB
 **Why it is this way.** `gh pr merge --auto` merges at once when nothing is
 required, so an empty list, a 404 and any API error are refusals
 (`crates/dream-core/src/automerge.rs:13`). The self-referential test has
-three parts so the engine never merges changes to itself: the slug, a config
+three heuristics for recognising engine targets: the slug, a config
 whose protected set covers the gate crates, and a checkout that contains them
 (`crates/dream-core/src/automerge.rs:136`, `crates/dream-core/src/automerge.rs:144`).
 The flag lives in the protected config, so a candidate patch cannot switch it
@@ -69,20 +64,24 @@ sequenceDiagram
     participant P as publish
     participant F as Forge
     participant D as automerge decide
-    P->>F: publish_draft, persist.rs line 305
+    P->>F: publish_draft, persist.rs line 298
     F-->>P: pushed and PR url
-    P->>P: draft clean means pushed with a url, persist.rs line 306
+    P->>P: draft clean means pushed with a url, persist.rs line 299
     alt auto_merge on and draft clean
-        P->>F: pr_base_branch of the PR, persist.rs line 314
+        P->>F: pr_base_branch of the PR, persist.rs line 307
         F-->>P: actual base branch
-        P->>F: required_status_checks of that branch only if it matches, persist.rs line 316
-    else flag off
+        P->>F: required_status_checks of that branch only if it matches, persist.rs line 309
+    else flag off or draft not clean
         P->>P: required checks left unsupported, branch protection never queried
     end
-    P->>D: decide with the gathered facts, persist.rs line 329
-    D-->>P: Allowed
-    P->>F: enable_automerge, persist.rs line 332
-    F-->>P: ok or error kept in automerge_error
+    P->>D: decide with the gathered facts, persist.rs line 322
+    D-->>P: Disabled, Refused or Allowed
+    alt Allowed with PR URL
+        P->>F: enable_automerge, persist.rs line 325
+        F-->>P: ok or error kept in automerge_error
+    else Disabled or Refused
+        P->>P: no enable request
+    end
 ```
 
 **What it shows.** With the flag off no protection query is made at all
@@ -96,8 +95,7 @@ treats as a refusal (`crates/dream-core/src/seams.rs:377`).
 touching `GhForge` is a dyn-safety check (`crates/dream-core/src/seams.rs:647`),
 so the protection parsing, the draft-to-ready transition and the squash
 request have only been exercised against fakes.
-**Debt:** the publish outcome is not reconciled. `Persisted` is journalled
-before the forge request and nothing records the push, the pull request URL or
+**Debt:** the publish outcome is not reconciled. The host contract requires journalling `Persisted` before the forge request and nothing records the push, the pull request URL or
 the ledger commit afterwards, so the delivery guarantee is at-most-once: a
 crash after `Persisted` can lose a publish, whether before the pull request
 exists or after it exists but before its URL or ledger row is recorded, and the
@@ -106,6 +104,5 @@ restart finalises the night to `Complete` without asking the forge
 Recovery is the operator's `reset_night`, which archives the journal so the
 night runs again; the night key `(repo, date, night_id)` is the idempotency key
 for any future reconciliation (`crates/dream-core/src/runstate.rs:441`).
-**Open:** a forge failure after `Allowed` is recorded in `automerge_error` and
-the pull request stays a draft (`crates/dream-core/src/persist.rs:327`); there
-is no retry.
+**Debt:** `GhForge` runs `gh pr ready` before `gh pr merge --auto --squash`. If the second command fails, the PR can remain ready while `automerge_error` reports failure; no rollback or retry restores draft state (`crates/dream-core/src/seams.rs:469`).
+**Debt:** `draft_clean` means only `pushed && pr_url.is_some()`. It does not validate an empty URL, remote head or PR identity; required-check names do not prove check success (`crates/dream-core/src/persist.rs:299`).

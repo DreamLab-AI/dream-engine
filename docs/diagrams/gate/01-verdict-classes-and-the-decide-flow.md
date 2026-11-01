@@ -3,7 +3,7 @@ id: GAT-01
 title: Verdict classes and the decide flow
 area: gate
 governing: [docs/concepts.md, docs/adr/ADR-DE-003-protected-path-guard.md]
-adrs: [ADR-DE-003]
+adrs: [ADR-DE-003, ADR-DE-009]
 sources:
   - crates/dream-gate/src/gate.rs
   - crates/dream-gate/src/pertest.rs
@@ -15,15 +15,15 @@ sources:
   - docs/concepts.md
   - README.md
   - docs/adr/ADR-DE-003-protected-path-guard.md
-verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
+  - docs/adr/ADR-DE-009-candidates-are-formatted-before-the-gate.md
+verified_commit: 815f963b1cbd6999e78144ce5475005ae1dd1d8e
 ---
 ## For developers
 
 The gate is a pure function of a frozen manifest, typed receipts and a strict
 parse of the model's verdict (`crates/dream-gate/src/gate.rs:8`). This topic
 covers how a veto gets its class, how classes become a verdict, and the order
-of the two protected-path checks around the patch: the guard before apply and
-the re-check inside `decide`. After reading it you can say which verdict a
+of the protected-path checks before application, after formatting and inside `decide`. After reading it you can say which verdict a
 given failure produces and why a guard refusal can never be diluted into a
 harness fault.
 
@@ -34,9 +34,7 @@ maps them to `BLOCKED-ENV`, `REJECT` and `INCONCLUSIVE`
 (`crates/dream-gate/src/gate.rs:17`), which matches the concepts document
 (`docs/concepts.md:34`).
 
-Two things changed after the first stamp. The gate no longer believes what a
-receipt says about itself: which evaluators are required, and what command each
-one ran, come from the frozen manifest and the receipts are checked against it
+Receipt and policy checks include the following controls. The gate validates selected receipt identity fields: which evaluators are required, and each expected command, come from the frozen manifest and the receipts are checked against it
 (`crates/dream-gate/src/gate.rs:197`). And the guard now has resource bounds, a
 shell-word reader for evaluator commands, and a policy builder that refuses a
 command it cannot read (`crates/dream-gate/src/guard.rs:182`,
@@ -49,10 +47,7 @@ was bad" teaches the team to distrust it. The class split keeps those apart: a
 broken test runner is recorded as an environment problem and does not count
 against the repository, while a change that touches the files that decide
 whether it passes is rejected outright. A model that claims success but ships
-no patch is not trusted either; it is recorded as inconclusive. A test result
-that has been tampered with, or that was produced by a different command from
-the one agreed at the start of the night, is treated as a broken test machine,
-not as a pass. A patch that is absurdly large, or an evaluator command the
+no patch is not trusted either; it is recorded as inconclusive. Receipt command identities are checked against the frozen manifest. The gate still trusts caller-supplied typed outcomes; it does not authenticate execution or independently bind the receipt to the evaluated tree. A patch that is absurdly large, or an evaluator command the
 engine cannot read with certainty, stops the night rather than being guessed at.
 
 ## GAT-01.1 From evaluator outcome to veto class
@@ -71,7 +66,7 @@ flowchart TB
     U["Unproven veto<br/>no patch, refused patch, unreadable verdict<br/>gate.rs:78"] --> IC["INCONCLUSIVE"]
 ```
 
-**What it shows.** Each required evaluator outcome maps to exactly one veto
+**What it shows.** When receipt grading runs, each non-passing required evaluator outcome maps to one veto
 class in `veto_for` (`crates/dream-gate/src/gate.rs:121`): missing, silent,
 blocked and timed-out are harness faults; a non-zero exit and an explicit
 failure marker are evidence.
@@ -87,28 +82,23 @@ always give the same decision (`crates/dream-gate/src/gate.rs:8`).
 
 ```mermaid
 flowchart TB
-    VR["validated_receipts from the frozen manifest<br/>gate.rs:389"] --> A
-    A["strict verdict parse<br/>gate.rs:396"] --> B{"claimed ACCEPT?<br/>gate.rs:405"}
-    B -->|"unreadable"| U1["unproven veto, subject verdict<br/>gate.rs:407"]
-    B -->|"yes"| C{"candidate state<br/>gate.rs:418"}
-    C -->|"Applied"| G["guard::check on the patch text again<br/>gate.rs:420"]
-    G -->|"violation"| GV["evidence veto and tree_trusted false<br/>gate.rs:421"]
-    C -->|"Protected"| PV["evidence veto protected-path<br/>gate.rs:425"]
-    C -->|"NoPatch, Refused, NotAttempted"| UV["unproven veto<br/>gate.rs:432"]
-    C -->|"DidNotApply"| HV["harness veto<br/>gate.rs:441"]
-    G -->|"clean"| T{"tree_trusted?<br/>gate.rs:461"}
-    T -->|"yes"| R["grade validated receipts<br/>gate.rs:463"]
-    R --> D["config digest differs from manifest?<br/>harness veto<br/>gate.rs:471"]
-    D --> PT["per-test vetoes, additive<br/>gate.rs:486"]
-    PT --> V{"verdict<br/>gate.rs:489"}
-    GV --> V
-    PV --> V
-    UV --> V
-    HV --> V
-    V -->|"no veto"| ACC["ACCEPT"]
-    V -->|"any harness veto"| BE["BLOCKED-ENV<br/>gate.rs:502"]
-    V -->|"else any evidence veto"| RJ["REJECT<br/>gate.rs:504"]
-    V -->|"else"| INC["INCONCLUSIVE<br/>gate.rs:506"]
+    VR["Validate receipt identities against manifest<br/>gate.rs:389"] --> C["Read strict verdict; add unproven veto if unreadable<br/>gate.rs:396"]
+    C --> A{"claimed ACCEPT?<br/>gate.rs:405"}
+    A -->|yes| S{"candidate state<br/>gate.rs:418"}
+    S -->|Applied| G["Recheck patch; violation makes tree untrusted<br/>gate.rs:420"]
+    S -->|Protected| E["Evidence veto; tree untrusted"]
+    S -->|DidNotApply| H["Harness veto; tree untrusted"]
+    S -->|NoPatch, Refused, NotAttempted| U["Unproven veto; tree untrusted"]
+    A -->|no| T
+    G --> T
+    E --> T
+    H --> T
+    U --> T
+    T{"tree trusted? Applied unless recheck refused<br/>gate.rs:461"} -->|yes| R["Grade validated receipts; optional config digest if ACCEPT;<br/>add per-test vetoes<br/>gate.rs:463"]
+    T -->|no| V
+    R --> V{"claimed ACCEPT?<br/>gate.rs:489"}
+    V -->|no| M["Keep parsed model verdict; unreadable is INCONCLUSIVE<br/>gate.rs:493"]
+    V -->|yes| P["No veto: ACCEPT; else Harness: BLOCKED-ENV;<br/>else Evidence: REJECT; else INCONCLUSIVE<br/>gate.rs:500"]
 ```
 
 **What it shows.** `decide` collects vetoes in steps, then picks the verdict
@@ -123,12 +113,12 @@ so a guard veto can never be diluted into `BLOCKED-ENV`
 (`crates/dream-gate/src/gate.rs:500`). The digest check runs only after the
 guard has said the patch did not touch the config, so drift is the harness and
 not the candidate (`crates/dream-gate/src/gate.rs:467`). The receipts graded
-in step 3 are the validated set, so a forged receipt is already a `Missing`
-harness veto by then (`crates/dream-gate/src/gate.rs:389`).
+in step 3 are the validated set, so a receipt that fails those identity checks becomes `Missing` and yields a harness veto (`crates/dream-gate/src/gate.rs:389`).
+**Debt:** candidate config comparison is optional: an absent `candidate_config_digest` skips it (`crates/dream-gate/src/gate.rs:470`).
 **Invariant:** acceptance needs a claimed ACCEPT and an empty veto list
 (`crates/dream-gate/src/gate.rs:489`).
 Resolved since the earlier stamp: the README no longer lists `dream-gate` as
-planned; its crate table describes the built gate (`README.md:57`).
+planned; its crate table describes the built gate (`README.md:77`).
 
 ## GAT-01.3 Guard before apply, recheck inside the gate
 
@@ -139,61 +129,33 @@ sequenceDiagram
     participant P as persist build
     participant R as EvaluatorRunner
     participant G as gate decide
-    H->>C: patch, policy from baseline config
-    C->>C: refuse a binary delete, candidate.rs:237
-    C->>C: guard check before any git command, candidate.rs:245
-    C->>P: prepare and build_branch_worktree, candidate.rs:250
-    P->>P: guard check again, persist.rs:139
-    P->>P: git apply reads the verified bytes on stdin, persist.rs:176
-    P-->>C: tree hash and applied patch
-    C->>R: optional candidate build command, candidate.rs:296
-    C->>R: required evaluators on the candidate tree, candidate.rs:300
-    C-->>H: Attempt with state and receipts
-    H->>G: decide with state, receipts, config digest
-    G->>G: guard check once more on the applied text, gate.rs:420
+    H->>C: patch and baseline policy
+    C->>C: binary-delete refusal and guard, candidate.rs line 482
+    C->>C: delete stale branch, candidate.rs line 493
+    C->>P: prepare and build_branch_worktree, candidate.rs line 494
+    P->>P: guard before worktree creation, persist.rs line 139
+    P->>P: git apply original bytes on stdin
+    opt original strategies fail and normalisation changes text
+        P->>P: guard normalised text before applying, persist.rs line 196
+    end
+    P-->>C: prepared tree and applied patch
+    C->>C: optional configured formatter on control host, candidate.rs line 527
+    C->>C: optional relocation, candidate.rs line 528
+    C->>R: optional build then required evaluators, candidate.rs line 547
+    C-->>H: Attempt with prepared hash, patch and receipts
+    H->>G: state, receipts, policy and optional config digest
+    opt report claims ACCEPT and candidate is Applied
+        G->>G: recheck recorded patch text, gate.rs line 420
+    end
     G-->>H: GateDecision
 ```
 
-**What it shows.** The patch is checked three times, at three layers, and the
-first two are before any git command or build can run.
-**Why it is this way.** The order is refuse, guard, worktree, build, evaluate
-(`crates/dream-core/src/candidate.rs:13`). `build_branch_worktree` checks
-again on the normalised text because normalisation synthesises headers and
-could name a path the original did not (`crates/dream-core/src/persist.rs:127`).
-The gate's own re-check is the second line for callers who skipped the first
-(`crates/dream-gate/src/gate.rs:367`), and `GateContext` makes the policy
-mandatory so the re-check cannot be silently absent
-(`crates/dream-gate/src/gate.rs:298`). The policy is built from the baseline
-config, so a patch cannot weaken the rules it is judged by
-(`crates/dream-core/src/candidate.rs:141`). The worktree step feeds the
-verified patch to `git apply` on standard input, so no patch file is ever
-written to the temp directory and a pre-planted symlink at the old predictable
-name is never followed (`crates/dream-core/src/git.rs:23`,
-`crates/dream-core/src/persist.rs:168`).
-**Debt:** the optional candidate build command and the evaluators execute the
-candidate's own scripts on the evaluation host through the runner
-(`crates/dream-core/src/candidate.rs:296`). The guard protects the evaluator
-files named in policy, but a candidate-added build script still runs with the
-runner's privileges; isolation is the host's job.
-**Open:** a patch the guard cannot parse with certainty (malformed, symlink,
-binary, escape, too large) ends as `INCONCLUSIVE` or `REJECT` depending on
-which layer sees it. Before apply, `candidate::run` maps `Protected` to the
-evidence state but every other violation to `Refused`, which is unproven
-(`crates/dream-core/src/candidate.rs:207`, `crates/dream-gate/src/gate.rs:437`).
-The gate's own re-check of an `Applied` patch maps every violation other than
-`Protected` to an evidence veto, `patch-guard` (`crates/dream-gate/src/gate.rs:353`).
-Both are current behaviour, and the guard's own docs tell callers to treat the
-non-protected violations as `REJECT`-class for consistent verdicts
-(`crates/dream-gate/src/guard.rs:1160`). Through `candidate::run` a refused patch therefore ends `INCONCLUSIVE`; the
-`REJECT` mapping is reached only when an `Applied` patch fails the gate's
-re-check, that is a caller that skipped the pre-apply check or a replay under a
-changed policy.
-**Debt:** the candidate worktree path is predictable, `dream-wt-<8 hex of the
-repository path digest>-<branch>` under the shared temp directory, and any
-existing directory at that path is removed before use
-(`crates/dream-core/src/persist.rs:142`). On a multi-user host another local
-user can pre-create or race that path; the patch file that used to sit beside
-it is gone, but the worktree directory is not yet unpredictable.
+**What it shows.** The current order includes formatting before relocation, build and evaluation. The first guard precedes branch deletion; the persist-layer guard precedes its worktree creation. Normalised fallback text is checked separately (`crates/dream-core/src/candidate.rs:469`, `crates/dream-core/src/persist.rs:196`).
+**Why it is this way.** A protected input must stop before candidate commands run. The gate also checks supplied patch text when acceptance is claimed (`crates/dream-gate/src/gate.rs:418`). The caller must construct policy from the correct frozen baseline; the type alone does not prove that provenance (`crates/dream-gate/src/gate.rs:295`).
+**Debt:** the formatter executes on the control host before relocation, and build/evaluator commands execute with runner privileges. Worktree isolation is not an execution sandbox (`crates/dream-core/src/candidate.rs:71`, `crates/dream-core/src/candidate.rs:527`).
+**Debt:** the returned tree hash is prepared before build/evaluation; commands can mutate the tree afterwards without a final hash check in `run` (`crates/dream-core/src/candidate.rs:547`).
+**Open:** pre-apply non-protected guard failures become `Refused` and therefore unproven; the gate's recheck of an `Applied` patch makes those failures evidence vetoes. The layers intentionally remain described separately (`crates/dream-core/src/candidate.rs:451`, `crates/dream-gate/src/gate.rs:344`).
+**Debt:** the worktree path is predictable under the shared temporary directory and an existing directory is removed before use (`crates/dream-core/src/persist.rs:142`).
 
 ## GAT-01.4 Receipts are checked against the frozen manifest
 
@@ -228,6 +190,7 @@ not require is kept but forced advisory, so it cannot promote itself into the
 veto set either (`crates/dream-gate/src/gate.rs:208`). The forged case is a
 harness fault and so `BLOCKED-ENV`, not `REJECT`, which keeps a tampered
 environment from being counted as evidence against the repository.
+**Debt:** passing identity checks leaves the supplied typed outcome unchanged; raw streams are reclassified by replay verification, not this function. Neither path attests real command execution (`crates/dream-gate/src/gate.rs:218`, `crates/dream-core/src/replay.rs:467`).
 **Invariant:** the set of required evaluators and each command's identity is
 decided by the manifest alone (`crates/dream-gate/src/gate.rs:197`).
 **Debt:** `complete_receipts` remains for callers holding only identities and
@@ -258,12 +221,10 @@ flowchart TB
 ```
 
 **What it shows.** Two things the guard now does before it trusts a patch or a
-policy. The patch is refused as `TooLarge` before it is split, on total size,
-header line length and file count, with defaults of 4 MiB, 2000 files and
+policy. Total patch size is bounded before line parsing; header line length and file count are bounded during parsing, with defaults of 4 MiB, 2000 files and
 8192-byte header lines (`crates/dream-gate/src/guard.rs:192`). And the policy
 for a night is built from the frozen evaluator commands read as shell words:
-the files they name become protected, and a command that cannot be read with
-certainty is an error rather than an approximation.
+the files they name become protected, and unsupported quoting or command substitution returns an error. This is a shell-word parser, not a complete shell dependency analysis.
 **Why it is this way.** The size check runs before the patch is split into lines, and the
 unquoted `diff --git` line is split in linear time without allocating
 (`crates/dream-gate/src/guard.rs:888`). Any bound
@@ -285,8 +246,7 @@ tree, errors the same way, and records the result so a replay protects exactly
 what the live run did (`crates/dream-core/src/replay.rs:143`,
 `crates/dream-core/src/replay.rs:173`).
 **Invariant:** a protected-path policy is a pure function of the frozen
-manifest, the config bytes and the recorded extras, so the live guard, the gate
-and a later replay agree (`crates/dream-core/src/replay.rs:173`).
+manifest, the config bytes and the recorded extras, so equal inputs reconstruct equal policy; a host must supply the same inputs to the live guard and replay (`crates/dream-core/src/replay.rs:173`).
 **Tension:** command substitution is refused wherever it is not in single
 quotes, so a legitimate evaluator such as `cargo test $(nproc)` stops the night
 as `UnsupportedCommand` (`crates/dream-gate/src/guard.rs:557`); the rule is

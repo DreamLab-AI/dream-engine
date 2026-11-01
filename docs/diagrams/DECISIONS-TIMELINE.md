@@ -3,7 +3,7 @@
 The register's sibling view: the decision records in the order they were
 written, and the code changes that moved a decision after it was recorded.
 Hand-written; the generator does not produce it. Dates are commit dates from
-`git log` up to the stamped revision `0f6a669`.
+`git log` up to the source revision `815f963` assessed on 1 November 2026.
 
 ## 2026-10-15
 
@@ -21,6 +21,14 @@ Hand-written; the generator does not produce it. Dates are commit dates from
 | 20:23 | `e089375` | The guard bounds patch size, file count and header lines (`TooLarge`), reads evaluator commands as shell words, and refuses commands it cannot read when frozen (GAT-01.5). | — |
 | 20:23 | `63143d9` | Evaluator-named files are resolved against the repository into recorded `PolicyExtras`, so replay protects what the live night did (GAT-01.5, NIT-02.1). | — |
 | 20:24 | `029a711` | The verified patch is fed to `git apply` on stdin; no predictable patch file in the temp dir (GAT-01.3). | The worktree directory path is still predictable (GAT-01.3 debt). |
-| 20:27 | `1026013` | Typed journal errors, night-level attempt budget, `NightLock`, collision-free two-step `reset_night`; MSRV 1.89 (NIT-01). | The MSRV is declared but no CI job builds on it (CRT-01.2 debt). |
+| 20:27 | `1026013` | Typed journal errors, night-level attempt budget, `NightLock`, non-overwriting two-step `reset_night`; MSRV 1.89 (NIT-01). | The MSRV is declared but no CI job builds on it (CRT-01.2 debt). |
 | 20:28 | `c93897f` | ADR-DE-007 records the hardening and the at-most-once publish limit (NIT-01.1, NIT-03.2). | The limit stands: a publish can be lost, not repeated. |
-| 20:36 | `d86aa4a` | Test that no patch file reaches the temp dir; ADR wording on the idempotency key corrected. | `0f6a669` (20:39) makes the assertion real. This is the stamped revision. |
+| 20:36 | `d86aa4a` | Test that no patch file reaches the temp dir; ADR wording on the idempotency key corrected. | `0f6a669` (20:39) makes the assertion real. This was the previous source pin. |
+
+## Later source and audit checkpoints
+
+| Date | Commit | Change | Audit disposition |
+|---|---|---|---|
+| 2026-10-17 | `8b59c04` | ADR-DE-008 and requested-source prioritisation, core 0.2.0. | Source gathering also calls the host LLM; CRT-02 corrects the former host-only claim. Source-budget and denylist limits are recorded in the estate recovery assessment. |
+| 2026-10-22 | `a3f4938` | ADR-DE-009 and candidate formatting before evaluation, core 0.3.0. | GAT-01.3 now includes formatting on the control host before relocation. A worktree is not a command sandbox. |
+| 2026-11-01 review | `815f963` source pin | Eight topics and all 24 panels source-assessed. | Corrected recovery, replay, receipt, licence and automerge claims. New fixtures reproduce fingerprint separator aliases, normalisation limits, unchecked manifest fields and repeated-call streaks. These findings remain open implementation work. |

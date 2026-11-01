@@ -11,7 +11,7 @@ sources:
   - crates/dream-gate/src/pertest.rs
   - crates/dream-core/src/testfmt.rs
   - docs/adr/ADR-DE-004-pairwise-selection-and-fingerprints.md
-verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
+verified_commit: 815f963b1cbd6999e78144ce5475005ae1dd1d8e
 ---
 ## For developers
 
@@ -30,8 +30,7 @@ policy `Reject` to an evidence veto and a fault to a harness veto.
 When a nightly change is judged on a test suite, a flaky test server must not
 make a good change look bad, nor a bad change look good. The selection rules
 count only comparisons where both sides produced a real result, say so when
-too many did not, and never let a change that breaks a previously passing
-test through on the strength of other wins.
+too many did not, and apply a no-regression rule to the evidence supplied. That protection depends on complete evidence with unique test identities; duplicate names currently overwrite earlier cases.
 
 ## SEL-01.1 Tally and the inconclusive guard
 
@@ -46,7 +45,7 @@ flowchart TB
     W --> G
     L --> G
     TI --> G
-    G -->|"fault share above 0.5, or fewer than 1 comparable"| INC["Inconclusive, before the rule is consulted<br/>policy.rs:39"]
+    G -->|"default: fault share above 0.5, or fewer than 1 comparable"| INC["Inconclusive, before the rule is consulted<br/>policy.rs:39"]
     G -->|ok| RULE["the policy rule decides Select or Reject<br/>policy.rs:40"]
 ```
 
@@ -70,7 +69,7 @@ flowchart TB
     EV --> WL["WilsonLower: select when the lower bound of the win rate is above 0.5<br/>policy.rs:305"]
     EV --> NR["NoRegression: reject any pairing that passed on baseline and fails on candidate<br/>policy.rs:364"]
     EV --> FL["Floor: candidate-only, every candidate score at or above the floor<br/>policy.rs:156"]
-    EV --> TD["TrainDev: train selects and held-out does not reject<br/>policy.rs:435"]
+    EV --> TD["TrainDev: both train and held-out select<br/>policy.rs:435"]
     TD -->|"train policy"| M
     TD -->|"dev policy, usually"| NR
 ```
@@ -104,9 +103,9 @@ flowchart TB
     ST -.->|"policy Inconclusive"| DROP["adds no veto at all<br/>pertest.rs:304"]
 ```
 
+**Debt:** each side is collected into a map keyed only by test name; the last duplicate wins and can hide a fault or regression (`crates/dream-gate/src/pertest.rs:208`).
 **What it shows.** Per-test evidence is additive: it can only add vetoes
-(`crates/dream-gate/src/pertest.rs:12`). Invalid options are a harness veto,
-not a silently dropped policy (`crates/dream-gate/src/pertest.rs:190`).
+(`crates/dream-gate/src/pertest.rs:12`). Invalid options are a harness veto when the test map is non-empty; an empty map returns before option validation (`crates/dream-gate/src/pertest.rs:190`).
 **Why it is this way.** A statistical test on a handful of cases proves
 nothing, so below `min_cases` the evaluator counts as one case
 (`crates/dream-gate/src/pertest.rs:20`).

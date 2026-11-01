@@ -9,7 +9,7 @@ sources:
   - crates/dream-gate/src/pertest.rs
   - crates/dream-core/src/streak.rs
   - docs/adr/ADR-DE-004-pairwise-selection-and-fingerprints.md
-verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
+verified_commit: 815f963b1cbd6999e78144ce5475005ae1dd1d8e
 ---
 ## For developers
 
@@ -26,46 +26,41 @@ evidence veto (`crates/dream-gate/src/pertest.rs:253`).
 
 The question the nightly engine needs to answer is not "is anything red" but
 "did this change cause a new kind of red". A suite may already be failing on
-a known problem. Giving each failure a stable name lets the engine tell the
-known failure, still there, from a brand new one that the change introduced.
+a known problem. Normalised names help group recurring failures. They are heuristic identities: different causes can collapse to the same name, so this alone cannot prove which change caused a failure.
 
 ## SEL-02.1 From text to identity
 
 ```mermaid
 flowchart TB
     OBS["Observation: task, stage, cause text<br/>lib.rs:376"] --> NC["normalize_cause<br/>lib.rs:177"]
-    NC --> P["paths become path placeholder"]
-    NC --> I["long opaque ids become id placeholder"]
-    NC --> D["digit runs become number placeholder"]
-    NC --> WS["collapse whitespace, truncate to 200 chars<br/>lib.rs:190"]
+    NC --> P["absolute paths with at least two segments become path placeholder"]
+    P --> I["ASCII identifier runs of at least 16 characters become id placeholder"]
+    I --> D["ASCII digit runs become number placeholder"]
+    D --> WS["collapse whitespace, truncate to 200 chars<br/>lib.rs:190"]
     WS --> H["SHA-256 over task, 0x1F, stage, 0x1F, cause<br/>lib.rs:357"]
     H --> FP["first 8 bytes, 16 hex characters<br/>lib.rs:365"]
 ```
 
 **What it shows.** Normalisation order is paths, ids, digits, whitespace, then
 truncation (`crates/failure-fingerprint/src/lib.rs:190`).
-**Why it is this way.** A separator byte between fields prevents two different
-splits of the same characters from colliding
-(`crates/failure-fingerprint/src/lib.rs:360`). As a side effect, long opaque
-identifiers such as tokens never reach a persisted cause
-(`crates/failure-fingerprint/src/lib.rs:15`).
+**Why it is this way.** Separators distinguish ordinary concatenations and normalisation removes selected volatile text (`crates/failure-fingerprint/src/lib.rs:357`). Neither operation validates caller-supplied names or sanitises arbitrary credentials.
+**Debt:** the unit separator is accepted inside task and stage names. `alpha + separator + beta / gamma` and `alpha / beta + separator + gamma` hash identical bytes; this deterministic alias does not require a SHA-256 collision (`crates/failure-fingerprint/src/lib.rs:229`, `crates/failure-fingerprint/src/lib.rs:357`).
+**Debt:** short or punctuation-separated credential-shaped strings survive. Numeric causes and suffixes beyond 200 characters also deliberately collapse. Normalisation is neither a secret filter nor a semantic root-cause identifier (`crates/failure-fingerprint/src/lib.rs:190`).
 **Tension:** the identity is 64 bits (`crates/failure-fingerprint/src/lib.rs:263`).
-For a single suite the chance of an accidental collision is negligible, but a
-collision between a new failure and a baseline failure would classify the new
-one as `Persisting` and let it past the gate's new-failure veto, with no signal.
-ADR-DE-004 lists a collision seen in practice as its review trigger.
+Accidental digest collision risk grows with the number of identities. Encoding aliases and normalisation merges are separate risks that do not require a random digest collision. A match against a baseline failure suppresses this particular new-fingerprint veto; other gate checks can still reject the candidate. ADR-DE-004 lists a collision seen in practice as its review trigger.
 
 ## SEL-02.2 New, persisting, fixed
 
 ```mermaid
-stateDiagram-v2
-    [*] --> New : observed, absent from previous manifest, count 1
-    New --> Persisting : observed again next step, count plus 1
-    Persisting --> Persisting : observed again, count plus 1
-    New --> Fixed : not observed next step
-    Persisting --> Fixed : not observed next step
-    Fixed --> [*] : dropped from the next manifest
-    Fixed --> New : observed again later, count restarts at 1
+flowchart TB
+    O["Normalised observations<br/>lib.rs:560"] --> D["Deduplicate by fingerprint, first wins<br/>lib.rs:562"]
+    D --> Q{"Fingerprint in previous manifest?<br/>lib.rs:574"}
+    Q -->|no| N["New: count 1<br/>first and last step supplied"]
+    Q -->|yes| P["Persisting: saturating count plus 1<br/>keep first step, use supplied last step"]
+    OLD["Previous records absent now<br/>lib.rs:584"] --> F["Fixed: return previous record unchanged"]
+    N --> NEXT["Next manifest:<br/>observed records only<br/>lib.rs:590"]
+    P --> NEXT
+    F --> DROP["Excluded from next manifest<br/>a later return is New"]
 ```
 
 **What it shows.** The lifecycle `advance` implements
@@ -78,8 +73,8 @@ record returned unchanged and absent from the next manifest
 de-duplicated, first wins (`crates/failure-fingerprint/src/lib.rs:562`). A
 failure that disappears and returns is `New` again with its count reset
 (`crates/failure-fingerprint/src/lib.rs:782`).
-**Invariant:** the persisted cause is always the normalised text, never the raw
-text (`crates/failure-fingerprint/src/lib.rs:410`).
+**Invariant:** records produced by `advance` normalise the observation cause (`crates/failure-fingerprint/src/lib.rs:560`).
+**Debt:** public record fields and `Manifest::from_json` permit unnormalised causes, inconsistent fingerprints and arbitrary step values. The reader checks the kind and JSON shape, not these semantic invariants (`crates/failure-fingerprint/src/lib.rs:467`, `crates/failure-fingerprint/src/lib.rs:514`).
 **Debt:** `count` is the previous count plus one and not a strict consecutive
 count; callers who need strictness check `prev.step + 1 == step`
 (`crates/failure-fingerprint/src/lib.rs:539`).
@@ -90,11 +85,11 @@ count; callers who need strictness check `prev.step + 1 == step`
 sequenceDiagram
     participant PT as pertest
     participant FF as advance
-    PT->>FF: advance empty manifest with baseline failures, step 1, pertest.rs line 253
+    PT->>FF: baseline failures, step 1, pertest.rs line 253
     FF-->>PT: baseline manifest
-    PT->>FF: advance baseline manifest with candidate failures, step 2, pertest.rs line 254
+    PT->>FF: candidate failures, step 2, pertest.rs line 254
     FF-->>PT: classification with new, persisting, fixed
-    PT->>PT: any new record gives an evidence veto, pertest.rs line 255
+    PT->>PT: new records add an evidence veto
     Note over PT,FF: persisting and fixed records never veto
 ```
 
@@ -108,8 +103,8 @@ not penalised for its known failures (`crates/dream-gate/src/pertest.rs:6`).
 
 ```mermaid
 flowchart TB
-    N["night ends BLOCKED-ENV with harness-class vetoes<br/>streak.rs:68"] --> A["advance_failures: only harness vetoes become observations<br/>streak.rs:74"]
-    L["per-repo manifest file in the shared state directory<br/>streak.rs:94"] --> R["record_night loads it, corrupt or absent means an empty manifest<br/>streak.rs:124"]
+    N["recorded verdict and vetoes, any verdict<br/>streak.rs:68"] --> A["advance_failures: only harness vetoes become observations<br/>streak.rs:74"]
+    L["per-repo manifest file in the shared state directory<br/>streak.rs:94"] --> R["record_night loads it; any read error or corrupt JSON starts empty<br/>streak.rs:124"]
     R --> A
     A --> C{"classification"}
     C -->|"BLOCKED-ENV, some persisting, none new, none fixed<br/>streak.rs:76"| ST["harness stuck notice<br/>streak.rs:136"]
@@ -123,7 +118,5 @@ escalated to a person and does not just look like a quiet night.
 evidence against a candidate cannot look like a stuck harness
 (`crates/dream-core/src/streak.rs:236`). A corrupt manifest fails open to an
 empty one (`crates/dream-core/src/streak.rs:261`).
-**Open:** the evidence-gate use in SEL-02.3 restarts from an empty manifest
-every night, so it needs only 64 bits to separate two trees; the cross-night use
-keeps records for as long as the failure persists, which is where a long-lived
-collision would matter.
+**Debt:** `record_night` has no night identifier or lock: duplicate calls count twice and can raise a stall notice during one actual night. Any read error starts empty; concurrent writers are not serialised here (`crates/dream-core/src/streak.rs:117`). `advance_failures` adds one to an unchecked `u64` step, which panics on overflow in debug builds (`crates/dream-core/src/streak.rs:75`).
+**Open:** the evidence-gate use in SEL-02.3 compares two trees, while the cross-night use retains a failure for as long as it persists. Neither usage validates that a matching fingerprint represents the same underlying cause (`crates/failure-fingerprint/src/lib.rs:574`).

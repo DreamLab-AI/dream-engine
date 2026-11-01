@@ -10,8 +10,9 @@ sources:
   - crates/dream-core/src/candidate.rs
   - crates/dream-core/src/persist.rs
   - crates/dream-core/src/lib.rs
+  - crates/dream-core/src/source.rs
   - docs/adr/ADR-DE-005-seams.md
-verified_commit: 0f6a66913c072603b6e29a80bdc67350737b9b21
+verified_commit: 815f963b1cbd6999e78144ce5475005ae1dd1d8e
 ---
 ## For developers
 
@@ -25,9 +26,7 @@ so the crate links no async runtime (`crates/dream-core/src/seams.rs:39`).
 ## For the business
 
 A product plugs in its own model, memory, test machines, chat channel and code
-host without forking the engine. The engine ships plain defaults that need
-nothing external, so a team can try a full night on a laptop with scripted
-test results before wiring any real service.
+host without forking the engine. Scripted evaluators support local tests. A full night still needs a host driver and model implementation; the local runner needs its command dependencies and the GitHub forge needs git, gh and authentication.
 
 ## CRT-02.1 The five seams and the implementations that ship
 
@@ -65,7 +64,7 @@ classDiagram
     Forge <|.. GhForge
     EvaluatorRunner <|.. LocalRunner
     EvaluatorRunner <|.. ScriptedRunner
-    note for Llm "no implementation ships<br/>seams.rs line 96"
+    note for Llm "host supplies Llm<br/>seams.rs line 96"
     note for GhForge "git push and gh CLI<br/>seams.rs line 424"
 ```
 
@@ -73,12 +72,12 @@ classDiagram
 none: the host supplies the model (`crates/dream-core/src/seams.rs:96`).
 `NullSink` and `JsonlSink` are at `seams.rs:157` and `seams.rs:202`,
 `StderrNotifier` at `seams.rs:329`, `GhForge` at `seams.rs:424`, `LocalRunner` at
-`runner.rs:48` and `ScriptedRunner` at `runner.rs:137`, all under
+`runner.rs:48` and `ScriptedRunner` at `runner.rs:85`, all under
 `crates/dream-core/src/`.
 **Why it is this way.** The traits are dyn-compatible so a consumer holds a
 `Box<dyn ...>` chosen at run time (`docs/adr/ADR-DE-005-seams.md:30`).
-**Invariant:** `Notifier::notify` is infallible by signature, so a broken
-channel cannot change a verdict (`crates/dream-core/src/seams.rs:320`).
+**Invariant:** `Notifier::notify` returns no `Result` (`crates/dream-core/src/seams.rs:320`).
+**Debt:** the signature does not contain panics or impose a deadline. A host implementation can interrupt or stall the caller; verdict persistence must not depend on an uncontained notification.
 **Debt:** `GhForge` has one test in this tree and it only proves the trait is
 dyn-safe (`crates/dream-core/src/seams.rs:647`). The push, PR creation and
 branch-protection paths have not been exercised against a live GitHub.
@@ -93,21 +92,20 @@ sequenceDiagram
     participant M as MemorySink
     participant F as Forge
     participant N as Notifier
-    H->>R: baseline evaluators (candidate.rs line 99 evaluate)
+    H->>R: baseline evaluators (candidate.rs line 343 evaluate)
     H->>L: complete request with the prompt
     L-->>H: report with a patch block
-    H->>R: build the candidate and re-run (candidate.rs line 296 and 300)
-    H->>F: publish_draft and optional automerge (persist.rs line 298)
+    H->>R: build the candidate and re-run (candidate.rs line 547 and 552)
+    H->>F: publish_draft and optional automerge (persist.rs line 291)
     H->>M: record the night, best effort
-    H->>N: notify, infallible
+    H->>N: notify with no Result - host contains faults
 ```
 
 **What it shows.** The order a host drives the seams in. The engine's own
 code crosses `EvaluatorRunner` in `candidate::run` and `Forge` in
-`persist::publish`; the `Llm`, `MemorySink` and `Notifier` calls are the host's.
+`persist::publish`; source gathering and repair also call the supplied `Llm` (`crates/dream-core/src/source.rs:1040`, `crates/dream-core/src/source.rs:1299`). The host orchestrates these operations and its memory and notification calls.
 **Why it is this way.** Memory writes are best effort and callers log and
-continue (`crates/dream-core/src/seams.rs:147`). A forge failure is reported
-inside the `PrOutcome`, never raised, so the night still records its verdict
+continue (`crates/dream-core/src/seams.rs:147`). The `publish_draft` signature returns `PrOutcome`; persistence of the night is a separate host responsibility and a trait implementation can still panic
 (`crates/dream-core/src/seams.rs:365`).
 **Open:** the sequence above is the intended host order from the crate docs
 (`crates/dream-core/src/lib.rs:3`). No driver in this repository enforces it,
