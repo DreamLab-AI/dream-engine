@@ -12,6 +12,12 @@ review_trigger: a new `Fixer` variant, a change to what `format_candidate` is al
 
 # ADR-DE-009 — A candidate is formatted before the gate judges it; layout is never why a night fails
 
+## External review qualification — 2026-11-02
+
+The [dated source reconciliation](external-review-2026-11-02.md) records the current
+implementation evidence, open acceptance gaps and limits of the external review.
+It supplements this decision without changing its adoption or activation status.
+
 ## Context
 Three consecutive dream-engine nights (2026-10-19 to 2026-10-22) ended `REJECT` on
 `fmt: required evaluator exited 1`, and the nights themselves, and then the governance

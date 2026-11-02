@@ -12,6 +12,12 @@ review_trigger: a candidate patch that changed an evaluator's behaviour without 
 
 # ADR-DE-003 — Protected-path guard and config-digest binding
 
+## External review qualification — 2026-11-02
+
+The [dated source reconciliation](external-review-2026-11-02.md) records the current
+implementation evidence, open acceptance gaps and limits of the external review.
+It supplements this decision without changing its adoption or activation status.
+
 ## Context
 
 The loop asks a model for a patch and then trusts the repository's own

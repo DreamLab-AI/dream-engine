@@ -12,6 +12,12 @@ review_trigger: a change to the source planner's selection order, to `requested_
 
 # ADR-DE-008 — Sources the previous night asked for are read first, capped, and never asked of the operator
 
+## External review qualification — 2026-11-02
+
+The [dated source reconciliation](external-review-2026-11-02.md) records the current
+implementation evidence, open acceptance gaps and limits of the external review.
+It supplements this decision without changing its adoption or activation status.
+
 ## Context
 The tree-read stage (ADR-2114 in the consuming engine) lets an LLM planner pick up to `max_files` files to inline. The planner saw only tonight's evidence and the file index. When a night ended INCONCLUSIVE for want of a file, its report named the file, and the consuming engine turned that line into an operator question. Across four repositories the same request then reached the human three nights running ("operator-approved 10-09, now missed twice"): a model asked to choose files cannot be held to a list, and the human was relaying a list the engine itself had written.
 
