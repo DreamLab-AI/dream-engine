@@ -51,12 +51,13 @@ measuring the wrong thing.
   worktree and **before** the tree is hashed for shipping and judged
   (`candidate::format_candidate`). It runs on the control plane, where the worktree is;
   the annexe only ever evaluates.
-- The fixer is given **only the files the candidate touched** that it handles
-  (`rustfmt --edition <crate edition> -- <files>`). If it changes any other file the
+- The fixer reads **only the files the candidate touched** that it handles,
+  one at a time on stdin (`rustfmt --emit stdout --config skip_children=true`).
+  Candidate formatter configuration is ignored. Output replaces only the explicit
+  regular file inside the worktree, after formatting succeeds. If it changes any other file the
   work is discarded (`Reverted`); the protected-path guard already passed on the
-  patch and the fixer must never widen the candidate's footprint. A touched file that
-  declares `#[path]` modules is not formatted at all (`Skipped`), since rustfmt would
-  follow the declaration out of the worktree.
+  patch and the fixer must never widen the candidate's footprint. Module declarations,
+  including spaced `#[ path]` and conditional attributes, are never traversed.
 - On success the layout lands as a **second commit** (`dream: rustfmt`), so a reviewer
   sees the model's diff and the engine's layout apart and the model's own tree is kept
   for audit. `tree_hash` and `applied_patch` become the formatted tree's, and
@@ -75,6 +76,11 @@ measuring the wrong thing.
   `EvaluatorIdentity` and `PreparedCandidate` gain a public field.
 
 ## Consequences
+
+The November 3 regression reproduces the former spaced-path out-of-worktree write
+and verifies the external file stays byte-identical with stdin formatting. Untouched
+child modules also stay unchanged. This repairs the formatter boundary; arbitrary
+build/evaluator commands still require the execution host's sandbox.
 - A night is no longer vetoed for rustfmt's layout; the fixer is itself a built-in,
   reviewed piece of the engine, so the gate's guarantee is unchanged: the evaluators
   still run on the exact tree that is shipped and judged.

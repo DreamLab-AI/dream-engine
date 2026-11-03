@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "dream-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "chrono",
  "dream-gate",

@@ -1316,7 +1316,7 @@ pub fn failing_hunk(apply_error: &str) -> Option<(String, usize)> {
 
 /// The real base-revision text around the hunk git refused: `context` lines
 /// either side of `line`, verbatim, with a header naming the range. None when
-/// the file cannot be read at `rev`.
+/// the file cannot be read at `rev`, is denied, or contains key material.
 pub fn failing_excerpt(
     repo: &Path,
     rev: &str,
@@ -1324,14 +1324,35 @@ pub fn failing_excerpt(
     line: usize,
     context: usize,
 ) -> Option<String> {
-    let text = read_blob(repo, rev, path)?;
+    failing_excerpt_with(repo, rev, path, line, context, &Denylist::default())
+}
+
+/// [`failing_excerpt`] with the host's source-stage filename denylist.
+///
+/// The whole committed blob is checked for key material before any excerpt is
+/// selected, using the same withholding policy as ordinary source gathering.
+pub fn failing_excerpt_with(
+    repo: &Path,
+    rev: &str,
+    path: &str,
+    line: usize,
+    context: usize,
+    deny: &Denylist,
+) -> Option<String> {
+    let files = tracked_files(repo, rev)?;
+    let tracked = files.iter().map(|f| f.path.as_str()).collect();
+    let path = validate_path_with(path, &tracked, deny).ok()?;
+    let text = read_blob(repo, rev, &path)?;
+    if has_secret_content(&text) {
+        return None;
+    }
     let start = line.saturating_sub(context).max(1);
     let range = LineRange {
         start,
-        end: line + context,
+        end: line.saturating_add(context),
     };
     let (body, total) = slice_lines(&text, range);
-    let end = (line + context).min(total);
+    let end = line.saturating_add(context).min(total);
     Some(format!(
         "`{path}` lines {start}-{end} of {total}, exactly as committed:\n\n````text\n{body}\n````"
     ))
@@ -1807,6 +1828,33 @@ mod tests {
         assert!(prompt.contains("NO-PATCH:"));
         assert!(!prompt.to_lowercase().contains("receipt"));
         assert!(!prompt.to_lowercase().contains("evaluator"));
+    }
+
+    #[test]
+    fn repair_excerpt_withholds_denied_names_and_key_material_anywhere_in_the_file() {
+        let (d, rev) = repo_with(&[
+            (".env", "MODEL_TOKEN=fixture-token\n"),
+            (
+                "ordinary.txt",
+                "safe line\n-----BEGIN PRIVATE KEY-----\nfixture\n",
+            ),
+            ("safe.txt", "public data\n"),
+        ]);
+        assert!(failing_excerpt(d.path(), &rev, ".env", 1, 0).is_none());
+        assert!(failing_excerpt(d.path(), &rev, "ordinary.txt", 1, 0).is_none());
+        assert!(failing_excerpt(d.path(), &rev, "safe.txt", 1, 0)
+            .unwrap()
+            .contains("public data"));
+        assert!(failing_excerpt_with(
+            d.path(),
+            &rev,
+            "safe.txt",
+            1,
+            0,
+            &Denylist::new(["safe.txt"])
+        )
+        .is_none());
+        assert!(failing_excerpt(d.path(), &rev, "../safe.txt", 1, 0).is_none());
     }
 
     #[test]

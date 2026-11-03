@@ -108,17 +108,17 @@ pub fn format_candidate(
         };
         return Some(rec);
     }
-    // rustfmt follows `#[path = "…"] mod x;` wherever it points, including
-    // out of the worktree; a model-written declaration is not trusted.
+    // Only explicit regular files inside this worktree may be overwritten.
+    // Formatting via stdin below never follows module declarations.
+    let root = std::fs::canonicalize(&wt).ok();
     if let Some(f) = files.iter().find(|f| {
-        std::fs::read_to_string(wt.join(f))
-            .map(|s| s.contains("#[path"))
-            .unwrap_or(false)
+        let path = wt.join(f);
+        !std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_file())
+            || !std::fs::canonicalize(&path)
+                .is_ok_and(|p| root.as_ref().is_some_and(|r| p.starts_with(r)))
     }) {
         rec.outcome = FormattingOutcome::Skipped {
-            reason: format!(
-                "{f} declares #[path] modules; the fixer could reach outside the worktree"
-            ),
+            reason: format!("{f} is not a regular file confined to the candidate worktree"),
         };
         return Some(rec);
     }
@@ -234,9 +234,14 @@ fn fixer_handles(fixer: Fixer, path: &str) -> bool {
 fn fixer_command(fixer: Fixer, wt: &Path, files: &[String]) -> String {
     match fixer {
         Fixer::Rustfmt => {
-            let edition = crate_edition(wt, &files[0]);
-            let quoted: Vec<String> = files.iter().map(|f| shell_quote(f)).collect();
-            format!("rustfmt --edition {edition} -- {}", quoted.join(" "))
+            files.iter().map(|file| {
+                let edition = crate_edition(wt, file);
+                let quoted = shell_quote(file);
+                // Stdin + stdout prevents rustfmt writing module paths, including
+                // spaced/cfg_attr attributes and symlinked child modules. Ignore
+                // candidate-supplied formatter config and write only after success.
+                format!("candidate_formatted=$(rustfmt --edition {edition} --config-path /dev/null --config skip_children=true --emit stdout < {quoted}) && printf '%s\\n' \"$candidate_formatted\" > {quoted}")
+            }).collect::<Vec<_>>().join(" && ")
         }
     }
 }
@@ -416,6 +421,11 @@ pub enum AttemptError {
         /// What failed, as text.
         detail: String,
     },
+    /// Evaluation changed the candidate bytes or their identity could not be verified.
+    Integrity {
+        /// The failed post-evaluation check.
+        detail: String,
+    },
 }
 
 /// What [`run`] produced; feed `state` and `receipts` to
@@ -549,6 +559,33 @@ pub fn run(
         b
     });
     let receipts = evaluate(runner, &work_dir, input.required);
+    let integrity_command = format!(
+        "candidate_status=$(git status --porcelain=v1 --untracked-files=all) && test -z \"$candidate_status\" && candidate_tree=$(git rev-parse 'HEAD^{{tree}}') && test \"$candidate_tree\" = {}",
+        shell_quote(&prepared.tree_hash)
+    );
+    // Check the publishable local tree and, when relocated, the evaluated copy.
+    let local = crate::runner::LocalRunner.run(
+        &prepared.worktree.display().to_string(),
+        &integrity_command,
+        30,
+    );
+    let remote = relocate.map(|_| runner.run(&work_dir, &integrity_command, 30));
+    if std::iter::once(&local)
+        .chain(remote.as_ref())
+        .any(|r| r.exit_code != Some(0) || r.timed_out || r.transport_error.is_some())
+    {
+        let detail = "candidate tree changed during evaluation or integrity could not be verified"
+            .to_string();
+        return Attempt {
+            state: CandidateState::DidNotApply {
+                detail: detail.clone(),
+            },
+            prepared: Some(prepared),
+            receipts,
+            build,
+            error: Some(AttemptError::Integrity { detail }),
+        };
+    }
     Attempt {
         state: CandidateState::Applied {
             tree_hash: prepared.tree_hash.clone(),
@@ -1147,6 +1184,51 @@ mod tests {
     }
 
     #[test]
+    fn spaced_path_attribute_cannot_format_a_file_outside_the_candidate() {
+        let (d, repo) = rust_scratch_repo();
+        let outside = d.path().join("outside.rs");
+        let original = "pub fn external( )->u8{1}\n";
+        std::fs::write(&outside, original).unwrap();
+        let patch = new_file_patch(
+            "src/lib.rs",
+            &format!(
+                "#[ path = {:?}]\nmod outside;\npub fn local( ){{}}\n",
+                outside
+            ),
+        );
+        let mut c = prepare(
+            &repo,
+            "dream/fmt-spaced",
+            &patch,
+            "test",
+            "HEAD",
+            &rust_policy(),
+        )
+        .unwrap();
+        let evaluator = fmt_evaluator();
+        format_candidate(&mut c, "HEAD~1", &rust_policy(), &[&evaluator]);
+        let after = std::fs::read_to_string(&outside).unwrap();
+        discard(&repo, &c);
+        assert_eq!(after, original, "formatter must never write a child module");
+    }
+
+    #[test]
+    fn evaluator_source_mutation_cannot_receive_an_applied_tree_receipt() {
+        let (_d, repo) = scratch_repo();
+        let mut evaluator = fmt_evaluator();
+        evaluator.fixer = None;
+        evaluator.command = "printf tampered > value.txt".into();
+        let patch = new_file_patch("note.txt", "candidate\n");
+        let a = run_with_fixer(&repo, "dream/mutating-evaluator", &patch, &[evaluator]);
+        let state = a.state.clone();
+        discard(&repo, a.prepared.as_ref().unwrap());
+        assert!(
+            !matches!(state, CandidateState::Applied { .. }),
+            "{state:?}"
+        );
+    }
+
+    #[test]
     fn a_fixer_formats_the_candidate_and_the_recorded_patch_reproduces_the_tree() {
         let (_d, repo) = rust_scratch_repo();
         let patch = new_file_patch("src/lib.rs", "pub fn add(a:i32,b:i32)->i32{a+b}\n");
@@ -1178,7 +1260,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fixer_that_reaches_a_file_the_candidate_did_not_touch_is_reverted() {
+    fn a_fixer_does_not_traverse_untouched_child_modules() {
         let (_d, repo) = rust_scratch_repo();
         commit_file(&repo, "src/child.rs", "pub fn c(a:i32)->i32{a}\n");
         commit_file(&repo, "src/lib.rs", "mod child;\npub fn a() {}\n");
@@ -1186,10 +1268,7 @@ mod tests {
         let a = run_with_fixer(&repo, "dream/fmt-widened", patch, &[fmt_evaluator()]);
         let c = a.prepared.as_ref().unwrap();
         let f = c.formatting.as_ref().unwrap();
-        let FormattingOutcome::Reverted { reason } = &f.outcome else {
-            panic!("{f:?}");
-        };
-        assert!(reason.contains("src/child.rs"), "{reason}");
+        assert!(matches!(f.outcome, FormattingOutcome::Unchanged), "{f:?}");
         // the candidate is exactly as the model wrote it: one commit, clean tree, child untouched
         assert_eq!(
             git(&c.worktree, &["log", "--format=%s", "-n", "2"]).trim(),
@@ -1228,16 +1307,17 @@ mod tests {
     }
 
     #[test]
-    fn a_touched_file_declaring_path_modules_is_not_formatted() {
+    fn a_path_attribute_is_formatted_without_reading_its_target() {
         let (_d, repo) = rust_scratch_repo();
         let patch = new_file_patch("src/lib.rs", "#[path = \"../value.txt\"]\nmod m;\n");
         let a = run_with_fixer(&repo, "dream/fmt-path", &patch, &[fmt_evaluator()]);
         let c = a.prepared.as_ref().unwrap();
         let f = c.formatting.as_ref().unwrap();
-        let FormattingOutcome::Skipped { reason } = &f.outcome else {
-            panic!("{f:?}");
-        };
-        assert!(reason.contains("#[path]"), "{reason}");
+        assert!(matches!(f.outcome, FormattingOutcome::Unchanged), "{f:?}");
+        assert_eq!(
+            std::fs::read_to_string(c.worktree.join("value.txt")).unwrap(),
+            "42\n"
+        );
         assert_eq!(
             git(&c.worktree, &["log", "--format=%s", "-n", "1"]).trim(),
             "dream: add"
