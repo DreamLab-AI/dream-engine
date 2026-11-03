@@ -57,7 +57,9 @@ called by `dream_core::candidate::run`.
 
 After evaluators finish, `candidate::run` requires a clean tracked/index/untracked
 source state and the prepared HEAD tree hash in the publishable worktree and any
-relocated evaluation checkout. A failed or unavailable check returns an integrity
+relocated evaluation checkout. A fresh temporary index, populated from the prepared
+tree, rehashes tracked working files so `assume-unchanged` and `skip-worktree` flags
+cannot hide changes. A failed or unavailable check returns an integrity
 harness failure instead of `Applied`. Ignored build outputs are allowed. The
 regression executes a successful evaluator that edits source, then verifies its
 receipt cannot authorise the original tree. This is a final-state check, not a

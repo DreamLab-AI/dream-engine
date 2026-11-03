@@ -451,6 +451,9 @@ pub struct Attempt {
 /// worktree: a host that runs evaluators elsewhere (a remote machine, a
 /// container) copies the tree and returns the directory to use there, or an
 /// error string that becomes a `DidNotApply` harness veto.
+/// The returned directory must be a clean Git checkout with HEAD's tree equal
+/// to `PreparedCandidate::tree_hash`; archive-based hosts must establish that
+/// identity before returning. Both checkouts are verified after evaluation.
 pub type Relocate<'a> = &'a dyn Fn(&PreparedCandidate) -> Result<String, String>;
 
 /// Map a guard refusal to the gate's vocabulary: a protected path is
@@ -559,9 +562,9 @@ pub fn run(
         b
     });
     let receipts = evaluate(runner, &work_dir, input.required);
+    let expected_tree = shell_quote(&prepared.tree_hash);
     let integrity_command = format!(
-        "candidate_status=$(git status --porcelain=v1 --untracked-files=all) && test -z \"$candidate_status\" && candidate_tree=$(git rev-parse 'HEAD^{{tree}}') && test \"$candidate_tree\" = {}",
-        shell_quote(&prepared.tree_hash)
+        "candidate_status=$(git status --porcelain=v1 --untracked-files=all) && test -z \"$candidate_status\" && candidate_tree=$(git rev-parse 'HEAD^{{tree}}') && test \"$candidate_tree\" = {expected_tree} && candidate_index=$(mktemp) && trap 'rm -f -- \"$candidate_index\"' EXIT && export GIT_INDEX_FILE=\"$candidate_index\" && git read-tree {expected_tree} && git -c core.fsmonitor=false -c core.ignorestat=false -c core.fileMode=true add -u && candidate_actual=$(git write-tree) && test \"$candidate_actual\" = {expected_tree}"
     );
     // Check the publishable local tree and, when relocated, the evaluated copy.
     let local = crate::runner::LocalRunner.run(
@@ -1226,6 +1229,29 @@ mod tests {
             !matches!(state, CandidateState::Applied { .. }),
             "{state:?}"
         );
+    }
+
+    #[test]
+    fn evaluator_cannot_hide_source_mutation_with_index_flags() {
+        for flag in ["--assume-unchanged", "--skip-worktree"] {
+            let (_d, repo) = scratch_repo();
+            let mut evaluator = fmt_evaluator();
+            evaluator.fixer = None;
+            evaluator.command =
+                format!("git update-index {flag} value.txt && printf tampered > value.txt");
+            let a = run_with_fixer(
+                &repo,
+                "dream/index-hidden",
+                &new_file_patch("note.txt", "candidate\n"),
+                &[evaluator],
+            );
+            let state = a.state.clone();
+            discard(&repo, a.prepared.as_ref().unwrap());
+            assert!(
+                !matches!(state, CandidateState::Applied { .. }),
+                "{flag}: {state:?}"
+            );
+        }
     }
 
     #[test]

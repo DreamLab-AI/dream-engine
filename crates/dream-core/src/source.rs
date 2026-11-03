@@ -750,6 +750,9 @@ pub fn request_key(path: &str, lines: Option<LineRange>) -> String {
 /// hex secret assigned to a key-looking name is withheld whole — never
 /// partially redacted, since a clipped key is still a key.
 pub fn has_secret_content(text: &str) -> bool {
+    if !ontomark_compile::input::secrets::scan(text).is_empty() {
+        return true;
+    }
     if text.contains("PRIVATE KEY-----") {
         return true;
     }
@@ -1109,10 +1112,11 @@ pub async fn gather(
         }
     }
     let evidence_tail = tail_chars(evidence, PLANNER_EVIDENCE_CHARS);
+    let safe_commands: Vec<String> = commands.iter().map(|s| redact(s)).collect();
     let prompt = source_plan_prompt(
-        deep,
-        scans,
-        commands,
+        &redact(deep),
+        &redact(scans),
+        &safe_commands,
         &redact(evidence_tail),
         &index_listing(&files, cfg.index_cap_chars, deny),
         cfg.max_files,
@@ -2026,6 +2030,40 @@ mod tests {
         assert_eq!(rec.planner, "ok");
         assert_eq!(rec.rejected.len(), 2, "{:?}", rec.rejected);
         assert_eq!(fake.seen.lock().unwrap()[0].1, 2048, "clamped up from 1000");
+    }
+
+    #[test]
+    fn planner_metadata_uses_the_same_redactor_as_evidence() {
+        let (d, rev) = repo_with(&[("src/a.rs", "fn a() {}\n")]);
+        let fake = Fake::new(vec![Ok(r#"{"files":["src/a.rs"]}"#.into())]);
+        let commands = vec!["curl -H 'Authorization: Bearer fixture-private-value'".into()];
+        let cfg = SourceConfig::default();
+        let deny = Denylist::default();
+        let input = GatherInput::new(
+            d.path(),
+            &rev,
+            "fixture-private-value",
+            "fixture-private-value",
+            &commands,
+            "fixture-private-value",
+            &cfg,
+            &deny,
+        );
+        futures::executor::block_on(gather(&fake, None, &input, &|s| {
+            s.replace("fixture-private-value", "[withheld]")
+        }));
+        let seen = fake.seen.lock().unwrap();
+        assert!(!seen[0].0.contains("fixture-private-value"));
+        assert!(seen[0].0.contains("[withheld]"));
+    }
+
+    #[test]
+    fn common_provider_tokens_use_the_shared_ontology_detector() {
+        let token = format!("ghp_{}", "a1B2".repeat(9));
+        assert!(has_secret_content(&format!("value = {token}")));
+        assert!(!has_secret_content(
+            "public API documentation and a short example token"
+        ));
     }
 
     #[test]

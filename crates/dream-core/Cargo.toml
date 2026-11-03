@@ -22,6 +22,9 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 thiserror = "2"
 tracing = "0.1"
 quick-xml = "0.41"
+# Consume the estate's existing publication credential detector, without its
+# optional reasoning engine; prompt supply and publication share token shapes.
+ontomark-compile = { version = "0.6.3", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

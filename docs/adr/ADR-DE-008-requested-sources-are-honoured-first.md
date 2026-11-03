@@ -44,3 +44,9 @@ host-specific source exclusion. Regression cases cover a denied filename, key
 material outside the requested lines, a host-denied ordinary filename and a valid
 public excerpt. Consumers must adopt dream-core 0.4.1 and pass their source denylist;
 producer tests alone do not establish running host adoption.
+
+Credential shapes now reuse `ontomark-compile::input::secrets::scan` without the
+optional reasoning engine, alongside the existing Nostr and private-key checks.
+Planner deep/scan labels and evaluator commands pass through the caller's redactor
+just like evidence. Pattern matching is a bounded detector, not a promise to
+identify every possible credential or arbitrary confidential prose.
