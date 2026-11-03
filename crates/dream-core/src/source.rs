@@ -108,25 +108,30 @@ pub struct TrackedFile {
     pub size: u64,
 }
 
-/// Every blob tracked at `rev` (`git ls-tree -r -l`). Gitignored files are
-/// absent by construction — the same set `git archive` ships to a remote runner.
+/// Every blob tracked at `rev` (`git ls-tree -r -l -z`). Untracked files are
+/// absent by construction. NUL separators preserve UTF-8 paths without Git quoting.
 pub fn tracked_files(repo: &Path, rev: &str) -> Option<Vec<TrackedFile>> {
     let out = Command::new("git")
         .arg("-C")
         .arg(repo)
-        .args(["ls-tree", "-r", "-l", "--full-tree", rev])
+        .args(["ls-tree", "-r", "-l", "-z", "--full-tree", rev])
         .output()
         .ok()?;
     if !out.status.success() {
         return None;
     }
-    Some(parse_ls_tree(&String::from_utf8_lossy(&out.stdout)))
+    let text = String::from_utf8(out.stdout).ok()?;
+    Some(parse_ls_tree_records(&text, '\0'))
 }
 
 /// Parse `git ls-tree -r -l` output: `<mode> <type> <object> <size>\t<path>`.
 /// Submodule (`commit`) entries and unparseable lines are skipped.
 pub fn parse_ls_tree(text: &str) -> Vec<TrackedFile> {
-    text.lines()
+    parse_ls_tree_records(text, '\n')
+}
+
+fn parse_ls_tree_records(text: &str, delimiter: char) -> Vec<TrackedFile> {
+    text.split(delimiter)
         .filter_map(|line| {
             let (meta, path) = line.split_once('\t')?;
             let mut parts = meta.split_whitespace();
@@ -1440,6 +1445,20 @@ async fn run_repair(llm: &dyn Llm, fallback: Option<&dyn Llm>, prompt: String) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tracked_unicode_and_quoted_paths_are_returned_without_git_escaping() {
+        let paths = ["src/é.rs", "notes/quoted\"name.md", "notes/tab\tname.txt"];
+        let entries = paths.map(|path| (path, "public source\n"));
+        let (d, rev) = repo_with(&entries);
+        let tracked = tracked_files(d.path(), &rev).unwrap();
+        for path in paths {
+            assert!(tracked.iter().any(|file| file.path == path), "{tracked:?}");
+        }
+        assert!(failing_excerpt(d.path(), &rev, paths[0], 1, 0)
+            .unwrap()
+            .contains("public source"));
+    }
 
     #[test]
     fn key_material_is_detected() {
