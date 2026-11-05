@@ -202,4 +202,4 @@ private forum and Nostr deployment is AGPL-3.0-only, lives in the product that
 consumes the engine, and is not part of this repository
 ([ADR-DE-002](docs/adr/ADR-DE-002-licence-and-provenance.md)).
 
-Diagram corpus (citation-verified, with a register of tensions and debt): [docs/diagrams](docs/diagrams/README.md).
+Diagram corpus (citation-verified): the `dream-engine` area of the estate master record, [VisionFlow `docs/diagrams/dream-engine`](https://github.com/DreamLab-AI/VisionFlow/tree/main/docs/diagrams/dream-engine) (moved from this repository on 2026-11-05; [id map](docs/diagrams/README.md)).
