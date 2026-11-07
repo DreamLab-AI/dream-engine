@@ -697,9 +697,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "ontomark-compile"
-version = "0.6.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72cf2bc78aebf9430941cc5525900383b325b79be7eb67ca0a4283185631ffbc"
+checksum = "8a9709fcc8a2322dbc0b98fc31d71f4f12bac1ffbc334629574695c6421c9ead"
 dependencies = [
  "anyhow",
  "hex",
@@ -710,7 +710,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "sha2 0.10.9",
  "similar",
  "thiserror",
@@ -852,9 +852,9 @@ dependencies = [
 
 [[package]]
 name = "rdfs-certificate"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac981884278db0c85a4a65a080bb8b872ebc3c04a9de9d4be011eb6d369c8210"
+checksum = "2fd9aeaa467199825cbd3f2249467dc42342fc7111aa914a1fc6392bc2faae8a"
 dependencies = [
  "serde",
  "sha2 0.11.1",
@@ -981,16 +981,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
+name = "serde_norway"
+version = "0.9.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
+checksum = "e408f29489b5fd500fab51ff1484fc859bb655f32c671f307dcd733b72e8168c"
 dependencies = [
  "indexmap",
  "itoa",
  "ryu",
  "serde",
- "unsafe-libyaml",
+ "unsafe-libyaml-norway",
 ]
 
 [[package]]
@@ -1204,10 +1204,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
+name = "unsafe-libyaml-norway"
+version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
+checksum = "b39abd59bf32521c7f2301b52d05a6a2c975b6003521cbd0c6dc1582f0a22104"
 
 [[package]]
 name = "utf8parse"
