@@ -1,0 +1,13 @@
+{
+  "repo": "DreamLab-AI/example-site",
+  "cron": "0 9 * * *",
+  "slots": [{ "deep": "site", "scan": ["index.html", "assets"] }],
+  "extraDisciplines": [
+    "static-site-only: hand-written HTML/CSS/JS, no bundler, no WASM, no compile step; never propose introducing a build framework.",
+    "browser-checks-out-of-annexe: accessibility, Lighthouse and Playwright need the browser sidecar; never invent a browser evaluator, record a HANDOFF (browser) note.",
+    "content-is-the-product: copy, messaging and asset integrity outrank code-structure concerns.",
+    "estate-health-is-read-not-collected: the snapshot is collected by CI; a night reads it and never re-collects or edits it.",
+    "adr-citations-must-exist: cite only ids present in docs/adr/; propose new ADRs by title and leave the id to the operator.",
+    "orphan-assets-are-kept: unused diagram images are kept on purpose; no night may propose a prune."
+  ]
+}

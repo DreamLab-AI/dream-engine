@@ -2,7 +2,7 @@
 
 # dream-engine
 
-### A nightly, evidence-gated loop that lets an agent propose changes to a repository and a gate decide
+### Measured repository improvement, with a deterministic acceptance gate
 
 [![Licence](https://img.shields.io/badge/Licence-MIT%20OR%20Apache--2.0-blue?style=flat-square)](#licence)
 [![Rust](https://img.shields.io/badge/Rust-1.89%2B-orange?style=flat-square)](Cargo.toml)
@@ -10,7 +10,9 @@
 [![crates.io](https://img.shields.io/crates/v/failure-fingerprint?style=flat-square&label=failure-fingerprint)](https://crates.io/crates/failure-fingerprint)
 [![Status](https://img.shields.io/badge/status-pre--1.0-yellow?style=flat-square)](docs/adr/README.md)
 
-*The model proposes. A pure function of measured evidence disposes. A human merges.*
+**Compare a proposed patch against its baseline using the repository’s own evaluators.**
+
+[Start](#quickstart) · [Workflow](#how-a-night-runs) · [Crates](#crates) · [Status](#working-status) · [Docs](docs/README.md)
 
 </div>
 
@@ -18,14 +20,9 @@
 
 ## What is dream-engine?
 
-dream-engine runs a repository's own checks against a proposed change and
-decides, from the numbers alone, whether the change is better, worse, unproven,
-or untestable. Once a night it freezes an experiment, asks a model for one
-patch, evaluates the baseline and the patched tree on the same testbed, and
-hands the two result sets to a gate. The gate is a pure function: the same
-evidence always gives the same verdict, and it calls no model. An accepted
-change opens as a draft pull request. It is never merged by the engine unless
-you have switched that on ([ADR-DE-006](docs/adr/ADR-DE-006-automerge-is-an-option.md)).
+dream-engine is a Rust library workspace and offline command line for evidence-gated repository improvement. A host freezes an experiment, asks a model for a patch and evaluates the baseline and candidate on the same testbed. The gate returns a verdict from measured evidence without calling a model. The host owns scheduling, model access, notifications and publication.
+
+Use it to build nightly maintenance, compare candidate implementations, replay an experiment or enforce protected paths before applying a patch. An accepted result can become a draft pull request. Acceptance does not establish deployment readiness: that depends on the evaluators you configured and the behaviour they cover.
 
 The design is deliberately cautious about what counts as evidence. An
 evaluator that is missing, silent, blocked, timed out or failing vetoes the
@@ -35,6 +32,29 @@ on the model. A candidate may not touch the files that decide whether it
 passes ([ADR-DE-003](docs/adr/ADR-DE-003-protected-path-guard.md)).
 
 ## How a night runs
+
+```mermaid
+sequenceDiagram
+    participant H as Host driver
+    participant S as Source reader
+    participant M as Model adapter
+    participant E as Evaluator runner
+    participant G as Pure gate
+    participant F as Forge adapter
+    H->>H: Freeze manifest and experiment identity
+    H->>E: Evaluate baseline
+    H->>S: Read tracked source at the selected revision
+    S-->>H: Bounded source packet and refusal record
+    H->>M: Request one candidate patch
+    M-->>H: Patch
+    H->>H: Check protected paths before applying
+    H->>E: Evaluate candidate on the same testbed
+    H->>G: Paired results and bound receipts
+    G-->>H: ACCEPT / REJECT / INCONCLUSIVE / BLOCKED-ENV
+    opt Accepted and publication configured
+        H->>F: Publish through the configured policy
+    end
+```
 
 The engine freezes an experiment manifest (baseline revision, tree hash, the
 sha256 of each evaluator command, model identity and a digest of the config)
@@ -61,14 +81,6 @@ is in [docs/concepts.md](docs/concepts.md).
 The statistics are checked against reference values computed independently in
 exact arithmetic: nine wins out of ten gives an exact one-sided binomial p of
 11/1024, and a Wilson lower bound for eight of ten at z = 1.96 is 0.4902.
-
-What is not here yet: the nightly driver itself (a host supplies it by
-implementing the seams), `TrainDev` with held-out dev evaluators wired into the
-nightly path, and post-publish recheck with ledger-driven rollback. The forge
-step of automerge is unit-tested against a stub but has not been exercised
-against real GitHub, and `dream_core::persist::publish` is the only entry point
-that applies the automerge policy: a host that opens its pull requests through
-`Forge::publish_draft` directly never merges anything, whatever `autoMerge` says.
 
 ## Quickstart
 
@@ -105,6 +117,68 @@ cargo test --workspace --locked
 Configuration for a Rust repository is in
 [docs/guide/configuring-a-repo.md](docs/guide/configuring-a-repo.md).
 
+## Working status
+
+**Reviewed 21 October 2026 against source `64e8324`.** The workspace declares version 0.2.0; individual crate versions and consumer pins are separate. Use the crate manifests and your host's lockfile when choosing an API version. This review did not run a live model-to-GitHub experiment.
+
+The 0.2.0 source-reading API adds `GatherInput::with_requested`: requested files are selected before planner picks and evidence-mentioned paths. Requests can reserve at most half the file slots and half the rendered byte budget. The reader checks them against the tracked tree and denylist and records honoured and refused requests. The host stores and expires requests; the library does not interpret last night's report or ask an operator for files. See [ADR-DE-008](docs/adr/ADR-DE-008-requested-sources-are-honoured-first.md) and [`source.rs`](crates/dream-core/src/source.rs).
+
+<details>
+<summary><strong>Integration boundaries and unfinished behaviour</strong></summary>
+
+What is not here yet: the nightly driver itself (a host supplies it by
+implementing the seams), `TrainDev` with held-out dev evaluators wired into the
+nightly path, and post-publish recheck with ledger-driven rollback. The forge
+step of automerge is unit-tested against a stub but has not been exercised
+against real GitHub, and `dream_core::persist::publish` is the only entry point
+that applies the automerge policy: a host that opens its pull requests through
+`Forge::publish_draft` directly never merges anything, whatever `autoMerge` says.
+
+A finished night is terminal, but publishing is not an exactly-once distributed transaction: crash recovery does not reconcile every external forge outcome. Read [ADR-DE-007](docs/adr/ADR-DE-007-a-night-is-identified-by-its-directory.md) before designing retry policy.
+
+</details>
+
+## Where it sits in VisionFlow
+
+[VisionFlow](https://github.com/DreamLab-AI/VisionFlow) documents the estate's self-improvement loop. This repository owns the reusable, permissively licensed gate and execution components. [Agentbox](https://github.com/DreamLab-AI/agentbox/tree/main/services/dream-engine) owns its product-specific host and AGPL integration with identity, relay and notification services. A source pin or published crate does not establish that a running host has been rebuilt with it.
+
+This is an independent Rust implementation. The former TypeScript tracking fork is historical lineage; it is not this workspace's implementation or release identity.
+
+## Jev option (opt-in hypothesis screening)
+
+`dream_core::screen` lets a host spend a limited measurement budget on the candidate
+hypotheses most likely to matter. A typed-decision service (System One: a `score` for
+evidence fit and a `noul` for "does the change address the stated problem", per hypothesis)
+can **order** candidates and **defer** the ones that are both poorly supported and off-target.
+Status: *proposed research candidate; no measured uplift*; the wiring and fallback tests do
+not show uplift.
+
+- **Authority:** unchanged. The pairwise gate, fault treatment, protected-path guard,
+  evaluator receipts and promotion rules still decide every candidate that runs. A deferred
+  hypothesis is held with a reason, never rejected, and the result is always a partition of
+  the input ids (checked by `Screening::is_partition_of`; a service that invents, drops or
+  repeats an id is ignored).
+- **Off by default:** the default screen `NotScreened` builds no request and yields
+  `plan_unscreened`: the input order, cut at the budget. That is also the result on every
+  failure: no endpoint, timeout, transport error, non-2xx (`http-<code>`), malformed body or
+  missing answer, low confidence, or a broken invariant. The reason is a log token
+  (`flag-off`, `no-endpoint`, `timeout`, `transport`, `http-<code>`, `malformed`,
+  `low-confidence`, `invariant-broken`), never request content.
+- **Accept nothing automatically:** `ScreenPolicy::default()` records verdicts as annotations
+  and changes neither order nor deferral. Set `min_confidence` (and `defer_fit_below` for
+  deferral) from labelled data before relying on it.
+- **Repo disciplines (VF-04-S1-01):** `screen_candidates` takes the host's declared disciplines;
+  `declared_disciplines(&DreamConfig)` returns the two built-ins plus the repo's
+  `extraDisciplines`. Each hypothesis also gets a `violates` Noul against them. A violator is
+  ranked behind the rest, and deferred only if `defer_violation_at` is set. Existing
+  evaluators and the human landing gate are unchanged.
+- **What leaves, and where to:** nothing, from this workspace. It links no HTTP client; a host
+  implements `HypothesisScreen` or passes a transport closure to `JsonScreen`. A request
+  carries at most 16 hypotheses (statement, problem evidence and proposed-change text, 1,200
+  chars each) and up to 12 evaluator descriptions, to whatever endpoint the host selects. No
+  HTTP implementation ships here: this repo has no multi-candidate caller, and the agentbox
+  adapter (AB-23) is where one belongs. Question set `dream-engine.de-01-s1-01.v1`.
+
 ## Documentation
 
 [docs/README.md](docs/README.md) is the index. The decisions are in
@@ -128,4 +202,4 @@ private forum and Nostr deployment is AGPL-3.0-only, lives in the product that
 consumes the engine, and is not part of this repository
 ([ADR-DE-002](docs/adr/ADR-DE-002-licence-and-provenance.md)).
 
-Diagram corpus (citation-verified, with a register of tensions and debt): [docs/diagrams](docs/diagrams/README.md).
+Diagram corpus (citation-verified): the `dream-engine` area of the estate master record, [VisionFlow `docs/diagrams/dream-engine`](https://github.com/DreamLab-AI/VisionFlow/tree/main/docs/diagrams/dream-engine) (moved from this repository on 2026-11-05; [id map](docs/diagrams/README.md)).

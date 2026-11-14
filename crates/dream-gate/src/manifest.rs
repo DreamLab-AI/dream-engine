@@ -45,6 +45,57 @@ pub enum ManifestError {
     Serde(#[from] serde_json::Error),
 }
 
+/// What the engine did to a candidate's layout before the gate judged it
+/// (ADR-DE-009): which fixer, for which evaluator, on which files, and how it
+/// ended. Recorded whatever the outcome, so a night's artefacts say why a
+/// candidate was or was not reformatted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Formatting {
+    /// The fixer that ran.
+    pub fixer: crate::config::Fixer,
+    /// The evaluator that named it.
+    pub evaluator: String,
+    /// The candidate's touched files the fixer was given.
+    pub files: Vec<String>,
+    /// How it ended.
+    pub outcome: FormattingOutcome,
+}
+
+/// How a [`Formatting`] ended. Every outcome but `Applied` leaves the
+/// candidate exactly as the model wrote it: tree, commit and worktree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FormattingOutcome {
+    /// The fixer changed the touched files; a second commit (`dream: <fixer>`)
+    /// holds the layout, `tree_hash` and `applied_patch` are the
+    /// formatted tree's, and the model's own tree is kept for audit.
+    Applied {
+        /// `tree_hash` before formatting: the model's own tree.
+        tree_hash_before: String,
+    },
+    /// The fixer ran and changed nothing.
+    Unchanged,
+    /// The fixer was not run; `reason` says why (no `.rs` file touched, a
+    /// touched file declares `#[path]` modules the fixer would follow out of
+    /// the worktree).
+    Skipped {
+        /// Why it was not run.
+        reason: String,
+    },
+    /// The fixer changed a file outside the candidate's footprint, or the
+    /// re-guarded diff was refused; its work was discarded.
+    Reverted {
+        /// What was discarded, and why.
+        reason: String,
+    },
+    /// The fixer exited non-zero, timed out or could not start; its partial
+    /// work was discarded and the gate judges the unformatted tree.
+    Failed {
+        /// The exit status or fault, with the output's tail.
+        reason: String,
+    },
+}
+
 /// One evaluator as frozen into the manifest: its declared identity, the exact
 /// command text, and a digest of that text so a later edit is detectable.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +118,10 @@ pub struct EvaluatorIdentity {
     /// evaluator as one case. Absent from older manifests.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test_format: Option<crate::config::TestFormat>,
+    /// The built-in fixer run on the candidate's touched files before this
+    /// evaluator judges it (ADR-DE-009). Absent from older manifests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixer: Option<crate::config::Fixer>,
 }
 
 impl EvaluatorIdentity {
@@ -80,6 +135,7 @@ impl EvaluatorIdentity {
             deeps: spec.deeps.clone(),
             timeout_secs: spec.timeout_secs,
             test_format: spec.test_format,
+            fixer: spec.fixer,
         }
     }
 
@@ -353,6 +409,10 @@ pub struct CandidateRecord {
     pub applied_via: String,
     /// RFC 3339 creation time.
     pub created_at: String,
+    /// What a fixer did to the candidate's layout before the gate (ADR-DE-009);
+    /// absent when no evaluator named one, and from older records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formatting: Option<Formatting>,
 }
 
 /// Write the candidate record next to the manifest as `candidate.json`.
@@ -377,6 +437,7 @@ mod tests {
             deeps: vec![],
             timeout_secs: 900,
             test_format: None,
+            fixer: None,
         }
     }
 
@@ -465,6 +526,7 @@ mod tests {
             deeps: vec!["hooks".into()],
             timeout_secs: 60,
             test_format: None,
+            fixer: None,
         });
         let required: Vec<&str> = m.required().iter().map(|e| e.name.as_str()).collect();
         assert_eq!(
