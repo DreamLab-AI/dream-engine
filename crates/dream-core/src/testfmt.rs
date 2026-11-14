@@ -341,7 +341,7 @@ pub fn parse_vitest_json(text: &str, root: Option<&str>) -> Result<Vec<TestCase>
 fn attr(e: &quick_xml::events::BytesStart<'_>, key: &str) -> String {
     e.attributes()
         .flatten()
-        .find(|a| a.key.as_ref() == key.as_bytes())
+        .find(|a| a.key.as_ref() == key)
         .and_then(|a| {
             a.normalized_value(quick_xml::XmlVersion::Implicit1_0)
                 .ok()
@@ -373,7 +373,7 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
             Event::Start(e) => {
                 depth_open += 1;
                 match e.name().as_ref() {
-                    b"testcase" => {
+                    "testcase" => {
                         let class = attr(&e, "classname");
                         let name = attr(&e, "name");
                         let full = if class.is_empty() {
@@ -383,10 +383,10 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                         };
                         cur = Some((full, None, false));
                     }
-                    b"failure" | b"error" if cur.is_some() => {
+                    "failure" | "error" if cur.is_some() => {
                         in_fail = Some((attr(&e, "message"), String::new()));
                     }
-                    b"skipped" => {
+                    "skipped" => {
                         if let Some(c) = cur.as_mut() {
                             c.2 = true;
                         }
@@ -395,7 +395,7 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                 }
             }
             Event::Empty(e) => match e.name().as_ref() {
-                b"testcase" => {
+                "testcase" => {
                     let class = attr(&e, "classname");
                     let name = attr(&e, "name");
                     let full = if class.is_empty() {
@@ -405,7 +405,7 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                     };
                     cases.push(TestCase::new(full, TestStatus::Passed));
                 }
-                b"failure" | b"error" => {
+                "failure" | "error" => {
                     if let Some(c) = cur.as_mut() {
                         let m = attr(&e, "message");
                         c.1 = Some(if m.is_empty() {
@@ -415,7 +415,7 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                         });
                     }
                 }
-                b"skipped" => {
+                "skipped" => {
                     if let Some(c) = cur.as_mut() {
                         c.2 = true;
                     }
@@ -424,32 +424,28 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
             },
             Event::Text(t) => {
                 if let Some((_, buf)) = in_fail.as_mut() {
-                    buf.push_str(&t.decode().map_err(|e| bad(&e))?);
+                    buf.push_str(&t);
                 }
             }
             Event::GeneralRef(r) => {
-                // quick-xml 0.41 delivers `&amp;` / `&#10;` as separate events.
+                // quick-xml (0.41 and later) delivers `&amp;` / `&#10;` as separate events.
                 if let Some((_, buf)) = in_fail.as_mut() {
                     if let Some(c) = r.resolve_char_ref().map_err(|e| bad(&e))? {
                         buf.push(c);
-                    } else if let Some(t) = r
-                        .decode()
-                        .ok()
-                        .and_then(|n| quick_xml::escape::resolve_predefined_entity(&n))
-                    {
+                    } else if let Some(t) = quick_xml::escape::resolve_predefined_entity(&r) {
                         buf.push_str(t);
                     }
                 }
             }
             Event::CData(t) => {
                 if let Some((_, buf)) = in_fail.as_mut() {
-                    buf.push_str(&String::from_utf8_lossy(&t.into_inner()));
+                    buf.push_str(&t.into_inner());
                 }
             }
             Event::End(e) => {
                 depth_open = depth_open.saturating_sub(1);
                 match e.name().as_ref() {
-                    b"failure" | b"error" => {
+                    "failure" | "error" => {
                         if let (Some((msg, text)), Some(c)) = (in_fail.take(), cur.as_mut()) {
                             let cause = if msg.trim().is_empty() {
                                 let l = first_line(&text);
@@ -464,7 +460,7 @@ pub fn parse_junit(xml: &str) -> Result<Vec<TestCase>, TestFmtError> {
                             c.1 = Some(cause);
                         }
                     }
-                    b"testcase" => {
+                    "testcase" => {
                         if let Some((name, fail, skipped)) = cur.take() {
                             if !skipped {
                                 let st = match fail {
