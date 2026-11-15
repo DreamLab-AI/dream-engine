@@ -349,6 +349,10 @@ pub struct DraftPr {
     pub title: String,
     /// PR body.
     pub body: String,
+    /// The commit at the tip of `branch` that was reviewed and pushed. Automerge
+    /// is pinned to it (`--match-head-commit`), so a commit pushed after review
+    /// cannot merge unreviewed.
+    pub head_sha: String,
 }
 
 /// What publishing a branch achieved.
@@ -394,9 +398,13 @@ pub trait Forge: Send + Sync {
     /// since a draft cannot be merged. Only called after the automerge policy said
     /// [`Allowed`](crate::automerge::AutomergeDecision::Allowed).
     ///
+    /// `head_sha` is the reviewed head commit; the merge must be pinned to it so
+    /// a later push to the branch cancels the automerge instead of landing
+    /// unreviewed code.
+    ///
     /// The default is [`ForgeError::Unsupported`].
-    fn enable_automerge(&self, repo: &str, pr_url: &str) -> Result<(), ForgeError> {
-        let _ = (repo, pr_url);
+    fn enable_automerge(&self, repo: &str, pr_url: &str, head_sha: &str) -> Result<(), ForgeError> {
+        let _ = (repo, pr_url, head_sha);
         Err(ForgeError::Unsupported)
     }
 }
@@ -466,7 +474,8 @@ impl Forge for GhForge {
         }
     }
 
-    fn enable_automerge(&self, repo: &str, pr_url: &str) -> Result<(), ForgeError> {
+    fn enable_automerge(&self, repo: &str, pr_url: &str, head_sha: &str) -> Result<(), ForgeError> {
+        let merge_args = automerge_args(repo, pr_url, head_sha)?;
         // A draft cannot be merged: take it out of draft first.
         let ready = Command::new("gh")
             .args(["pr", "ready", pr_url, "--repo", repo])
@@ -478,7 +487,7 @@ impl Forge for GhForge {
             ));
         }
         let out = Command::new("gh")
-            .args(["pr", "merge", pr_url, "--repo", repo, "--auto", "--squash"])
+            .args(&merge_args)
             .output()
             .map_err(|e| ForgeError::Failed(format!("cannot run gh: {e}")))?;
         if out.status.success() {
@@ -489,6 +498,32 @@ impl Forge for GhForge {
             ))
         }
     }
+}
+
+/// The `gh pr merge` argument vector that enables squash automerge pinned to
+/// the reviewed head commit. An empty `head_sha` is refused: an unpinned
+/// automerge is exactly what this guards against.
+fn automerge_args(repo: &str, pr_url: &str, head_sha: &str) -> Result<Vec<String>, ForgeError> {
+    let sha = head_sha.trim();
+    if sha.is_empty() || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(ForgeError::Failed(
+            "refusing automerge without a reviewed head commit".into(),
+        ));
+    }
+    Ok([
+        "pr",
+        "merge",
+        pr_url,
+        "--repo",
+        repo,
+        "--auto",
+        "--squash",
+        "--match-head-commit",
+        sha,
+    ]
+    .iter()
+    .map(|s| (*s).to_owned())
+    .collect())
 }
 
 impl GhForge {
@@ -536,6 +571,32 @@ fn gh_pr_create(dir: &Path, pr: &DraftPr) -> Option<String> {
 mod tests {
     use super::*;
     use futures::executor::block_on;
+
+    #[test]
+    fn automerge_args_pin_the_reviewed_head_commit() {
+        let args = automerge_args("o/r", "https://github.com/o/r/pull/1", "0123abcd").unwrap();
+        assert_eq!(
+            args,
+            [
+                "pr",
+                "merge",
+                "https://github.com/o/r/pull/1",
+                "--repo",
+                "o/r",
+                "--auto",
+                "--squash",
+                "--match-head-commit",
+                "0123abcd"
+            ]
+        );
+    }
+
+    #[test]
+    fn automerge_args_refuse_a_missing_or_malformed_sha() {
+        for bad in ["", "  ", "not-a-sha", "abc; rm"] {
+            assert!(automerge_args("o/r", "u", bad).is_err(), "{bad:?}");
+        }
+    }
 
     #[test]
     fn transient_classification() {

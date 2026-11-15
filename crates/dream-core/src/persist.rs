@@ -322,7 +322,7 @@ pub fn publish(
     let automerge = automerge::decide(cfg, &facts);
     let (mut automerge_enabled, mut automerge_error) = (false, None);
     if let (AutomergeDecision::Allowed, Some(url)) = (&automerge, &outcome.pr_url) {
-        match forge.enable_automerge(&pr.repo_slug, url) {
+        match forge.enable_automerge(&pr.repo_slug, url, &pr.head_sha) {
             Ok(()) => automerge_enabled = true,
             Err(e) => automerge_error = Some(e.to_string()),
         }
@@ -709,7 +709,7 @@ mod tests {
             self.calls.lock().unwrap().push("base");
             self.base.clone()
         }
-        fn enable_automerge(&self, _: &str, _: &str) -> Result<(), ForgeError> {
+        fn enable_automerge(&self, _: &str, _: &str, _: &str) -> Result<(), ForgeError> {
             self.calls.lock().unwrap().push("enable");
             self.enable.clone()
         }
@@ -728,6 +728,7 @@ mod tests {
             branch: "dream/x-2026-01-01".into(),
             title: "t".into(),
             body: "b".into(),
+            head_sha: "0123abcdef".into(),
         }
     }
 
