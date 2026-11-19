@@ -33,7 +33,13 @@ deny = [
 
 [advisories]
 version = 2
-ignore = []
+ignore = [
+    # chrono is unmaintained, with no safe upgrade. dream-core and dream-gate
+    # use it directly for night dates and timestamps. The advisory reports no
+    # vulnerability; this is an interim ignore until the crates move to a
+    # maintained date library.
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained notice, no vulnerability and no safe upgrade; direct dependency of dream-core and dream-gate, migration pending" },
+]
 
 [sources]
 unknown-registry = "deny"
