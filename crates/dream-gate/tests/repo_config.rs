@@ -32,13 +32,14 @@ fn the_evaluators_are_the_workspace_gates_and_there_is_no_darwin() {
     );
     // fmt must say something on success: cargo fmt --check is silent when
     // clean, and the gate reads a silent exit 0 as BLOCKED-ENV (2026-10-17).
+    // Both commands are quote-free so they survive remote execution (fe3a825).
     assert_eq!(
         cmd("fmt"),
-        "cargo fmt --all --check && echo 'fmt: all files formatted'"
+        "cargo fmt --all --check && echo fmt: all files formatted"
     );
     assert_eq!(
         cmd("doc"),
-        "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace"
+        "RUSTDOCFLAGS=-Dwarnings cargo doc --no-deps --workspace"
     );
     assert_eq!(cmd("deny"), "cargo deny check");
     assert!(cmd("parity").contains("--test ts_parity"));

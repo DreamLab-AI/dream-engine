@@ -19,6 +19,8 @@ dream guard check --patch FILE [--config P]  print touched paths, or the violati
 nightly driver is the host's, built from `dream-core`.
 
 Exit codes: `0` passed, `1` the check ran and said no, `2` the check could not run.
+`dream validate` exits `1` on an unreadable config: either way the engine
+could not use it.
 
 `replay verify` shows that a run directory's stored inputs and decision agree;
 it is not tamper evidence by itself. Bind the directory with a witness for that.
