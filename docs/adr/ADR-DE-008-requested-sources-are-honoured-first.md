@@ -12,6 +12,12 @@ review_trigger: a change to the source planner's selection order, to `requested_
 
 # ADR-DE-008 — Sources the previous night asked for are read first, capped, and never asked of the operator
 
+## External review qualification — 2026-11-02
+
+The [dated source reconciliation](external-review-2026-11-02.md) records the current
+implementation evidence, open acceptance gaps and limits of the external review.
+It supplements this decision without changing its adoption or activation status.
+
 ## Context
 The tree-read stage (ADR-2114 in the consuming engine) lets an LLM planner pick up to `max_files` files to inline. The planner saw only tonight's evidence and the file index. When a night ended INCONCLUSIVE for want of a file, its report named the file, and the consuming engine turned that line into an operator question. Across four repositories the same request then reached the human three nights running ("operator-approved 10-09, now missed twice"): a model asked to choose files cannot be held to a list, and the human was relaying a list the engine itself had written.
 
@@ -28,3 +34,19 @@ The tree-read stage (ADR-2114 in the consuming engine) lets an LLM planner pick 
 - A stale or over-broad request can occupy at most half of tonight's read; the planner always keeps half for what tonight's evidence points at.
 - Source supply stops being a governance decision. A human sees a source request only if the consumer's expiry raises an alert about a path that was inlined and asked for again, which indicates the wrong window or a real blocker.
 - Consumers building `GatherInput` by struct literal must move to the constructor.
+
+## Repair excerpt parity — 2026-11-03
+
+`failing_excerpt` now applies the same tracked-path validation, built-in filename
+denylist and whole-blob key-material withholding before selecting lines.
+`failing_excerpt_with` adds the host denylist so repair supply cannot bypass a
+host-specific source exclusion. Regression cases cover a denied filename, key
+material outside the requested lines, a host-denied ordinary filename and a valid
+public excerpt. Consumers must adopt dream-core 0.4.1 and pass their source denylist;
+producer tests alone do not establish running host adoption.
+
+Credential shapes now reuse `ontomark-compile::input::secrets::scan` without the
+optional reasoning engine, alongside the existing Nostr and private-key checks.
+Planner deep/scan labels and evaluator commands pass through the caller's redactor
+just like evidence. Pattern matching is a bounded detector, not a promise to
+identify every possible credential or arbitrary confidential prose.

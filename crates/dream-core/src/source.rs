@@ -108,25 +108,30 @@ pub struct TrackedFile {
     pub size: u64,
 }
 
-/// Every blob tracked at `rev` (`git ls-tree -r -l`). Gitignored files are
-/// absent by construction — the same set `git archive` ships to a remote runner.
+/// Every blob tracked at `rev` (`git ls-tree -r -l -z`). Untracked files are
+/// absent by construction. NUL separators preserve UTF-8 paths without Git quoting.
 pub fn tracked_files(repo: &Path, rev: &str) -> Option<Vec<TrackedFile>> {
     let out = Command::new("git")
         .arg("-C")
         .arg(repo)
-        .args(["ls-tree", "-r", "-l", "--full-tree", rev])
+        .args(["ls-tree", "-r", "-l", "-z", "--full-tree", rev])
         .output()
         .ok()?;
     if !out.status.success() {
         return None;
     }
-    Some(parse_ls_tree(&String::from_utf8_lossy(&out.stdout)))
+    let text = String::from_utf8(out.stdout).ok()?;
+    Some(parse_ls_tree_records(&text, '\0'))
 }
 
 /// Parse `git ls-tree -r -l` output: `<mode> <type> <object> <size>\t<path>`.
 /// Submodule (`commit`) entries and unparseable lines are skipped.
 pub fn parse_ls_tree(text: &str) -> Vec<TrackedFile> {
-    text.lines()
+    parse_ls_tree_records(text, '\n')
+}
+
+fn parse_ls_tree_records(text: &str, delimiter: char) -> Vec<TrackedFile> {
+    text.split(delimiter)
         .filter_map(|line| {
             let (meta, path) = line.split_once('\t')?;
             let mut parts = meta.split_whitespace();
@@ -750,6 +755,9 @@ pub fn request_key(path: &str, lines: Option<LineRange>) -> String {
 /// hex secret assigned to a key-looking name is withheld whole — never
 /// partially redacted, since a clipped key is still a key.
 pub fn has_secret_content(text: &str) -> bool {
+    if !ontomark_compile::input::secrets::scan(text).is_empty() {
+        return true;
+    }
     if text.contains("PRIVATE KEY-----") {
         return true;
     }
@@ -1109,10 +1117,11 @@ pub async fn gather(
         }
     }
     let evidence_tail = tail_chars(evidence, PLANNER_EVIDENCE_CHARS);
+    let safe_commands: Vec<String> = commands.iter().map(|s| redact(s)).collect();
     let prompt = source_plan_prompt(
-        deep,
-        scans,
-        commands,
+        &redact(deep),
+        &redact(scans),
+        &safe_commands,
         &redact(evidence_tail),
         &index_listing(&files, cfg.index_cap_chars, deny),
         cfg.max_files,
@@ -1316,7 +1325,7 @@ pub fn failing_hunk(apply_error: &str) -> Option<(String, usize)> {
 
 /// The real base-revision text around the hunk git refused: `context` lines
 /// either side of `line`, verbatim, with a header naming the range. None when
-/// the file cannot be read at `rev`.
+/// the file cannot be read at `rev`, is denied, or contains key material.
 pub fn failing_excerpt(
     repo: &Path,
     rev: &str,
@@ -1324,14 +1333,35 @@ pub fn failing_excerpt(
     line: usize,
     context: usize,
 ) -> Option<String> {
-    let text = read_blob(repo, rev, path)?;
+    failing_excerpt_with(repo, rev, path, line, context, &Denylist::default())
+}
+
+/// [`failing_excerpt`] with the host's source-stage filename denylist.
+///
+/// The whole committed blob is checked for key material before any excerpt is
+/// selected, using the same withholding policy as ordinary source gathering.
+pub fn failing_excerpt_with(
+    repo: &Path,
+    rev: &str,
+    path: &str,
+    line: usize,
+    context: usize,
+    deny: &Denylist,
+) -> Option<String> {
+    let files = tracked_files(repo, rev)?;
+    let tracked = files.iter().map(|f| f.path.as_str()).collect();
+    let path = validate_path_with(path, &tracked, deny).ok()?;
+    let text = read_blob(repo, rev, &path)?;
+    if has_secret_content(&text) {
+        return None;
+    }
     let start = line.saturating_sub(context).max(1);
     let range = LineRange {
         start,
-        end: line + context,
+        end: line.saturating_add(context),
     };
     let (body, total) = slice_lines(&text, range);
-    let end = (line + context).min(total);
+    let end = line.saturating_add(context).min(total);
     Some(format!(
         "`{path}` lines {start}-{end} of {total}, exactly as committed:\n\n````text\n{body}\n````"
     ))
@@ -1415,6 +1445,20 @@ async fn run_repair(llm: &dyn Llm, fallback: Option<&dyn Llm>, prompt: String) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tracked_unicode_and_quoted_paths_are_returned_without_git_escaping() {
+        let paths = ["src/é.rs", "notes/quoted\"name.md", "notes/tab\tname.txt"];
+        let entries = paths.map(|path| (path, "public source\n"));
+        let (d, rev) = repo_with(&entries);
+        let tracked = tracked_files(d.path(), &rev).unwrap();
+        for path in paths {
+            assert!(tracked.iter().any(|file| file.path == path), "{tracked:?}");
+        }
+        assert!(failing_excerpt(d.path(), &rev, paths[0], 1, 0)
+            .unwrap()
+            .contains("public source"));
+    }
 
     #[test]
     fn key_material_is_detected() {
@@ -1810,6 +1854,33 @@ mod tests {
     }
 
     #[test]
+    fn repair_excerpt_withholds_denied_names_and_key_material_anywhere_in_the_file() {
+        let (d, rev) = repo_with(&[
+            (".env", "MODEL_TOKEN=fixture-token\n"),
+            (
+                "ordinary.txt",
+                "safe line\n-----BEGIN PRIVATE KEY-----\nfixture\n",
+            ),
+            ("safe.txt", "public data\n"),
+        ]);
+        assert!(failing_excerpt(d.path(), &rev, ".env", 1, 0).is_none());
+        assert!(failing_excerpt(d.path(), &rev, "ordinary.txt", 1, 0).is_none());
+        assert!(failing_excerpt(d.path(), &rev, "safe.txt", 1, 0)
+            .unwrap()
+            .contains("public data"));
+        assert!(failing_excerpt_with(
+            d.path(),
+            &rev,
+            "safe.txt",
+            1,
+            0,
+            &Denylist::new(["safe.txt"])
+        )
+        .is_none());
+        assert!(failing_excerpt(d.path(), &rev, "../safe.txt", 1, 0).is_none());
+    }
+
+    #[test]
     fn failing_excerpt_is_verbatim_and_clamped() {
         let d = tempfile::tempdir().unwrap();
         let repo = d.path();
@@ -1978,6 +2049,40 @@ mod tests {
         assert_eq!(rec.planner, "ok");
         assert_eq!(rec.rejected.len(), 2, "{:?}", rec.rejected);
         assert_eq!(fake.seen.lock().unwrap()[0].1, 2048, "clamped up from 1000");
+    }
+
+    #[test]
+    fn planner_metadata_uses_the_same_redactor_as_evidence() {
+        let (d, rev) = repo_with(&[("src/a.rs", "fn a() {}\n")]);
+        let fake = Fake::new(vec![Ok(r#"{"files":["src/a.rs"]}"#.into())]);
+        let commands = vec!["curl -H 'Authorization: Bearer fixture-private-value'".into()];
+        let cfg = SourceConfig::default();
+        let deny = Denylist::default();
+        let input = GatherInput::new(
+            d.path(),
+            &rev,
+            "fixture-private-value",
+            "fixture-private-value",
+            &commands,
+            "fixture-private-value",
+            &cfg,
+            &deny,
+        );
+        futures::executor::block_on(gather(&fake, None, &input, &|s| {
+            s.replace("fixture-private-value", "[withheld]")
+        }));
+        let seen = fake.seen.lock().unwrap();
+        assert!(!seen[0].0.contains("fixture-private-value"));
+        assert!(seen[0].0.contains("[withheld]"));
+    }
+
+    #[test]
+    fn common_provider_tokens_use_the_shared_ontology_detector() {
+        let token = format!("ghp_{}", "a1B2".repeat(9));
+        assert!(has_secret_content(&format!("value = {token}")));
+        assert!(!has_secret_content(
+            "public API documentation and a short example token"
+        ));
     }
 
     #[test]

@@ -12,6 +12,12 @@ review_trigger: a candidate patch that changed an evaluator's behaviour without 
 
 # ADR-DE-003 — Protected-path guard and config-digest binding
 
+## External review qualification — 2026-11-02
+
+The [dated source reconciliation](external-review-2026-11-02.md) records the current
+implementation evidence, open acceptance gaps and limits of the external review.
+It supplements this decision without changing its adoption or activation status.
+
 ## Context
 
 The loop asks a model for a patch and then trusts the repository's own
@@ -46,3 +52,15 @@ build scripts safe: they run on the evaluation host, which must be sandboxed
 ([SECURITY.md](../../SECURITY.md)). The guard and digest binding are implemented in `dream-gate`
 (`guard::check`, `gate::decide` with its `GateContext`, the manifest digest) and
 called by `dream_core::candidate::run`.
+
+## Post-evaluation identity — 2026-11-03
+
+After evaluators finish, `candidate::run` requires a clean tracked/index/untracked
+source state and the prepared HEAD tree hash in the publishable worktree and any
+relocated evaluation checkout. A fresh temporary index, populated from the prepared
+tree, rehashes tracked working files so `assume-unchanged` and `skip-worktree` flags
+cannot hide changes. A failed or unavailable check returns an integrity
+harness failure instead of `Applied`. Ignored build outputs are allowed. The
+regression executes a successful evaluator that edits source, then verifies its
+receipt cannot authorise the original tree. This is a final-state check, not a
+sandbox or proof that untrusted commands cannot transiently change and restore data.

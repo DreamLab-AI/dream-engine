@@ -18,6 +18,8 @@
 //! * [`replay`]: capture a night's gate inputs and re-run the pure gate.
 //! * [`source`], [`context`], [`compile`]: what the model is shown, and the
 //!   prompt it is shown it in.
+//! * [`screen`]: the optional Jev option, ordering or deferring candidate
+//!   hypotheses under a budget before the measured loop; off is the identity.
 //! * [`readiness`], [`runstate`], [`roster`], [`sweep`]: admission,
 //!   restart-safe identity, fair rotation and branch ageing.
 //!
@@ -52,6 +54,7 @@ pub mod replay;
 pub mod roster;
 pub mod runner;
 pub mod runstate;
+pub mod screen;
 pub mod seams;
 pub mod source;
 pub mod streak;
